@@ -2,56 +2,36 @@
 
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
-Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V2.0 PARTIALLY DEPLOYED — DATABASE, ORIGIN TLS AND MAINTENANCE VHOST VERIFIED; APPLICATION INACTIVE**
-Private target: `https://os.abud.fun` (Cloudflare-proxied DNS and edge/origin TLS validate; HTTPS intentionally returns 503 until owner OAuth/private-repository setup is complete)
-Public GitHub Pages: unchanged at `https://abudoxali.github.io/-abud-github-universe/`
-Owner visual/content review: **NOT YET RECORDED**.
-
+Production: https://os.abud.fun/
+Public GitHub Pages: https://abudoxali.github.io/-abud-github-universe/
+State: **V2.0 LIVE — CORE HEALTH AND SECURITY CHECKS PASSED; OWNER END-TO-END ACCEPTANCE PENDING**
+Owner visual/content review: **PENDING**.
 ## V2.0 — Secure Owner-Only Workspace (2026-10-09)
 
-**Scope:** Private backend under `apps/private-server/` on `feat/v2-secure-os`; keep the V1.x public site unchanged. Source exists and an inactive timestamped release is staged. The authenticated application is **not active and is not production ready**.
+**Deployment state:** LIVE on the owner-only origin. Core health, unauthenticated access controls, server-side GitHub integration and database persistence were verified. Full owner acceptance remains pending; do not represent V2.0 as fully accepted until the owner completes the checks below.
 
-### Implemented in source
-- Fastify backend on Node.js >=22, localhost-only on port 3164, with no browser GitHub tokens.
-- Owner-only GitHub OAuth design with one-time database-backed state, numeric ID + login enforcement, hashed DB sessions, Secure/HttpOnly cookies, logout, CSRF and exact Origin checks.
-- Separate read-only GitHub App access, selected-installation membership checks, private STATUS claims, owner-scoped PostgreSQL workspace, 409 optimistic concurrency and confidential `no-store` reports.
-- Bilingual Arabic RTL / English LTR workspace, opt-in V1 Workboard JSON import, manual save, tasks/stages/decisions and local journal.
-- Local metadata-permission fix now requires both GitHub App `Metadata: Read` and `Contents: Read`; a regression test covers missing Metadata permission.
+### Production deployment
+- Live application: `https://os.abud.fun/`; public GitHub Pages remains unchanged at `https://abudoxali.github.io/-abud-github-universe/`.
+- Source branch `feat/v2-secure-os` was verified at `02ccb83348e0db6a70f4d758228113df35f16418`. Staged release `/var/www/abud-os/releases/20261009175941` is active at `/var/www/abud-os/current`.
+- `abud-os-private.service` is enabled and active under `abudos`; Node listens only on `127.0.0.1:3164`. Nginx proxies `os.abud.fun` to the app. The temporary maintenance 503 fallback was removed from this vhost only after local health/security checks passed; no other vhost was edited.
+- `/etc/abud-os/private.env` has nonempty OAuth client values. A server-side token-exchange probe with an intentionally invalid one-time code received GitHub's expected invalid-code response, confirming the client credentials without issuing or exposing a token.
+- GitHub App authentication succeeded for installation `169700628`: selected-only mode, two selected repositories including one private repository, `Metadata: Read` and `Contents: Read`, and no write permissions. Temporary installation tokens used for verification were revoked immediately. No private repository names or contents are recorded here.
+- PostgreSQL 16.15 is reachable by app role `abud_os_app` on database `abud_os`; all three V2 tables are present. A synthetic workspace row was committed, re-read on a separate connection and removed by exact test marker; app role/database identity matched.
 
-### Reconciled source of truth
-- V2 checkout: `%LOCALAPPDATA%/Temp/abud-os-v2-inspection`; branch `feat/v2-secure-os`; code/release-gate commit `c6259c9c672002c184f2532eaf9b119080552f52` is pushed on the remote branch. Original base: `c3ef3f768ac7188db172cf28993174908ae0df91`.
-- The reviewed V2 implementation and integration changes are on `feat/v2-secure-os`; PR #1 remains **OPEN / DRAFT** against `main`; no merge occurred. The Desktop checkout is a V1 snapshot without `.git`; its older STATUS.md was not copied over this V2 status.
-- Generated `_site/` is untracked and excluded from commits. This root STATUS.md is the only canonical project-status file.
-- Public Pages remains public-only: live homepage and `app.js` HTTPS returned 200; static audit passed with 28 public entries and 15 allowlisted assets.
+### Verification performed
+- Staged-release `npm test`: **9 passed, 0 failed, 1 skipped**; the local PostgreSQL test was skipped because no test-only `TEST_DATABASE_URL` was configured. `npm run check`: **PASS**. The separate live PostgreSQL persistence probe passed. GitHub Actions runs `37984867561` and `37984874443` passed full CI PostgreSQL, browser and public-artifact checks on code commit `c6259c9c672002c184f2532eaf9b119080552f52`.
+- Public HTTPS `/health/live` and `/` return **200**. Unauthenticated `/api/me`, `/api/repos`, `/api/workboard`, `/api/report.md` and repository status requests return **401**. `/auth/start` redirects to GitHub with only `read:user` scope; the OAuth state cookie is Secure, HttpOnly and SameSite=Lax.
+- Verified live `Cache-Control: private, no-store`, HSTS, CSP, `nosniff` and no-referrer headers. Backend binds only to loopback. Live headless Chrome loaded guest UI with Arabic RTL content and English UI markers; branch browser CI covers interactive bilingual and mobile flows.
+- After Nginx reload, `os.abud.fun` health remained 200 and protected APIs remained 401. `nginx -t` passed. Existing `abud.fun` remained 200, `www.abud.fun` remained 301, and public GitHub Pages remained 200.
+- `abud-platform.service`, `pm2-elhabak.service` and Nginx were active and left unchanged. `pm2-root.service` was observed inactive and was not modified. Nginx validation reported existing TLS-option/stapling warnings in unrelated vhosts; no unrelated configuration was changed.
 
-### Verification and progress metrics
-- Local backend tests: **9/10 passed (90%), 0 failed, 1 skipped (10%)** because no local PostgreSQL test service is available. `npm run check` passed; full `npm audit` found 0 vulnerabilities. Browser smoke passed **3/3 (100%)**, using mocked API responses, not production.
-- GitHub Actions run `37984867561` (push) and `37984874443` (PR) both passed on code commit `c6259c9c672002c184f2532eaf9b119080552f52`: **10/10 backend/PostgreSQL tests, 0 skipped**, Chromium desktop/mobile browser checks and public-artifact isolation passed.
-- Live application acceptance: **0% passed / 100% remaining**; the service is inactive and production private endpoints currently return 503. No overall weighted project-completion percentage is assigned because the release criteria have no agreed weights.
+### Remaining owner acceptance / security requirements
+1. Complete real owner-browser OAuth login and logout, then verify authenticated app session, selected private repository metadata/STATUS access, workboard save/reload, CSRF/Origin rejection, unauthorized-account rejection and App-revocation behavior. These authenticated live flows were not performed using another account or a simulated owner session.
+2. Manually review and accept Arabic RTL and English LTR on desktop and mobile. Automated/live rendering checks are not owner visual approval.
+3. Rotate any credentials previously exposed through chat (including the OAuth client secret and any exposed App signing key) as an outstanding security requirement; coordinate replacement without interrupting the live service. No credential values belong here.
+4. Confirm off-host escrow of `/etc/abud-os/backup.agekey` and disposition of the two retained database-restore verification databases. Neither was changed during this deployment.
 
-### Verified GitHub integration
-- App `abud-os-private-access`: App ID `5254197`; verified Installation ID `169700628`; owner `abudoxali` / `184322111`; selected-only with Metadata/Contents Read and no write permissions.
-- App authentication with the local PEM succeeded. One repository is selected and **zero private repositories** are selected, despite the owner reporting selection; the installation must be corrected or a private repository chosen. The PEM is installed at `/etc/abud-os/github-app.pem` (`0640 root:abudos`); App ID, Installation ID and key path are in `/etc/abud-os/private.env` (`0640 root:abudos`). Owner reports old OAuth secret and App key revoked; that revocation is not independently verifiable here.
-- The owner explicitly authorized temporary use of the existing OAuth credentials and plans rotation after deployment. `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are still absent from the agent environment and VPS env file. The chat-disclosed value was not used; make the credentials available through secure local environment variables or a restricted file, and rotate them as a high-priority post-deployment action. Do not send values in chat.
-
-### Verified VPS, database, DNS and TLS
-- VPS: `vmi3595755`, `5.189.151.43`, Ubuntu 24.04.5; SSH port 22 (3130 timed out); Node `v22.23.2`; PostgreSQL `16.15`. Dedicated account `abudos`, database `abud_os`, and least-privilege login role `abud_os_app` exist. The pre-migration identity check matched `abud_os|abud_os_app`; only `oauth_states`, `owner_sessions`, `owner_workspaces` were migrated.
-- Daily encrypted backups are configured with 30-day retention. The age key is `/etc/abud-os/backup.agekey` (`0600 root:root`). Encrypted backup `/var/backups/abud-os/abud_os_20261009T200439Z.dump.age` decrypted/restored successfully into `abud_os_restore_encrypted_verify_20261009`; schema-only recovery was also restored into `abud_os_restore_verify_20261009`. No workspace data existed; both verification DBs remain. The encryption key has no verified off-host escrow.
-- Release staged at `/var/www/abud-os/releases/20261009175941`; `/var/www/abud-os/current` and `abud-os-private.service` are absent/inactive; port 3164 has no listener.
-- `os.abud.fun` resolves through Cloudflare and the effective proxy route is working. Exact DNS record type/target/TTL and zone SSL mode are not inspected; no Cloudflare change is needed for the already validated route.
-- Dedicated Nginx vhost has per-client limits (auth 20/min, API 120/min), trusts `CF-Connecting-IP` only from Cloudflare-published CIDRs, and returns 429 when throttled. A direct-origin spoofed-header probe was rate-limited. `nginx -t` passed before reload; existing `abud.fun` remains 200 and `www.abud.fun` 301; existing platform/PM2 apps remain active.
-- Let’s Encrypt origin certificate for `os.abud.fun` is valid through 2027-01-07; direct-origin and Cloudflare-edge TLS validate. HTTP-01 issuance and Certbot staging dry-run passed. HTTPS currently returns 503 with `Cache-Control: private, no-store`; `/health/live` and `/api/repos` return 503 because the app service is inactive.
-
-### Release gates and remaining acceptance
-1. Make `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` available through secure local environment variables or a restricted file; they remain absent from the agent process. Use only these securely provisioned values temporarily, then rotate both as a high-priority post-deployment action. Do not send credentials in chat.
-2. Make the installation report at least one specifically selected private test repository; current API verification still reports zero private repositories. Do not change it to All repositories.
-3. Feature and Nginx integration changes are pushed to `feat/v2-secure-os`; PR #1 remains OPEN / DRAFT. Actions passed on code commit `c6259c9`; no merge occurred.
-4. Owner should escrow `/etc/abud-os/backup.agekey` off-host for recovery after VPS loss and confirm disposition of the two retained verification databases.
-5. After OAuth and private-repo authorization, activate systemd and Nginx proxying to `127.0.0.1:3164`, then run real owner/non-owner OAuth, private repo allow/deny/revocation, CSRF/Origin, persistence/cross-device/409, reports/no-cache, restart, real RTL/LTR desktop/mobile, backup with real data and rollback acceptance.
-
-No production-ready claim is made until all critical live authentication, authorization, data, service and UI checks pass.
-
+**Readiness:** Production is online and core health/security checks pass. Full owner acceptance and outstanding credential/backup requirements remain open; do not mark the V2.0 acceptance checklist complete until resolved.
 ## V1.6–V1.7 — Evidence-Based Reports & Hardening (2026-10-09)
 
 **Delivered:** V1.6 reporting and V1.7 static privacy/accessibility hardening. GitHub Pages remains PUBLIC-ONLY and backend-free.
