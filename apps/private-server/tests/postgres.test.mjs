@@ -12,8 +12,9 @@ if(url){
     parsed.pathname!=="/abud_os_test")
   throw Error("TEST_DATABASE_URL must point to an isolated LOCAL abud_os_test database");
 }
+if(process.env.CI&&!url)throw Error("CI must provide isolated TEST_DATABASE_URL; integration test cannot be skipped");
 test("PostgreSQL owner-only schema and optimistic workspace revision",{
- skip:!url?"No isolated TEST_DATABASE_URL provided":""
+ skip:!url
 },async()=>{
  const pool=new pg.Pool({connectionString:url,max:1});
  try{
