@@ -62,7 +62,7 @@ try {
   assert.equal(await mobile.locator("#repoGrid .repo-card").count(),43);
   await mobile.locator("#mobileMenu").click();
   assert.equal(await mobile.locator("#mobileBackdrop").isVisible(),true);
-  await mobile.locator("#mobileBackdrop").click({position:{x:380,y:120}});
+  await mobile.locator("#mobileBackdrop").click({position:{x:10,y:120}});
   assert.equal(await mobile.locator("#mobileBackdrop").isVisible(),false);
   const dimensions=await mobile.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth}));
   assert.ok(dimensions.scrollWidth<=dimensions.viewport+2,"Mobile horizontal overflow: "+JSON.stringify(dimensions));
