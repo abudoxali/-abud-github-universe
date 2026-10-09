@@ -1,0 +1,39 @@
+/* V1.2 Public Project Intelligence and weekly activity */
+.weekly-review{margin-top:17px;padding:23px;border-radius:18px;border:1px solid #302840;background:linear-gradient(145deg,#0f0d18,#0b0b13)}
+.weekly-header,.intelligence-header{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:17px}
+.weekly-header h3{font-size:19px;line-height:1.4;margin:4px 0;color:#eee5f6}
+.weekly-header p,.intelligence-header p{color:#a69cb4;font-size:12px;margin:4px 0 0;line-height:1.8}
+.weekly-pill{font:700 10px var(--latin);letter-spacing:.65px;color:#a99ab5;padding:6px 10px;border:1px solid #3a2f4a;border-radius:8px;white-space:nowrap}
+.weekly-summary{color:#d9c7eb;font:600 12px var(--latin);margin-bottom:14px}
+.weekly-entries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.weekly-entry{display:flex;flex-direction:column;gap:7px;min-width:0;padding:13px;border-radius:10px;background:#16111e;border:1px solid #30263e;text-align:start}
+.weekly-entry:hover{border-color:#a46bcc;background:#1c1526}
+.weekly-entry strong{font:700 12px var(--latin);color:#e6d9ee;overflow-wrap:anywhere}
+.weekly-entry span{font:500 10px var(--latin);color:#9587a7}
+.weekly-empty{padding:14px;border-radius:10px;border:1px dashed #453650;color:#a89aad;font-size:12px;grid-column:1/-1;line-height:2}
+.intelligence{margin-top:29px;scroll-margin-top:90px}
+.intelligence-header h2{font-size:24px;color:#f3ebfa;margin:7px 0 3px}
+.intelligence-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.intelligence-card{min-width:0;border:1px solid #30283c;background:radial-gradient(ellipse at 100% 0,rgba(147,51,234,.1),transparent 60%),linear-gradient(145deg,#11101b,#0b0a13);border-radius:17px;padding:23px}
+.intelligence-card-title{display:flex;align-items:center;justify-content:space-between;gap:13px;color:#c9a3e9;font:700 10px var(--latin);letter-spacing:1px;margin-bottom:16px}
+.intelligence-state{border:1px solid #4b355e;background:#25172f;color:#ba9dd1;border-radius:8px;padding:4px 8px;letter-spacing:.1px;font:700 9px var(--latin)}
+.intelligence-state.ready{background:rgba(52,211,153,.1);border-color:#315c50;color:#76e6bd}
+.intelligence-state.absent{background:rgba(251,191,36,.06);border-color:#6b5834;color:#e4c27f}
+.intelligence-state.error{background:rgba(251,113,133,.06);border-color:#6b3448;color:#e49aab}
+.intelligence-facts{display:flex;flex-wrap:wrap;align-items:flex-start;gap:7px;margin-bottom:11px}
+.intelligence-fact{border:1px solid #3c2d4b;background:#1c1525;border-radius:9px;padding:8px 10px;color:#ddcce9;font:500 11px/1.7 var(--latin);overflow-wrap:anywhere;max-width:100%}
+.intelligence-fact strong{color:#c79dea}
+.intelligence-excerpt{white-space:pre-line;overflow-wrap:anywhere;line-height:2;color:#bcb0ca;min-height:126px;font-size:12px;border-radius:10px;background:#0b0910;border:1px solid #272033;padding:14px}
+.intelligence-actions{margin-top:15px}
+.intelligence-actions a{color:#dbb0fa;font:600 12px var(--latin);border-bottom:1px solid #77518d}
+.intelligence-card.intelligence-agent{border-color:#56346d}
+.intelligence-agent p{color:#afa2bd;font-size:12px;line-height:1.85;margin:0 0 16px}
+.agent-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;background:#0b0911;border:1px solid #30233e;border-radius:12px;margin:0 0 13px}
+.agent-tab{padding:10px 7px;border:1px solid transparent;background:transparent;border-radius:8px;color:#ab9ab8;font:600 11px var(--latin)}
+.agent-tab.active{background:#38204f;border-color:#70448e;color:#f0dafd;box-shadow:inset 0 1px rgba(255,255,255,.08)}
+.agent-prompt{display:block;resize:vertical;min-height:230px;max-height:530px;width:100%;padding:15px;background:#08070d;border:1px solid #332840;border-radius:12px;color:#d8cfdf;font:500 11px/1.75 var(--latin);direction:ltr;text-align:left;outline:none;white-space:pre-wrap;overflow:auto}
+.agent-prompt:focus-visible{border-color:#a067c9}
+.agent-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:13px}
+.agent-actions span{color:#9e91a9;font-size:10px;line-height:1.8;flex:1}
+@media(max-width:1150px){.weekly-entries{grid-template-columns:repeat(2,minmax(0,1fr))}.intelligence-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.weekly-header,.intelligence-header{align-items:flex-start;flex-direction:column}.weekly-entries{grid-template-columns:1fr}.weekly-review,.intelligence-card{padding:18px}.intelligence-header h2{font-size:20px}.agent-prompt{min-height:210px}.agent-actions .btn{width:100%}}
