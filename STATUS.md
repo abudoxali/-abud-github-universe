@@ -3,8 +3,41 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V1.5 PROGRESS & DECISION JOURNAL — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
+State: **V1.7 RELIABILITY & PRIVACY — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
 Owner visual/content review: **NOT YET RECORDED**.
+
+## V1.6–V1.7 — Evidence-Based Reports & Hardening (2026-10-09)
+
+**Delivered:** V1.6 reporting and V1.7 static privacy/accessibility hardening. GitHub Pages remains PUBLIC-ONLY and backend-free.
+
+### V1.6 — Local Reports
+- Responsive bilingual 7/30-day report inside the Personal Workboard: focus projects, user-set status, task completion, blocked stages, local journal decisions, and available GitHub public last-push metrics.
+- Public data coverage shown explicitly; no claim that GitHub Push, GitHub Actions, or local task completion proves real product deployment or revenue.
+- On-demand **Markdown download** and **browser Print/PDF dialog** with a print-specific A4 layout. This is not a server-generated PDF or cloud-synchronized report.
+- Reports filter against the currently visible PUBLIC-only repository membership and exclude removed/private project records after successful public membership reconciliation.
+- Implemented in `reports.js`, `reports.css`, `index.html`; added desktop/mobile coverage to `tests/smoke.mjs`.
+
+### V1.7 — Reliability, Accessibility, Privacy
+- Added HTML meta-delivered Content Security Policy with same-origin JavaScript and a restricted network allowlist, plus `referrer=no-referrer`. **Not** a configurable server-sent CSP header.
+- Keyboard `:focus-visible` treatment, reduced-motion accessibility and forced-colors focus support.
+- `scripts/audit-static.mjs` allows only the 15 intended public static files in the Pages artifact, validates PUBLIC_ONLY catalog structure, link consistency, static security markup, and specific credential signatures in released assets. GitHub Actions must pass this gate **before** publication.
+- No sensitive private data was intentionally imported into the website, and no backend/token architecture was added.
+- The publicly accessible **old Git history may still contain the earlier all-repository inventory**. V1.7 does not remove it; a separate, approved history migration and impact review is required.
+
+### Verification evidence
+- GitHub Actions run https://github.com/abudoxali/-abud-github-universe/actions/runs/37908756720 — **SUCCESS**, including `main` commit `5a9f3cc64a249c720812622fe4efe99df2570f55`.
+- PASS: Node JavaScript syntax validation and static existence checks.
+- PASS: Chromium Desktop RTL/LTR, prior V1.0–V1.5 features and V1.6 7/30-day reporting, locally authored decisions, Markdown download, Print/PDF invocation and report privacy filtering.
+- PASS: Chromium CSP/no-referrer and reduced-motion verification; mobile smoke, no horizontal overflow and no uncaught JavaScript errors.
+- PASS: Static publication audit: 28 public repositories, **15 allowlisted site assets**, security checks and no stale relationships.
+- PASS: Real GitHub Pages deployment and public HTTPS fetch of the actual site and its added report JavaScript.
+- Owner's **manual visual approval: PENDING**, independent of CI/HTTPS success.
+
+### V2 status — defined, NOT SHIPPED
+- Security and live-acceptance contract added at `docs/V2_SECURE_WORKSPACE.md`.
+- A genuine authenticated private workspace with cross-device database state, read-only scoped GitHub App credentials, owner sessions and per-repository authorization is NOT implemented or verified.
+- V2 implementation/deployment requires the owner to choose a current backend domain/host, approve the GitHub authorization method/selected repositories, and approve the intended security/backup policy.
+- Never store private repository details or OAuth tokens on the public GitHub Pages app.
 
 ## V1.4–V1.5 — Daily Execution Workboard & Local Progress Journal (2026-10-09)
 
