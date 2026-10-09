@@ -3,8 +3,51 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V1.3 GRAPH & PROJECT DECISIONS — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
+State: **V1.5 PROGRESS & DECISION JOURNAL — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
 Owner visual/content review: **NOT YET RECORDED**.
+
+## V1.4–V1.5 — Daily Execution Workboard & Local Progress Journal (2026-10-09)
+
+**Current shipped state:** V1.5. Scope is device-local, public-only, no backend and no automatic changes to source repositories.
+
+### V1.4 — Personal Workboard
+- Add a responsive **Personal Execution Workboard** containing a maximum of three user-selected public focus repositories.
+- User choices drive the **Daily Command Center** priorities rather than the original fixed priority array.
+- For each selected repository: bounded short task list, done/undone task state, task completion summary and user-set manual stage (Backlog, In Progress, Blocked, Review, Done).
+- Data is persisted **only in this browser's localStorage** (key `abud-os-workboard-v1`). No account sync, GitHub write, public Markdown storage or backend storage occurs.
+- Safe JSON export/import with a 1MB file cap, public-membership filtering, input length/shape validation and rejection of obvious secret-looking input.
+- On successful public API synchronization, projects removed or made private are removed from the current local focus and local project/task records, and are not included in current exports.
+- GitHub Actions **SUCCESS** including browser and HTTPS on https://github.com/abudoxali/-abud-github-universe/actions/runs/37906793645.
+
+### V1.5 — Progress & Decision Journal
+- Add browser-local event history for focus/unfocus actions, stage updates, task creation/completion/reopening/deletion.
+- Allow a short, self-authored decision or blocker note linked to a currently focused public project.
+- Filter local history by 7 days, 30 days or all history.
+- Cap history at 150 events and include public-only, validated events in JSON exports and imports; remove events relating to repositories no longer public.
+- History is explicitly distinct from GitHub `pushed_at`, commits, CI, product completion and live deployment verification.
+- Files: `index.html`, `workboard.js`, `workboard.css`, `command-center.js`, `app.js`, Playwright smoke tests, GitHub Pages workflow.
+
+### Verification
+- https://github.com/abudoxali/-abud-github-universe/actions/runs/37907185146 — **SUCCESS**.
+- Node syntax and static asset checks: **PASS**.
+- Chromium desktop: previous V1.0–V1.3 dashboard, graph, public membership, Arabic/English, evidence and agent prompts: **PASS**.
+- V1.4: 3-project cap, tasks, completion and stage, refresh persistence, custom focus integration, JSON import filtering of synthetic private repos: **PASS**.
+- V1.5: local journal entries, manually authored decisions, 7/30/all filter, public-only event export/import, missing/private project cleanup: **PASS**.
+- Chromium mobile: workboard, empty journal, responsive navigation, project hub and no uncaught JS errors: **PASS**.
+- GitHub Pages publish + actual HTTPS content verification: **PASS**.
+
+### Caveats and gates
+- LocalStorage is **not encrypted private storage**. Use it for public project coordination and non-sensitive notes only; don't store customer data, tokens, private repository details or secrets.
+- Workboard state is *local to the current browser*. Users need to export/import backups when switching browsers/devices. A browser clear or incognito session may erase local data.
+- Current public repo membership must be successfully refreshed to reflect new GitHub visibility immediately; during a network outage the last published public snapshot may be stale.
+- The existing public Git history contains earlier repository catalogs; their presence is not fixed by the current HEAD. No destructive rewrite was performed.
+- Owner screenshot/visual acceptance is **not yet recorded**, distinct from passing CI and real HTTPS availability.
+- **V1.6, V1.7 and V2.0 are proposed, not implemented**. V2 private workspace requires secure server-side GitHub authorization and a backend beyond public GitHub Pages.
+
+### Future release direction (not delivered)
+- V1.6: owner-directed weekly review and printable/exportable summaries.
+- V1.7: accessibility, privacy hardening, CI reliability and review of historical public data exposure.
+- V2.0: authenticated secure ABUD OS with owner-private repository access, server-managed credentials and audited authorization; only after an approved backend deployment and end-to-end live tests.
 
 ## V1.3 — Smarter Project Graph & Decision Dashboard (2026-10-09)
 
