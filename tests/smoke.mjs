@@ -96,6 +96,13 @@ try {
   assert.equal(await desktop.locator("#graphClusters .graph-cluster").count(),8,"All 8 clusters should render");
   assert.equal(await desktop.locator("#metrics .stat").count(),5,"Metrics should render");
   assert.equal(await desktop.locator("html").getAttribute("dir"),"rtl","Default is Arabic RTL");
+  assert.match(await desktop.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content"),/script-src 'self'/);
+  assert.equal(await desktop.locator('meta[name="referrer"]').getAttribute("content"),"no-referrer");
+  await desktop.emulateMedia({reducedMotion:"reduce"});
+  const reduced=await desktop.locator("#workPin").evaluate(el=>getComputedStyle(el).transitionDuration);
+  assert.match(reduced,/^(?:0s|0\.00001s|1e-05s)/);
+  await desktop.emulateMedia({reducedMotion:"no-preference"});
+  console.log("PASS V1.7: CSP, no-referrer and reduced-motion support");
   await desktop.waitForFunction(()=>document.querySelector("#weeklyIndicator")?.textContent==="PUBLIC GITHUB");
   assert.ok((await desktop.locator("#weeklySummary").textContent()).includes(expected+"/"+expected),"Weekly report must state how many public repositories have metadata");
   console.log("PASS V1.2 weekly: last push review sourced from public metadata");
