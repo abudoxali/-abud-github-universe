@@ -3,71 +3,54 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V2.0 PRIVATE WORKSPACE BETA — AUTOMATED TESTS PASS; PRODUCTION NOT DEPLOYED**
-Private target domain: `os.abud.fun` (selected, DNS and TLS NOT verified)
+State: **V2.0 PARTIALLY DEPLOYED — DATABASE, ORIGIN TLS AND MAINTENANCE VHOST VERIFIED; APPLICATION INACTIVE**
+Private target: `https://os.abud.fun` (Cloudflare-proxied DNS and edge/origin TLS validate; HTTPS intentionally returns 503 until owner OAuth/private-repository setup is complete)
 Public GitHub Pages: unchanged at `https://abudoxali.github.io/-abud-github-universe/`
 Owner visual/content review: **NOT YET RECORDED**.
 
-## V2.0 — Secure Owner-Only Workspace Alpha (2026-10-09)
+## V2.0 — Secure Owner-Only Workspace (2026-10-09)
 
-**Scope:** New isolated backend under `apps/private-server/` on branch `feat/v2-secure-os`. Keep the V1.x public site unchanged. This is **not** a production V2.0 release.
+**Scope:** Private backend under `apps/private-server/` on `feat/v2-secure-os`; keep the V1.x public site unchanged. Source exists and an inactive timestamped release is staged. The authenticated application is **not active and is not production ready**.
 
 ### Implemented in source
-- Backend: Fastify on Node.js >=22. Isolated private server, default local-only port 3164, expected public origin `https://os.abud.fun`. No browser GitHub tokens.
-- Authentication: GitHub OAuth identity-only sign-in, one-time database-backed OAuth state, strict owner numeric ID + login validation, discard OAuth access token after identity check.
-- Authorization: opaque SHA-256 hashed, server-side PostgreSQL sessions, expiring HttpOnly Secure SameSite cookies; server-side logout; CSRF token and exact Origin checks on writes.
-- GitHub App: installed read-only **selected repository** access, permission gate rejecting all write scopes or unexpected owner; contents `STATUS.md` read on behalf of the installation, verifying membership on each request.
-- Data persistence: owner-scoped PostgreSQL workspace with revision-based 409 conflict prevention, validated task/focus/event formats. Private JSON is never uploaded to public GitHub Pages.
-- Private owner report: authenticated, `no-store` Markdown 7/30-day export, explicitly no permanent public download URL.
-- UI: responsive bilingual Arabic RTL and English LTR owner portal, approved repos, private/public badges, up to three focus projects, tasks, status document claims and exports.
-- Deployment references: isolated Nginx TLS vhost, isolated systemd service example, explicit fresh-database checks and live security acceptance checklist.
-- CI pipeline `.github/workflows/private-ci.yml` is separate from public Pages pipeline. It runs Node security tests and isolated PostgreSQL 16 integration tests in GitHub Actions, with no real OAuth/installation credentials.
+- Fastify backend on Node.js >=22, localhost-only on port 3164, with no browser GitHub tokens.
+- Owner-only GitHub OAuth design with one-time database-backed state, numeric ID + login enforcement, hashed DB sessions, Secure/HttpOnly cookies, logout, CSRF and exact Origin checks.
+- Separate read-only GitHub App access, selected-installation membership checks, private STATUS claims, owner-scoped PostgreSQL workspace, 409 optimistic concurrency and confidential `no-store` reports.
+- Bilingual Arabic RTL / English LTR workspace, opt-in V1 Workboard JSON import, manual save, tasks/stages/decisions and local journal.
+- Local metadata-permission fix now requires both GitHub App `Metadata: Read` and `Contents: Read`; a regression test covers missing Metadata permission.
 
-### V2.0 Beta milestone — Private execution and migration (2026-10-09)
+### Reconciled source of truth
+- V2 checkout: `%LOCALAPPDATA%/Temp/abud-os-v2-inspection`; branch `feat/v2-secure-os`; local HEAD `44902bae0bb0a28549091ff02278f4e4d25576f7`; remote branch remains `c3ef3f768ac7188db172cf28993174908ae0df91`.
+- The six reviewed commits are unpushed. PR #1 remains OPEN / DRAFT against `main` at the remote base SHA. No merge or push occurred. The Desktop checkout is a V1 snapshot without `.git`; its old STATUS.md was not copied over this V2 status.
+- Generated `_site/` is an untracked audit artifact and is excluded from all commits. The canonical STATUS.md and Nginx example have uncommitted local updates for this final gate pass.
+- Public Pages remains public-only: live homepage and `app.js` HTTPS returned 200; static audit passed with 28 public entries and 15 allowlisted assets.
 
-**Delivered on isolated V2 branch; NOT deployed to os.abud.fun.**
+### Verification and progress metrics
+- Local backend tests: **9/10 passed (90%), 0 failed, 1 skipped (10%)** because no local PostgreSQL test service is available. `npm run check` passed; full `npm audit` found 0 vulnerabilities. Browser smoke passed **3/3 (100%)**, using mocked API responses, not production.
+- Staged-release install/check/tests passed; the same PostgreSQL integration test was skipped. Previous GitHub Actions run `37918143206` passed 10/10 with PostgreSQL 16 and Chromium on the remote base, not the six local commits.
+- Live application acceptance: **0% passed / 100% remaining**; the service is inactive and production private endpoints currently return 503. No overall weighted project-completion percentage is assigned because the release criteria have no agreed weights.
 
-- Extended the owner-only UI with manual stage selection (Backlog / In Progress / Blocked / Review / Done), bounded task event journal, and written decision/blocker notes.
-- Added an explicit, user-selected **V1 Workboard JSON import** supporting currently GitHub-App-authorized public or private project names. Import filters unauthorized names and obvious secrets, never auto-reads public site localStorage, never auto-saves, requires confirmation and a separate authenticated Save action.
-- Unsaved-change navigation warning and corrected logout state clearing.
-- Added tests that simulate **positive GitHub OAuth callback**, strict owner identity, single-use OAuth state, owner session, logout/revocation, and denial to alternate GitHub accounts. These are mocked GitHub responses, **not live OAuth approvals**.
-- Added per-process OAuth abuse throttling (20 requests per minute per perceived client IP, bounded map). This is a fallback; a production reverse-proxy rate limit is still required.
-- Verified revoked GitHub App repository membership removes the repo, tasks, notes, and document contents from response payloads and private reports.
-- Added Chromium browser smoke tests for desktop owner UI, authorized repo listing, manual stage, task completion, decision journal, bilingual layout, saving, opt-in import, guest/mobile login boundary and no localStorage copy of private workspace data.
-- CI run: https://github.com/abudoxali/-abud-github-universe/actions/runs/37917892804 — **SUCCESS**.
-- Evidence: **10/10** Node/backend/PostgreSQL security tests passed, **0 failed, 0 skipped**. Real ephemeral PostgreSQL 16 was used; Chromium desktop/mobile checks passed; public Pages artifact isolation check passed.
-- Real production PostgreSQL, OAuth credentials, selected GitHub App installation, Cloudflare DNS, HTTPS, Nginx, server deployment, cross-device auth and owner acceptance are still **UNVERIFIED**.
-- V2 remains **BETA CODE**, **NOT PRODUCTION**; PR #1 stays Draft, main remains the public GitHub Pages site.
+### Verified GitHub integration
+- App `abud-os-private-access`: App ID `5254197`; verified Installation ID `169700628`; owner `abudoxali` / `184322111`; selected-only with Metadata/Contents Read and no write permissions.
+- App authentication with the local PEM succeeded. One repository is selected and **zero private repositories** are selected, despite the owner reporting selection; the new installation response must be corrected or a private repository chosen. The PEM is installed at `/etc/abud-os/github-app.pem` (`0640 root:abudos`); App ID, Installation ID and key path are in `/etc/abud-os/private.env` (`0640 root:abudos`). Owner reports old OAuth secret and App key revoked; that revocation is not independently verifiable here.
+- OAuth Client ID and rotated Client Secret are absent from the agent environment and VPS env file, despite the owner choosing local environment variables. The value disclosed in chat was not used. Do not send credentials in chat.
 
-### Automated verification — PASS
-- Isolated private-backend CI: https://github.com/abudoxali/-abud-github-universe/actions/runs/37912814286 — **SUCCESS**.
-- Node.js 22 security tests and actual temporary PostgreSQL 16 integration: **6/6 PASS, 0 FAIL, 0 SKIP**. The DB test was initially incorrectly skipped; this was discovered and corrected, and the final rerun executed it successfully.
-- Confirmed owner-session checks, unauthenticated private API/report denial, CSRF+Origin refusal, unauthorized installation repo denial, strict GitHub App permissions and selected-repo requirement, OAuth state cookie format, simulated report privacy, DB one-time OAuth state consumption, and optimistic DB revision concurrency.
-- Public GitHub Pages artifact isolation check passed. Real production OAuth/DNS/VPS/private repo end-to-end remains unverified.
-- Draft PR for review: https://github.com/abudoxali/-abud-github-universe/pull/1 — intentionally **NOT MERGED** to protect the working public site.
+### Verified VPS, database, DNS and TLS
+- VPS: `vmi3595755`, `5.189.151.43`, Ubuntu 24.04.5; SSH port 22 (3130 timed out); Node `v22.23.2`; PostgreSQL `16.15`. Dedicated account `abudos`, database `abud_os`, and least-privilege login role `abud_os_app` exist. The pre-migration identity check matched `abud_os|abud_os_app`; only `oauth_states`, `owner_sessions`, `owner_workspaces` were migrated.
+- A schema-only PostgreSQL backup was restored successfully into `abud_os_restore_verify_20261009`. Daily encrypted backups are configured with a 30-day retention timer; the age key is `/etc/abud-os/backup.agekey` (`0600 root:root`). The first encrypted backup `/var/backups/abud-os/abud_os_20261009T200439Z.dump.age` was decrypted/restored successfully into `abud_os_restore_encrypted_verify_20261009`. No workspace data existed; both restore-verification DBs remain for owner review. The encryption key has no verified off-host escrow.
+- Release staged at `/var/www/abud-os/releases/20261009175941`; `/var/www/abud-os/current` and `abud-os-private.service` are absent/inactive; port 3164 has no listener.
+- `os.abud.fun` resolves through Cloudflare and the effective proxy route is working. Exact DNS record type/target/TTL and zone SSL mode are not inspected; no Cloudflare change is needed for the already validated route.
+- Dedicated Nginx vhost has per-client limits (auth 20/min, API 120/min), trusts `CF-Connecting-IP` only from the current Cloudflare-published CIDRs, and returns 429 when throttled. A direct-origin spoofed-header probe exceeded the auth threshold and was rate-limited. `nginx -t` passed before reload; existing `abud.fun` remains 200 and `www.abud.fun` 301; existing platform/PM2 apps remain active.
+- Let’s Encrypt origin certificate for `os.abud.fun` is valid through 2027-01-07; direct-origin and Cloudflare-edge TLS validate. HTTP-01 issuance and Certbot staging dry-run passed. HTTPS currently returns 503 with `Cache-Control: private, no-store`; `/health/live` and `/api/repos` return 503 because the app service is inactive.
 
-### Verified boundaries
-- The exact remote `feat/v2-secure-os` base was verified at `c3ef3f768ac7188db172cf28993174908ae0df91`; GitHub owner identity independently verified as `abudoxali` / numeric ID `184322111`. Local reviewed patch commit: `03b3021d001952ff15b6bcdf3bd2cec016ceba22` on the acquired `feat/v2-secure-os` copy. PR #1 remains **OPEN / DRAFT** against `main` at the base SHA; the local commit was not pushed or merged.
-- Public GitHub Pages workflow and site remain public-only; no V2 data or credentials were added to the Pages artifact. The live homepage and `app.js` returned HTTP 200 over verified HTTPS. The local public-artifact audit passed with 28 public catalog entries, exactly 15 allowlisted files, CSP/referrer checks and no stale relationships.
-- Automated CI run `37918143206` passed on the base SHA with isolated PostgreSQL 16 and Chromium. On the local patch, `npm ci`, `npm run check`, `npm audit --omit=dev` (0 vulnerabilities), and backend tests passed; local `npm test` reports 9 passed / 1 skipped because no local PostgreSQL test service is available. `node tests/browser.mjs` passed all three mocked-API desktop/mobile checks. On the staged release, `npm ci --omit=dev`, `npm run check`, and `npm test` passed (9 passed / 1 PostgreSQL test skipped). A temporary local process on `127.0.0.1:3164` returned health 200 and `no-store` using mocked DB/GitHub dependencies; it was stopped and does not represent deployed-service health.
-- A new failing test exposed that GitHub App `Metadata: Read` was not enforced. Commit `03b3021d001952ff15b6bcdf3bd2cec016ceba22` now rejects installations without both `Metadata: Read` and `Contents: Read`, adds a regression test, pins a lockfile, and uses clean installs. The revised patch has not run in GitHub Actions because it has not been pushed.
-- GitHub App `abud-os-private-access` was verified using the local PEM without displaying or logging its contents: App ID `5254197`, Installation ID `169700628`, owner ID/login match, `repository_selection=selected`, and exactly `Metadata: Read` / `Contents: Read`. GitHub reports one selected repository and zero selected private repositories. The PEM is installed at `/etc/abud-os/github-app.pem` with mode `0640 root:abudos`; server-side App ID, Installation ID, and key path are configured in `/etc/abud-os/private.env` (`0640 root:abudos`). A private repository is not yet selected, so private source access is not accepted.
-- OAuth Client ID and rotated Client Secret are absent from the secure local environment/config paths checked and are not present in the VPS env file. No value supplied in chat was used. Real OAuth remains blocked until the owner provisions the rotated credentials securely; do not send them in chat.
-- Public VPS verified as `vmi3595755` / `5.189.151.43`, Ubuntu 24.04.5, reachable by the configured root key on SSH port 22; port 3130 times out. Node `v22.23.2`, PostgreSQL `16.15`, Nginx, and existing production services are present. Port `3164` and the ABUD OS systemd service are unused/absent. A new isolated `os.abud.fun` Nginx vhost is installed; `nginx -t` passed before reload. Existing `abud.fun` still returns 200 and `www.abud.fun` 301 at the origin; `abud-platform` and existing PM2 apps remain active.
-- Isolated resources created on that VPS: system account `abudos`; database `abud_os`; login role `abud_os_app` with superuser, role-creation, database-creation and inheritance privileges disabled; and `/etc/abud-os/private.env` mode `0640 root:abudos`. Before migration, the connection was verified as `current_database() = abud_os`, `current_user = abud_os_app`. The project schema was applied only to this database; exactly `oauth_states`, `owner_sessions`, and `owner_workspaces` are present. Inactive source release is staged at `/var/www/abud-os/releases/20261009175941`; no `current` symlink, systemd service, or port `3164` listener is active.
-- A schema-only PostgreSQL custom-format backup was created at `/var/backups/abud-os/abud_os_20261009175941.dump` (`0600 root:root`) and successfully restored into the isolated verification DB `abud_os_restore_verify_20261009`. That restore database is retained for owner review; no application workspace data exists yet. Backup retention/automation policy remains pending owner confirmation.
-- `os.abud.fun` now resolves to Cloudflare edge A/AAAA addresses and responds through the Cloudflare proxy. The underlying DNS record type/target/TTL and zone SSL mode cannot be inspected without Cloudflare authorization. The current origin certificate had no `os.abud.fun` SAN, so a real Let's Encrypt certificate was issued for `os.abud.fun`, with renewal dry-run **PASS**. Direct-origin TLS now validates. HTTPS at the edge and origin currently returns `503` with `Cache-Control: private, no-store`; `/health/live` and `/api/repos` are not live because the owner-only service is not active. The hostname no longer falls through to the public homepage.
-- Live OAuth, private repository access/revocation, cross-device state, application health, rollback, and owner visual/access-control acceptance remain **UNVERIFIED / PENDING**. No unrelated production app or database was modified.
-- The old public repo Git history may expose earlier names; no history rewrite or destructive Git changes have occurred.
+### Release gates and remaining acceptance
+1. `GITHUB_CLIENT_ID` and the rotated `GITHUB_CLIENT_SECRET` must be made available through secure local/server-side configuration; the agent environment still does not contain them. Do not send credentials in chat.
+2. Owner must make GitHub report at least one specifically selected private test repository in Installation `169700628`; do not change it to All repositories.
+3. Owner explicitly authorized pushing the six reviewed commits plus the Nginx-template/STATUS updates to `feat/v2-secure-os`; push is pending. Push only that branch, run CI on the new SHA, and update PR #1 without merging.
+4. Owner should escrow `/etc/abud-os/backup.agekey` in a secure off-host store to make encrypted backups recoverable after VPS loss, and confirm disposition of the two retained verification databases.
+5. After OAuth and private-repo authorization, activate systemd and the `/api`/`/auth` Nginx proxy to `127.0.0.1:3164`, then run real owner/non-owner OAuth, private repo allow/deny/revocation, CSRF/Origin, persistence/cross-device/409, report no-cache, restart, real RTL/LTR desktop/mobile, backup with real data and rollback acceptance.
 
-### Release gate
-1. Owner provides Cloudflare Zone Read + DNS Edit access scoped to `abud.fun` so the effective record target/TTL/proxy and zone SSL mode can be verified; confirm the ongoing backup/retention policy.
-2. Owner supplies the OAuth Client ID and rotated Client Secret through secure local/server-only configuration, and adds at least one owner-selected private repository to Installation `169700628`. Do not send credentials in chat.
-3. Run revised CI with PostgreSQL 16 and Chromium on commit `03b3021d001952ff15b6bcdf3bd2cec016ceba22`; publish the local patch to the draft PR only with separate push authorization.
-4. After OAuth and private-repo access are verified, enable the isolated systemd service, point the existing `os` Nginx vhost to `127.0.0.1:3164`, and activate the existing `current` release only after live health checks pass.
-5. Run live owner/stranger OAuth, access-control, private-repo/revocation, CSRF, cache, database persistence/conflict, backup/restore with real app data, restart, renewal, rollback, and real bilingual desktop/mobile acceptance before marking V2 READY.
-
-No release-ready claims are made before production HTTPS and real end-to-end acceptance.
+No production-ready claim is made until all critical live authentication, authorization, data, service and UI checks pass.
 
 ## V1.6–V1.7 — Evidence-Based Reports & Hardening (2026-10-09)
 
@@ -98,11 +81,9 @@ No release-ready claims are made before production HTTPS and real end-to-end acc
 - A timing-sensitive V1.2 regression was caught in a CI rerun: the agent prompt could be rendered before public GitHub commit/CI evidence arrived. Fixed by dispatching `abud:project-activity` after the project activity panel updates and regenerating the prompt. The follow-up complete Playwright/HTTPS run passed. No commit/CI evidence is fabricated when requests have not completed.
 - Owner's **manual visual approval: PENDING**, independent of CI/HTTPS success.
 
-### V2 status — defined, NOT SHIPPED
-- Security and live-acceptance contract added at `docs/V2_SECURE_WORKSPACE.md`.
-- A genuine authenticated private workspace with cross-device database state, read-only scoped GitHub App credentials, owner sessions and per-repository authorization is NOT implemented or verified.
-- V2 implementation/deployment requires the owner to choose a current backend domain/host, approve the GitHub authorization method/selected repositories, and approve the intended security/backup policy.
-- Never store private repository details or OAuth tokens on the public GitHub Pages app.
+### V2 status at this historical V1.7 snapshot (superseded)
+- This section records the V1.7-era design-only state before the V2 implementation and deployment preparation documented at the top of this file. It is retained as history, not as the current V2 status.
+- The public GitHub Pages app remains public-only; private repository details and OAuth tokens must never be added to it.
 
 ## V1.4–V1.5 — Daily Execution Workboard & Local Progress Journal (2026-10-09)
 
@@ -140,7 +121,7 @@ No release-ready claims are made before production HTTPS and real end-to-end acc
 - Current public repo membership must be successfully refreshed to reflect new GitHub visibility immediately; during a network outage the last published public snapshot may be stale.
 - The existing public Git history contains earlier repository catalogs; their presence is not fixed by the current HEAD. No destructive rewrite was performed.
 - Owner screenshot/visual acceptance is **not yet recorded**, distinct from passing CI and real HTTPS availability.
-- **V1.6, V1.7 and V2.0 are proposed, not implemented**. V2 private workspace requires secure server-side GitHub authorization and a backend beyond public GitHub Pages.
+- At this V1.5 snapshot, V1.6–V2.0 were future proposals; subsequent V1.6–V1.7 history and the current V2.0 deployment status above supersede that snapshot.
 
 ### Future release direction (not delivered)
 - V1.6: owner-directed weekly review and printable/exportable summaries.
