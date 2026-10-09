@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050508">
-  <meta name="description" content="ABUD GitHub Universe — interactive bilingual map of all 43 GitHub repositories, current priorities and product lineage.">
+  <meta name="description" content="ABUD GitHub Universe — interactive bilingual map of public GitHub repositories, current priorities and product lineage.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="ABUD GitHub Universe — Project Command Center">
-  <meta property="og:description" content="43 repositories. One clear map.">
+  <meta property="og:description" content="Public repositories. One clear map.">
   <meta property="og:url" content="https://abudoxali.github.io/-abud-github-universe/">
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -68,9 +68,9 @@
           </div>
           <div class="hero-art" aria-hidden="true">
             <div class="orb-ring ring-a"></div><div class="orb-ring ring-b"></div><div class="orb-ring ring-c"></div>
-            <div class="orb-core"><span>A</span><small>43</small></div>
+            <div class="orb-core"><span>A</span><small id="heroRepoCount">28</small></div>
             <span class="orb-satellite sat-a"></span><span class="orb-satellite sat-b"></span><span class="orb-satellite sat-c"></span><span class="orb-satellite sat-d"></span>
-            <span class="orb-label orb-label-1">GITHUB · 43</span><span class="orb-label orb-label-2">8 CLUSTERS</span>
+            <span class="orb-label orb-label-1" id="orbRepoLabel">GITHUB · 28</span><span class="orb-label orb-label-2">8 CLUSTERS</span>
           </div>
         </section>
 
@@ -97,7 +97,7 @@
             <div class="map-viewport" id="mapViewport" tabindex="0" aria-label="Interactive repository relationship map">
               <div class="map-world" id="mapWorld">
                 <svg class="graph-lines" id="graphLines" viewBox="0 0 2260 1640" aria-hidden="true"></svg>
-                <div class="graph-center" id="graphCenter"><div class="core-glyph">✧</div><strong>ABUD OS</strong><span>REPOSITORY UNIVERSE</span><div id="graphTotal">43 REPOS</div></div>
+                <div class="graph-center" id="graphCenter"><div class="core-glyph">✧</div><strong>ABUD OS</strong><span>REPOSITORY UNIVERSE</span><div id="graphTotal">28 REPOS</div></div>
                 <div id="graphClusters"></div>
               </div>
             </div>
@@ -106,7 +106,7 @@
         </section>
 
         <section class="registry-section" id="library">
-          <div class="section-heading"><div><div class="section-kicker">03 / COMPLETE REPOSITORY REGISTRY</div><h2 data-i18n="registryTitle">كل الـRepositories</h2><p data-i18n="registrySub">بحث وتصنيف وتفاصيل لكل مشروع — مع روابط GitHub المباشرة.</p></div><div id="resultCount" class="section-count">43 / 43</div></div>
+          <div class="section-heading"><div><div class="section-kicker">03 / COMPLETE REPOSITORY REGISTRY</div><h2 data-i18n="registryTitle">كل الـRepositories</h2><p data-i18n="registrySub">بحث وتصنيف وتفاصيل لكل مشروع — مع روابط GitHub المباشرة.</p></div><div id="resultCount" class="section-count">28 / 28</div></div>
           <div class="registry-tools">
             <label class="search-box"><span>⌕</span><input id="repoSearch" type="search" autocomplete="off" data-i18n-placeholder="search" placeholder="ابحث باسم المشروع، حالته، أو وظيفته..."><kbd>/</kbd></label>
             <button id="clearFilters" class="btn btn-outline" type="button" data-i18n="clear">مسح الفلاتر</button>
