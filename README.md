@@ -27,6 +27,21 @@ The public GitHub Universe is now usable as a daily project reference:
 
 V1.1 is still **public-only**. An authenticated private workspace is a separate product milestone and must not be implemented by shipping private records or OAuth credentials through GitHub Pages.
 
+## V1.2 — Project Intelligence & AI Agent Workflow
+
+V1.2 extends the V1.1 daily board without introducing a backend or requesting private repository data.
+
+- **Weekly public activity** shows which public repositories have a GitHub `pushed_at` date within the last seven days. It counts *repositories with recent pushes*, not commits, engineering output, user adoption, or release completion. Missing or partial metadata is explicitly labeled.
+- **STATUS.md evidence** is fetched on demand from the root of the selected public repository. The browser first checks repository visibility, then requests only `STATUS.md` on the default branch. The UI extracts a few recognizable fields (Status, Updated, Completion, Phase, Blocker, etc.) and links back to the actual document.
+- **Evidence quality:** the UI calls values *document claims*, not runtime proof. Missing, oversized or unavailable status files are explicitly marked. Remote markdown is treated as untrusted data and is never rendered as executable HTML.
+- **Agent 1 / Agent 2 handoff:** select a copyable analysis-only handoff or an execution-focused local coding prompt. Both retain the repo identity, curated next action, optional verified STATUS blob SHA, and any publicly observed commit/CI evidence, with strong trust and security constraints. Neither blindly copies instructions or secret-looking values from remote status text.
+- **Bilingual:** Arabic RTL and English LTR, responsive cards and copy-ready English agent prompts.
+- **Security:** the public site remains public-only and uses no authentication tokens in frontend code. A private repository is never read by the status loader, and old project deep links cannot knowingly reveal hidden projects after public sync.
+
+The `intelligence.js` and `intelligence.css` modules are deployed alongside `command-center.js` and `command-center.css`. Chromium tests cover public source parsing, Agent 1/2 prompts, qualified CI and commit evidence, weekly metadata, absent status files, private/deleted links and mobile usability.
+
+**Limit:** this is an inspection and coordination reference, *not* an authenticated private project-management backend or autonomous coding service.
+
 ## Privacy boundaries
 
 The deployed site is public. It must contain **public repositories only**, even when the connected owner's GitHub integration can see private repositories. Never insert private names, sensitive records, environment values or credentials into site source files.
@@ -42,6 +57,7 @@ If GitHub's API is unavailable, the site uses its most recently reviewed public 
 - `data.js` — public-only curated repository snapshot and relationships
 - `app.js` — graph, search, filtering, localization, details, public API reconciliation
 - `command-center.js` / `command-center.css` — V1.1 daily workspace, project pages, public commit/CI evidence
+- `intelligence.js` / `intelligence.css` — V1.2 weekly activity, STATUS.md source and Agent 1/2 prompts
 - `scripts/sync-public.mjs` — safe public membership diff, preserves human assessments
 - `tests/smoke.mjs` — Chromium desktop/mobile and privacy-reconciliation checks
 - `.github/workflows/pages.yml` — sync, test, deploy, HTTPS smoke
