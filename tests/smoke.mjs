@@ -73,7 +73,7 @@ async function mockPublicGitHub(page){
 const server = http.createServer(async (req,res) => {
   try {
     const name = decodeURI((req.url || "/").split("?")[0]).replace(/^\/+/, "") || "index.html";
-    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","decisions.js","decisions.css","workboard.js","workboard.css","favicon.svg"].includes(name)) {
+    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","decisions.js","decisions.css","workboard.js","workboard.css","reports.js","reports.css","favicon.svg"].includes(name)) {
       res.writeHead(404).end("Not found");return;
     }
     const buf = await readFile(resolve(root,name));
@@ -201,6 +201,26 @@ try {
   assert.match(await desktop.locator("#workHistoryList").textContent(),/Release blockers need review/);
   await desktop.locator("#historyFilter").selectOption("all");
   assert.equal(await desktop.locator("#historyFilter").inputValue(),"all");
+  const snapshot=await desktop.evaluate(()=>window.ABUD_REPORT.collect());
+  assert.equal(snapshot.projects.length,3);
+  assert.equal(snapshot.completed,1);
+  assert.ok(snapshot.events.some(e=>e.kind==="note"&&e.project==="RootRay"));
+  assert.ok(snapshot.publicCount===expected);
+  await desktop.locator("#reportPeriod").selectOption("30");
+  assert.equal(await desktop.locator("#reportPeriod").inputValue(),"30");
+  const reportMd=await desktop.evaluate(()=>window.ABUD_REPORT.getMarkdown());
+  assert.match(reportMd,/RootRay/);
+  assert.match(reportMd,/Release blockers need review/);
+  assert.match(reportMd,/1/);
+  assert.match(reportMd,/GitHub Push does not prove|GitHub push do not prove|CI and GitHub push do not prove/i);
+  const downloadPromise=desktop.waitForEvent("download");
+  await desktop.locator("#reportMarkdown").click();
+  const file=await downloadPromise;
+  assert.match(file.suggestedFilename(),/^abud-os-review-30d-\d{4}-\d{2}-\d{2}\.md$/);
+  await desktop.evaluate(()=>{window.__printCalled=false;window.print=()=>{window.__printCalled=true;};});
+  await desktop.locator("#reportPrint").click();
+  assert.equal(await desktop.evaluate(()=>window.__printCalled),true);
+  console.log("PASS V1.6: period, owner evidence, Markdown download, Print/PDF action"); 
   console.log("PASS V1.5: local task/stage journal and authored project decision");
   await desktop.reload({waitUntil:"domcontentloaded"});
   await desktop.locator('#workProjects [data-work-project="RootRay"] .work-task.done').waitFor();
@@ -277,6 +297,8 @@ try {
   assert.ok(!pruned.focus.includes("RootRay"));
   assert.ok(!Object.keys(pruned.projects).includes("RootRay"));
   assert.ok(!pruned.events.some(event=>event.project==="RootRay"));
+  assert.ok(!(await desktop.evaluate(()=>window.ABUD_REPORT.getMarkdown())).includes("RootRay"),
+    "Private/removed project may not be exported in Markdown");
 
   await desktop.goto(url+"#project/RootRay",{waitUntil:"domcontentloaded"});
   await desktop.waitForURL(/#daily$/);
@@ -349,6 +371,8 @@ try {
   assert.equal(await mobile.locator("#relationGrid .relation-card").count(),6);
     assert.equal(await mobile.locator("#workProjects .work-project").count(),3);
   assert.equal(await mobile.locator("#workHistoryList .work-history-empty").count(),1);
+  assert.equal(await mobile.locator("#reportStats .report-stat").count(),4);
+  assert.equal(await mobile.locator("#reportPeriod").inputValue(),"7");
     await mobile.locator("#dailyLead h3").waitFor();
   assert.equal(await mobile.locator("#dailyQueue .queue-card").count(),2);
   await mobile.locator("#dailyLead a").first().click();
