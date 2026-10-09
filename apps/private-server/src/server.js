@@ -170,6 +170,45 @@ export function createServer({env=process.env,pool,github,fetchImpl=fetch}={}){
     if(!rows.length)return reply.code(409).send({error:"version-conflict"});
     return {revision:rows[0].revision,data};
   });
+  server.get("/api/report.md",async(request,reply)=>{
+    const user=await authorized(request,reply);if(!user)return;
+    const allowedList=await github.list();
+    const allowed=new Set(allowedList.map(r=>r.name));
+    const {rows}=await pool.query("SELECT revision,data FROM owner_workspaces WHERE github_user_id=$1",[user.id]);
+    const data=normalizeWorkspace(rows[0]?.data??{version:1,focus:[],projects:{},events:[]},allowed);
+    const days=request.query?.days==="30"?30:7;
+    const cutoff=Date.now()-days*86400000;
+    const date=new Date().toISOString();
+    const clean=str=>String(str||"").replace(/[\r\n\x00-\x1f]+/g," ").replace(/[\x60*\[\]<>]/g," ").slice(0,130);
+    const lines=[
+      "# ABUD OS — Private Owner Report",
+      "",
+      "Generated: "+date,
+      "Period: "+days+" days",
+      "Authorized repositories: "+allowedList.length,
+      "Current focus: "+data.focus.length,
+      "Source: authenticated server-side PostgreSQL workspace and selected GitHub App installation.",
+      "","## Owner-selected focus",""
+    ];
+    for(const name of data.focus){
+      const p=data.projects[name]||{stage:"backlog",tasks:[]};
+      lines.push("### "+clean(name),"","- Stage: "+clean(p.stage));
+      const total=p.tasks.length,done=p.tasks.filter(t=>t.done).length;
+      lines.push("- Tracked tasks completed: "+done+"/"+total,"");
+      for(const task of p.tasks)lines.push("- ["+(task.done?"x":" ")+"] "+clean(task.title));
+      lines.push("");
+    }
+    lines.push("## Locally recorded decisions and events","");
+    for(const event of data.events.filter(e=>Date.parse(e.at)>=cutoff).slice(0,100))
+      lines.push("- "+event.at.slice(0,16)+" / "+clean(event.project)+" / "+
+        clean(event.kind)+": "+clean(event.detail));
+    lines.push("","---",
+      "Owner-entered status is not independent proof of production readiness.",
+      "Confidential owner export. Do not publish on GitHub Pages.");
+    reply.header("Content-Disposition",'attachment; filename="abud-os-private-'+days+'d.md"');
+    reply.type("text/markdown; charset=utf-8");
+    return lines.join("\n")+"\n";
+  });
   return server;
 }
 async function main(){
