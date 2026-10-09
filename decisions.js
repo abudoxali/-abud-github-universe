@@ -151,7 +151,9 @@
     legend.textContent=tr("خطوط ملونة: علاقات محرّرة وليست اعتمادات كود","Colored lines: curated, not verified code dependencies");
   }
   function focusMap(index,scroll=true){
-    if(!publicRelations().some(r=>r.index===index))return;
+    const target=publicRelations().find(r=>r.index===index);
+    if(!target)return;
+    if(relationFilter!=="all"&&relationFilter!==target.type)relationFilter="all";
     focusedIndex=index;relationRender();drawEdges();
     if(scroll)$("#map").scrollIntoView({behavior:"smooth",block:"start"});
   }
