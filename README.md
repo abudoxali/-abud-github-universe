@@ -56,6 +56,34 @@ V1.3 makes the project reference **actionable without overstating what GitHub ca
 
 Implementation: `decisions.js` / `decisions.css`, typed editorial relationships in `data.js`, and a small sidebar navigation update in `app.js`. Existing V1.0–V1.2 workflows remain intact.
 
+## V1.4 — Local Personal Workboard
+
+The **Personal Execution Workboard** is a device-local feature for prioritizing work, not a replacement for GitHub issue tracking or a centralized database.
+
+- Select at most **three public repositories** as daily focus projects; the V1.1 Daily Command Center reflects that selection.
+- Add up to **20 brief actionable tasks per project**, mark completed/reopened, delete tasks, and choose a manual execution stage: Backlog, In progress, Blocked, Needs review, Done.
+- Save device-local workspace state using browser `localStorage`; it survives ordinary page reloads on the same browser, **not** browser clearing or automatic device syncing.
+- Export/import a structured JSON backup. Import limits payloads to 1MB and revalidates project membership, task lengths, data types and invalid/sensitive-looking entries. Records for private, deleted or otherwise non-public repos are skipped.
+- The workboard has **no authenticated backend**, cloud sync, secret management, or GitHub write permissions. Never enter passwords, keys, or other sensitive client data.
+
+## V1.5 — Progress & Decision Journal
+
+The workboard now includes a **local execution timeline**:
+
+- Record brief manual decisions attached to currently focused public projects.
+- Automatically journal focus/unfocus, stage updates, task creation, task completion/reopening, and task deletion.
+- Filter activity by seven days, thirty days, or all available history.
+- Store **up to 150 events** in the same local workspace and include sanitized, public-only events in JSON exports/imports.
+- Clearly distinguish manually authored journal events from GitHub commits and real deployment evidence.
+- The timeline is not synchronized between devices; clearing browser storage loses the local journal unless exported.
+
+## V1.6–V2.0 product direction — not yet implemented
+
+- **V1.6 Reporting:** printable weekly review, public project evidence links, owner-confirmed decisions, and safe exports.
+- **V1.7 Quality & Privacy:** CI resilience, richer accessibility/browser support and a deliberate review of older public Git history. No history rewrite without owner approval.
+- **V2.0 Secure ABUD OS:** authenticated, private workspace with GitHub App/OAuth authorization and server-side API access, encrypted credentials, least-privilege permissions, audited private repository access and a backend/database hosted separately from public GitHub Pages. A static Pages site cannot guarantee private project confidentiality.
+- A complete private backend **must not be represented as shipped** without deployment, authorization, end-to-end tests and owner acceptance.
+
 ## Privacy boundaries
 
 The deployed site is public. It must contain **public repositories only**, even when the connected owner's GitHub integration can see private repositories. Never insert private names, sensitive records, environment values or credentials into site source files.
@@ -73,6 +101,7 @@ If GitHub's API is unavailable, the site uses its most recently reviewed public 
 - `command-center.js` / `command-center.css` — V1.1 daily workspace, project pages, public commit/CI evidence
 - `intelligence.js` / `intelligence.css` — V1.2 weekly activity, STATUS.md source and Agent 1/2 prompts
 - `decisions.js` / `decisions.css` — V1.3 explainable signals, relationship types and graph edge overlays
+- `workboard.js` / `workboard.css` — V1.4–V1.5 device-local focus, tasks, stages, progress journal and safe JSON export/import
 - `scripts/sync-public.mjs` — safe public membership diff, preserves human assessments
 - `tests/smoke.mjs` — Chromium desktop/mobile and privacy-reconciliation checks
 - `.github/workflows/pages.yml` — sync, test, deploy, HTTPS smoke
