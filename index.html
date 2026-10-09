@@ -14,6 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./command-center.css">
   <title>ABUD GitHub Universe — Project Command Center</title>
 </head>
 <body>
@@ -26,6 +27,7 @@
       </a>
       <div class="side-label" data-i18n="workspace">WORKSPACE / مساحة العمل</div>
       <nav class="nav-links" aria-label="Main navigation">
+        <a class="nav-link" href="#daily"><span class="nav-icon">☷</span><span id="navDailyLabel">مركز اليوم</span><span class="nav-short">00</span></a>
         <a class="nav-link current" href="#overview"><span class="nav-icon">◈</span><span data-i18n="navOverview">نظرة عامة</span><span class="nav-short">01</span></a>
         <a class="nav-link" href="#map"><span class="nav-icon">⌘</span><span data-i18n="navMap">خريطة المشاريع</span><span class="nav-short">02</span></a>
         <a class="nav-link" href="#library"><span class="nav-icon">▦</span><span data-i18n="navLibrary">كل المستودعات</span><span class="nav-short">03</span></a>
@@ -56,9 +58,58 @@
       </header>
 
       <div class="content">
+        <section class="daily-shell" id="daily" aria-labelledby="dailyTitle">
+          <div class="daily-head">
+            <div><div class="section-kicker">00 / DAILY COMMAND CENTER · V1.1</div>
+              <h2 id="dailyTitle">مركز القيادة اليومي</h2>
+              <p id="dailySubtitle">قرار واحد واضح، وثلاث أولويات، وحالة GitHub العامة.</p></div>
+            <div class="daily-timestamp"><span class="pulse-dot"></span><span id="dailyDate"></span></div>
+          </div>
+          <div class="daily-layout">
+            <article class="daily-feature" id="dailyLead"></article>
+            <div class="daily-queue" id="dailyQueue"></div>
+          </div>
+          <div class="daily-notes" id="dailyNotes"></div>
+        </section>
+        <section class="project-hub" id="projectHub" hidden aria-labelledby="hubTitle">
+          <div class="hub-toolbar">
+            <a href="#daily" id="hubBack" class="btn btn-outline">← <span id="hubBackLabel">العودة للوحة التحكم</span></a>
+            <span class="hub-eyebrow">PROJECT INTELLIGENCE / V1.1</span>
+          </div>
+          <div class="hub-header">
+            <div class="hub-title-area">
+              <div class="hub-state" id="hubCategory"></div>
+              <h1 id="hubTitle"></h1>
+              <p id="hubDescription"></p>
+            </div>
+            <div class="hub-cta">
+              <a id="hubRepoLink" class="btn btn-primary" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+              <button id="hubCopyBrief" class="btn btn-secondary" type="button">Copy next step</button>
+            </div>
+          </div>
+          <div class="hub-data-grid">
+            <article class="hub-data-card hub-data-main">
+              <div class="hub-card-label" id="hubActionLabel">NEXT ACTION</div>
+              <h2 id="hubNext"></h2><p id="hubReview"></p>
+            </article>
+            <article class="hub-data-card">
+              <div class="hub-card-label" id="hubCommitLabel">LAST COMMIT</div>
+              <div id="hubCommit" class="hub-state-text" aria-live="polite"></div>
+            </article>
+            <article class="hub-data-card">
+              <div class="hub-card-label" id="hubCiLabel">CI / WORKFLOW</div>
+              <div id="hubCi" class="hub-state-text" aria-live="polite"></div>
+            </article>
+          </div>
+          <div class="hub-extras">
+            <div class="hub-extra-card"><h3 id="hubEvidenceLabel">SOURCE & EVIDENCE</h3><div id="hubEvidence"></div></div>
+            <div class="hub-extra-card"><h3 id="hubMetaLabel">GITHUB METADATA</h3><div id="hubInfo"></div></div>
+          </div>
+          <p id="hubDisclaimer" class="hub-disclaimer"></p>
+        </section>
         <section class="hero" aria-labelledby="heroTitle">
           <div class="hero-content">
-            <div class="eyebrow"><span class="eyebrow-dot"></span> ABUD FUN <span class="slash">/</span> SYSTEM OVERVIEW <span class="slash">/</span> V1.0</div>
+            <div class="eyebrow"><span class="eyebrow-dot"></span> ABUD FUN <span class="slash">/</span> SYSTEM OVERVIEW <span class="slash">/</span> V1.1</div>
             <h1 id="heroTitle" data-i18n="heroTitle">كل مشاريعي.<br><em>صورة واحدة واضحة.</em></h1>
             <p class="hero-description" data-i18n="heroDesc">مرجع تفاعلي يجمع كل Repositories بتاعتي، يوضح اللي شغّال، اللي خلص، اللي محتاج قرار، وإيه الخطوة الصح بعد كده.</p>
             <div class="hero-buttons">
@@ -141,10 +192,12 @@
       <div class="drawer-field" id="drawerMetaWrap"><span data-i18n="drawerGitHub">معلومات GitHub / PUBLIC METADATA</span><div id="drawerMeta" class="drawer-metadata"></div></div>
       <div class="drawer-warning" data-i18n="publicNote">التصنيفات هنا إدارية وليست إثباتًا لجاهزية Production. الموقع عام — لا تخزّن أسرارًا داخله.</div>
       <a id="drawerGithub" class="btn btn-primary drawer-link" href="#" target="_blank" rel="noopener noreferrer"><span data-i18n="viewGitHub">افتح Repository على GitHub</span> ↗</a>
+      <button id="drawerOpenHub" class="btn btn-outline drawer-link" type="button" style="margin-top:10px">افتح ملف المشروع التفصيلي ↗</button>
     </div>
   </aside>
   <div id="toast" role="status" aria-live="polite" class="toast"></div>
   <script defer src="./data.js"></script>
   <script defer src="./app.js"></script>
+  <script defer src="./command-center.js"></script>
 </body>
 </html>
