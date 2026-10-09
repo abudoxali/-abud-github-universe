@@ -65,6 +65,17 @@
         <p class="help" data-i18n="sourceNote">الحالة مقتبسة من الملف المصرح بقراءته. مش دليل على جاهزية التشغيل.</p>
         <div id="statusFacts" class="facts"></div>
       </section>
+      <section class="panel" id="privateReports">
+        <div class="panel-header"><div><div class="eyebrow">AUTHENTICATED OWNER EXPORTS</div>
+          <h2 data-i18n="reportTitle">تقارير خاصة محفوظة بصلاحيات الدخول</h2></div>
+          <span class="tag">SERVER ONLY</span>
+        </div>
+        <p class="help" data-i18n="reportNote">التقارير بتتولد بعد التحقق من تسجيل الدخول ولا بتتنشر كرابط عام.</p>
+        <div class="actions">
+          <a class="primary" href="/api/report.md?days=7" data-i18n="downloadWeek">تنزيل تقرير 7 أيام</a>
+          <a class="ghost" href="/api/report.md?days=30" data-i18n="downloadMonth">تنزيل تقرير 30 يوم</a>
+        </div>
+      </section>
       <div class="disclaimer" data-i18n="disclaimer">جلسات آمنة على السيرفر · Private metadata لا تُخزَّن في ملفات GitHub Pages العامة · GitHub activity لا تعني اكتمال المنتج.</div>
     </div>
     <div id="loading" class="loading">AUTHENTICATING…</div>
