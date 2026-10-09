@@ -221,6 +221,7 @@
           ${meta?.pushed_at?`<span>↻ ${html(fmtDate(meta.pushed_at))}</span>`:""}
         </div>
         <div class="repo-actions"><button class="small-btn" type="button" data-open="${html(r.name)}">${html(C().detail)} ↗</button>
+        <a class="small-btn" data-hub="${html(r.name)}" href="#project/${encodeURIComponent(r.name)}">Hub ↗</a>
         <a class="small-btn ghost" href="${repoUrl(r.name)}" target="_blank" rel="noopener noreferrer">${html(C().repo)}</a></div>
       </article>`;
     }).join("");
@@ -305,6 +306,7 @@
     renderRepoCards();
     renderRelations();
     renderGraph();
+    window.dispatchEvent(new Event("abud:refresh"));
   }
 
   function applyFilter(id) {
@@ -557,6 +559,11 @@
     }catch(_){}
   }
 
+  window.ABUD_RUNTIME = Object.freeze({
+    getRepos: () => state.repos.map((r) => ({...r})),
+    getMetadata: () => ({...state.metadata}),
+    getLanguage: () => state.lang
+  });
   recoverCachedMetadata();
   renderAll();
   bindUI();
