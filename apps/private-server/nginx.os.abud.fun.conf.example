@@ -1,11 +1,33 @@
-# Review current Nginx config before adding this NEW isolated vhost.
-# Do not overwrite other production hostnames.
+# Example only. Do NOT enable before DNS, certificate, and port checks.
+# Create a NEW site; do not modify or overwrite unrelated production vhosts.
 server {
-    listen 127.0.0.1:80;
+    listen 80;
     server_name os.abud.fun;
-    return 301 https://$host$request_uri;
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 301 https://os.abud.fun$request_uri;
+    }
 }
-# Terminate TLS with your existing trusted certificate tool;
-# use the real certificate paths assigned to os.abud.fun.
-# Proxy private / to http://127.0.0.1:3164 with Host and X-Forwarded-Proto.
-# Set Cache-Control: private, no-store and disallow shared caches.
+server {
+    listen 443 ssl;
+    server_name os.abud.fun;
+    ssl_certificate /etc/letsencrypt/live/os.abud.fun/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/os.abud.fun/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    add_header Cache-Control "private, no-store, max-age=0" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location / {
+        proxy_pass http://127.0.0.1:3164;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 30s;
+    }
+}
