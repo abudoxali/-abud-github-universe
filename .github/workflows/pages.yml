@@ -64,6 +64,7 @@ jobs:
           node --check data.js
           node --check tests/smoke.mjs
           node --check scripts/sync-public.mjs
+          node --check scripts/audit-static.mjs
       - name: Install browser smoke-test dependencies
         run: |
           npm install --no-save playwright
@@ -74,6 +75,8 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html styles.css command-center.css intelligence.css decisions.css workboard.css reports.css app.js command-center.js intelligence.js decisions.js workboard.js reports.js data.js favicon.svg _site/
+      - name: Audit exactly the public artifact
+        run: node scripts/audit-static.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
