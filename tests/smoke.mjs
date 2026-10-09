@@ -218,7 +218,7 @@ try {
   await desktop.locator("#workImportFile").setInputFiles({
     name:"workboard.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(safeImport))
   });
-  assert.equal(await desktop.locator("#workProjects .work-project").count(),2);
+  await desktop.waitForFunction(()=>document.querySelectorAll("#workProjects .work-project").length===2);
   assert.equal(await desktop.locator('#workProjects [data-work-stage="ThreadForm"]').inputValue(),"blocked");
   assert.ok(!(await desktop.locator("#workProjects").textContent()).includes("synthetic-private-test-repo"));
   const sanitized=await desktop.evaluate(()=>window.ABUD_WORKBOARD.getSnapshot());
