@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>ABUD OS · Private Workspace</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/app.js" defer></script>
+</head>
+<body>
+<div class="ambient"></div>
+<header class="bar">
+  <div class="brand"><span class="mark">A<span class="dot">.</span></span><span>ABUD <b>OS</b><small>SECURE COMMAND CENTER</small></span></div>
+  <div class="tools"><span class="secure">● <span data-i18n="private">PRIVATE WORKSPACE</span></span><button id="language" class="ghost" type="button">EN</button><button id="logout" class="ghost" type="button" hidden>خروج</button></div>
+</header>
+<main class="shell">
+  <aside class="sidebar">
+    <div class="aside-label">COMMAND CENTER · V2</div>
+    <div class="aside-link active"><span>◈</span><span data-i18n="overview">لوحة التحكم</span></div>
+    <div class="aside-link"><span>⌘</span><span data-i18n="repositories">المستودعات</span></div>
+    <div class="aside-link"><span>▦</span><span data-i18n="tasks">لوحة التنفيذ</span></div>
+    <div class="aside-divider"></div>
+    <div class="aside-label">ACCOUNT</div>
+    <p class="aside-note" data-i18n="privacy">الوصول للـPrivate Repositories يتم من السيرفر فقط. لا يوجد GitHub Token في المتصفح.</p>
+    <a class="aside-public" href="https://abudoxali.github.io/-abud-github-universe/" target="_blank" rel="noopener noreferrer">↗ <span data-i18n="public">الموقع العام</span></a>
+  </aside>
+  <section class="content">
+    <section id="loginView" class="login-card" hidden>
+      <div class="eyebrow">AUTHENTICATION REQUIRED</div>
+      <h1 data-i18n="signTitle">مساحة عملك الخاصة، بصلاحياتك.</h1>
+      <p data-i18n="signInfo">سجّل بحساب GitHub المصرّح به. الوصول إلى المشاريع الخاصة يتطلب GitHub App مثبتة على المستودعات المختارة فقط.</p>
+      <a href="/auth/start" class="primary login-action" data-i18n="sign">تسجيل دخول GitHub ↗</a>
+      <div class="auth-sub" data-i18n="authNote">النسخة دي مش جزءًا من GitHub Pages العام.</div>
+    </section>
+    <div id="protected" hidden>
+      <div class="eyebrow">PERSONAL PROJECT COMMAND CENTER / V2.0</div>
+      <div class="heading"><div><h1 data-i18n="title">كل شغلك. مكان واحد.</h1><p data-i18n="subtitle">بيانات مباشرة من GitHub App للـRepos المصرّح بها، ومهام محفوظة على السيرفر.</p></div><span id="ownerLabel" class="owner">OWNER ONLY</span></div>
+      <div id="metrics" class="metrics">
+        <article><span data-i18n="repoCount">مستودعات متاحة</span><strong id="totalRepos">—</strong></article>
+        <article><span data-i18n="privateCount">مستودعات خاصة</span><strong id="privateRepos">—</strong></article>
+        <article><span data-i18n="focusCount">مشاريع التركيز</span><strong id="focusRepos">—</strong></article>
+        <article><span data-i18n="completedCount">مهام منجزة</span><strong id="doneTasks">—</strong></article>
+      </div>
+      <div class="grid">
+        <section class="panel">
+          <div class="panel-header"><div><div class="eyebrow">AUTHORIZED REPOSITORIES</div><h2 data-i18n="browse">مستودعاتك المصرح بها</h2></div><button id="refresh" class="ghost" type="button" data-i18n="refresh">تحديث ↻</button></div>
+          <label class="search"><span>⌕</span><input id="search" type="search" autocomplete="off" data-placeholder-ar="بحث عن مشروع عام أو خاص..." data-placeholder-en="Search authorized public or private repos..." placeholder="بحث عن مشروع..."></label>
+          <div id="repoList" class="repos" aria-live="polite"></div>
+        </section>
+        <section class="panel panel-work">
+          <div class="panel-header"><div><div class="eyebrow">PRIVATE & SYNCHRONIZED</div><h2 data-i18n="workboard">لوحة التنفيذ</h2></div><span class="tag" data-i18n="three">3 مشاريع كحد أقصى</span></div>
+          <p class="help" data-i18n="workHelp">اختار مشروع للتركيز، وأضف مهامك. التغييرات تتزامن عبر قاعدة البيانات بعد الضغط على حفظ.</p>
+          <div id="focusList" class="focus-list"></div>
+          <div class="project-editor">
+            <label for="taskRepo" data-i18n="selectRepo">اختار مشروع تركيز</label>
+            <select id="taskRepo"></select>
+            <form id="taskForm" class="task-form"><input id="taskText" maxlength="120" autocomplete="off" required placeholder="خطوة واضحة قابلة للاختبار"><button type="submit" class="primary" data-i18n="addTask">+ إضافة</button></form>
+            <div id="taskList" class="tasks"></div>
+          </div>
+          <div class="actions"><span id="saveStatus" class="save-status" role="status"></span><button id="save" type="button" class="primary" data-i18n="save">حفظ على السيرفر</button></div>
+        </section>
+      </div>
+      <section class="panel source-panel" id="sourcePanel">
+        <div class="panel-header"><div><div class="eyebrow">SOURCE-OF-TRUTH REVIEW</div><h2 id="sourceTitle" data-i18n="source">اختار Repo لمراجعة STATUS.md</h2></div><span id="sourceBadge" class="tag">READ ONLY</span></div>
+        <p class="help" data-i18n="sourceNote">الحالة مقتبسة من الملف المصرح بقراءته. مش دليل على جاهزية التشغيل.</p>
+        <div id="statusFacts" class="facts"></div>
+      </section>
+      <div class="disclaimer" data-i18n="disclaimer">جلسات آمنة على السيرفر · Private metadata لا تُخزَّن في ملفات GitHub Pages العامة · GitHub activity لا تعني اكتمال المنتج.</div>
+    </div>
+    <div id="loading" class="loading">AUTHENTICATING…</div>
+    <div id="fatal" class="error-box" hidden></div>
+  </section>
+</main>
+</body>
+</html>

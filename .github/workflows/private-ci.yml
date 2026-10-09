@@ -1,0 +1,36 @@
+name: V2 Private Backend Checks
+on:
+  push:
+    branches: [feat/v2-secure-os]
+    paths:
+      - "apps/private-server/**"
+      - ".github/workflows/private-ci.yml"
+  pull_request:
+    paths:
+      - "apps/private-server/**"
+      - ".github/workflows/private-ci.yml"
+permissions:
+  contents: read
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/private-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Node dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate server and browser syntax
+        run: npm run check
+      - name: Security and authorization negative tests
+        run: npm test
+      - name: Check private server files not in public artifact
+        run: |
+          if grep -E 'private-server|GITHUB_CLIENT_SECRET|GITHUB_APP_PRIVATE_KEY' ../../.github/workflows/pages.yml; then
+            echo 'Public Pages workflow references private server material'; exit 1
+          fi
+          echo 'PASS: public Pages artifact remains isolated'

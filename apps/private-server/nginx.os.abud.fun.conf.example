@@ -1,0 +1,11 @@
+# Review current Nginx config before adding this NEW isolated vhost.
+# Do not overwrite other production hostnames.
+server {
+    listen 127.0.0.1:80;
+    server_name os.abud.fun;
+    return 301 https://$host$request_uri;
+}
+# Terminate TLS with your existing trusted certificate tool;
+# use the real certificate paths assigned to os.abud.fun.
+# Proxy private / to http://127.0.0.1:3164 with Host and X-Forwarded-Proto.
+# Set Cache-Control: private, no-store and disallow shared caches.
