@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createServer} from "../src/server.js";
 import {normalizeWorkspace,statusClaims,mustHaveValidConfig,repoName,hash} from "../src/security.js";
+import {requireReadOnlyInstallation} from "../src/github.js";
 
 const env={
  DATABASE_URL:"postgresql://test:disabled@127.0.0.1:5432/abud_os_test",
@@ -118,4 +119,14 @@ test("OAuth callback rejects missing state without calling GitHub",async()=>{
   assert.match(login.headers.location,/github\.com\/login\/oauth\/authorize/);
   assert.match(login.headers["set-cookie"],/Secure/);
  }finally{await server.close();}
+});
+
+test("GitHub App install must be owner-selected with read-only contents",()=>{
+ const good={account:{id:123456,login:"abudoxali"},repository_selection:"selected",
+   permissions:{metadata:"read",contents:"read",actions:"read"}};
+ assert.equal(requireReadOnlyInstallation(good,{ownerId:123456,ownerLogin:"abudoxali"}),true);
+ assert.throws(()=>requireReadOnlyInstallation({...good,repository_selection:"all"},{ownerId:123456,ownerLogin:"abudoxali"}),/SELECTED/);
+ assert.throws(()=>requireReadOnlyInstallation({...good,permissions:{metadata:"read",contents:"write"}},{ownerId:123456,ownerLogin:"abudoxali"}),/non-read-only/);
+ assert.throws(()=>requireReadOnlyInstallation({...good,account:{id:999,login:"attacker"}},{ownerId:123456,ownerLogin:"abudoxali"}),/SELECTED/);
+ assert.throws(()=>requireReadOnlyInstallation({...good,permissions:{metadata:"read"}},{ownerId:123456,ownerLogin:"abudoxali"}),/Contents: Read/);
 });
