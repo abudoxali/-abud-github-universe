@@ -47,22 +47,25 @@ Owner visual/content review: **NOT YET RECORDED**.
 - Draft PR for review: https://github.com/abudoxali/-abud-github-universe/pull/1 — intentionally **NOT MERGED** to protect the working public site.
 
 ### Verified boundaries
-- Source tree contains only code and examples, not live app secrets. `.env.example` contains placeholders.
-- Existing public GitHub Pages `_site` allowlist and deployed dashboard are unchanged by this feature branch.
-- OAuth callback and GitHub App installation are **NOT** verified live, because actual app registrations/client secrets/private signing key and a selected installation have not been connected for this application.
-- No SSH/session or DNS editing connector for the current VPS/Cloudflare zone was available. **No DNS records were changed** and **no VPS deployment occurred**.
-- The isolated production PostgreSQL target has not been created, migrated or backed up, and cross-device access has not been verified live.
+- The exact remote `feat/v2-secure-os` base was verified at `c3ef3f768ac7188db172cf28993174908ae0df91`; GitHub owner identity independently verified as `abudoxali` / numeric ID `184322111`. PR #1 remains **OPEN / DRAFT** against `main`; it has not been merged or pushed with this session's local review changes.
+- Public GitHub Pages workflow and site remain public-only; no V2 data or credentials were added to the Pages artifact.
+- Automated CI run `37918143206` passed on the verified base SHA with isolated PostgreSQL 16 and Chromium. In the acquired local review copy, `npm ci`, `npm run check`, `npm audit --omit=dev` (0 vulnerabilities), and the backend tests passed; local `npm test` reports 9 passed / 1 skipped because no local PostgreSQL test service is available. `node tests/browser.mjs` passed all three mocked-API desktop/mobile checks. These local checks do not establish live OAuth or production acceptance.
+- A new failing test exposed that GitHub App `Metadata: Read` was not enforced. Source now rejects installations without both `Metadata: Read` and `Contents: Read`; the regression test passes locally. The reviewed patch is not yet present on the remote PR branch.
+- No OAuth/App credentials or installation have been configured. GitHub API installation listing returned 403 because the authenticated CLI token is not authorized as a GitHub App; registrations cannot be verified through this connection.
+- Public VPS verified as `vmi3595755` / `5.189.151.43`, Ubuntu 24.04.5, reachable by the configured root key on SSH port 22; port 3130 times out. Node `v22.23.2`, PostgreSQL `16.15`, Nginx, and existing production services are present. Port `3164`, the `os.abud.fun` Nginx vhost, and the ABUD OS systemd service were unused/absent. `nginx -t` passes; existing `abud.fun` returned 200 and `www.abud.fun` 301 when checked against the local origin.
+- Isolated resources now created on that VPS: system account `abudos`; database `abud_os`; login role `abud_os_app` with superuser, role-creation, database-creation and inheritance privileges disabled; and `/etc/abud-os/private.env` mode `0640 root:abudos`. The DB connection was verified as `current_database() = abud_os`, `current_user = abud_os_app`. **The project schema has not yet been applied; no app release, service, or `current` symlink is active.**
+- Cloudflare authoritative nameservers are confirmed for `abud.fun`; `os.abud.fun` currently resolves NXDOMAIN. Verified origin IP is `5.189.151.43`. No Cloudflare API credential, Wrangler, or usable Cloudflare MCP integration is available; no DNS or zone settings were changed. No TLS certificate exists for the new hostname.
+- Database backup/restore, live OAuth, GitHub App permission/revocation, private repository access, cross-device state, TLS renewal, rollback, and owner visual/access-control acceptance remain **UNVERIFIED / PENDING**. No unrelated production app or database was modified.
 - The old public repo Git history may expose earlier names; no history rewrite or destructive Git changes have occurred.
-- Manual visual acceptance and production access-control acceptance: **PENDING**.
 
 ### Release gate
-1. Confirm actual VPS identity/current SSH authorization, spare port, app/service directory, new PostgreSQL DB name/role and backup strategy without altering other projects.
-2. Connect DNS management for the selected `os.abud.fun` subdomain; create the correct DNS record and install valid TLS.
-3. Owner authorizes a dedicated GitHub OAuth App and installs an owner-selected, read-only GitHub App. Put all credentials **server-side only**.
-4. Deploy a timestamped isolated release; verify OAuth owner/stranger flows, revoked installation, unauthenticated private reads, valid sessions and logout, CSRF, PostgreSQL migrations, encrypted transport, reports and cross-device workspace.
-5. Manual Arabic/English desktop/mobile acceptance and rollback/restore before marking V2 READY.
+1. Owner provides authorized Cloudflare DNS access for the `abud.fun` zone and confirms the intended backup/retention policy.
+2. Owner registers or verifies a dedicated OAuth App (`read:user` only) and a separate selected-repository GitHub App with Metadata/Contents read-only permissions, approves its installation, and provides the required secrets/private key through a secure server-only channel.
+3. Commit and review the lockfile/security patch on `feat/v2-secure-os`; run the revised CI with PostgreSQL 16 and Chromium.
+4. Apply only this project's schema after re-verifying the isolated DB/role; deploy an inactive timestamped release, then configure the isolated systemd service, new Nginx vhost and valid TLS without touching existing sites.
+5. Run live owner/stranger OAuth, access-control, revoked-installation, CSRF, cache, database persistence/conflict, backup/restore, restart, renewal, rollback, and real bilingual desktop/mobile acceptance before marking V2 READY.
 
-**Next permitted work:** prepare and review the staged GitHub PR, then production configuration through a validated infrastructure integration. No release-ready claims before actual E2E.
+No release-ready claims are made before production HTTPS and real end-to-end acceptance.
 
 ## V1.6–V1.7 — Evidence-Based Reports & Hardening (2026-10-09)
 

@@ -18,7 +18,7 @@ Target hostname: **os.abud.fun** (chosen). No DNS change, SSH login or deploymen
 - Create a dedicated OS service account `abudos`; do not grant it other apps' files or databases.
 - Create a fresh local PostgreSQL database `abud_os` with a unique limited-privilege role. Verify `SELECT current_database(), current_user` matches the newly created target **before** running `db/schema.sql`. Never migrate an existing app DB.
 - Store environment variables outside the repository, for example `/etc/abud-os/private.env`, owner/group permissions allowing only the dedicated service account; store the GitHub App PEM separately in a protected path. Neither must be committed, echoed, attached to logs or uploaded to the public site.
-- Install Node dependencies from the reviewed code and run `npm test && npm run check`. Production install should use a committed lockfile once dependencies are frozen.
+- Install Node dependencies reproducibly from the reviewed lockfile with `npm ci`, then run `npm test && npm run check`. Production installs should use `npm ci --omit=dev`.
 - Start a new isolated service using `abud-os-private.service.example`, adjusted to the verified system's Node executable and release path. This uses systemd rather than sharing an existing PM2 process namespace with unrelated services; do not replace other units.
 - Apply `nginx.os.abud.fun.conf.example` as a **new** Nginx server name only after acquiring a real certificate; verify with `nginx -t` before reload.
 - Create the `os` DNS record at the correct provider, pointing to the **verified** host. DNS and certificate steps require real account access; they cannot be accomplished by merely editing GitHub files.

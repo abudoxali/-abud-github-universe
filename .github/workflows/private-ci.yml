@@ -39,15 +39,13 @@ jobs:
         with:
           node-version: "22"
       - name: Install Node dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Validate server and browser syntax
         run: npm run check
       - name: Security and authorization negative tests
         run: npm test
       - name: Install headless browser for private UI smoke
-        run: |
-          npm install --no-save playwright
-          npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium
       - name: Private dashboard browser checks (desktop and mobile)
         run: node tests/browser.mjs
       - name: Check private server files not in public artifact

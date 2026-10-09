@@ -37,7 +37,7 @@ The owner dashboard now supports GitHub-App-authorized public/private repository
 
 ```bash
 cd apps/private-server
-npm install
+npm ci
 npm test
 npm run check
 ```

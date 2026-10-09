@@ -16,5 +16,8 @@
     "@octokit/app": "^16.0.0",
     "fastify": "^5.5.0",
     "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "playwright": "1.62.0"
   }
 }
