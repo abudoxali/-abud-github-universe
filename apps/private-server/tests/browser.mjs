@@ -78,13 +78,13 @@ try{
  },events:[]};
  page.once("dialog",dialog=>dialog.accept());
  await page.locator("#importFile").setInputFiles({name:"workboard.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(file))});
- await page.waitForFunction(()=>document.querySelector("#saveStatus")?.textContent?.includes("تم استيراد"));
+ await page.waitForFunction(()=>document.querySelector("#saveStatus")?.textContent?.includes("Draft imported"));
  assert.equal(await page.locator("#focusList .focus").count(),1);
  assert.match(await page.locator("#focusList").textContent(),/repo-public/);
  assert.ok(!(await page.locator("#focusList").textContent()).includes("unapproved"));
  assert.equal(saves,1,"Imported draft must NOT autosave");
  await page.locator("#save").click();
- await page.waitForFunction(()=>document.querySelector("#saveStatus")?.textContent?.includes("تم حفظ"));
+ await page.waitForFunction(()=>document.querySelector("#saveStatus")?.textContent?.includes("Saved"));
  assert.equal(saves,2);
  assert.deepEqual(current.data.focus,["repo-public"]);
  assert.ok(!Object.hasOwn(current.data.projects,"unapproved"));
