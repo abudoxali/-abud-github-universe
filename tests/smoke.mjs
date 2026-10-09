@@ -129,10 +129,6 @@ try {
   assert.match(await desktop.locator("#hubDisclaimer").textContent(),/production/i);
   const hubLink=await desktop.locator("#hubRepoLink").getAttribute("href");
   assert.equal(hubLink,"https://github.com/abudoxali/RootRay");
-  await desktop.locator("#hubBack").click();
-  await desktop.waitForURL(/#daily$/);
-  assert.equal(await desktop.locator("#projectHub").isVisible(),false);
-
   // V1.2: status facts are displayed as source claims, not execution instructions.
   await desktop.locator("#intelligenceState").getByText("FOUND / PUBLIC").waitFor();
   const statusText=await desktop.locator("#intelligenceFacts").textContent();
@@ -149,6 +145,11 @@ try {
   assert.match(exec,/Inspect → Run → Diagnose → Execute → Test → Verify → Update STATUS.md/);
   assert.ok(exec.includes("CI outcome alone is not product acceptance"));
   console.log("PASS V1.2: safe public STATUS source, Agent 1/2 prompts, qualified commit and CI evidence");
+  await desktop.locator("#hubBack").click();
+  await desktop.waitForURL(/#daily$/);
+  assert.equal(await desktop.locator("#projectHub").isVisible(),false);
+
+
   console.log("PASS V1.1: daily priorities, routed project hub, mocked public commit and CI");
 
   // Mock a newly private/deleted repository and a new public repository.
