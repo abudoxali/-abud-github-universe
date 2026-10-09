@@ -97,7 +97,7 @@ try {
   assert.equal(await desktop.locator("#metrics .stat").count(),5,"Metrics should render");
   assert.equal(await desktop.locator("html").getAttribute("dir"),"rtl","Default is Arabic RTL");
   await desktop.waitForFunction(()=>document.querySelector("#weeklyIndicator")?.textContent==="PUBLIC GITHUB");
-  assert.match(await desktop.locator("#weeklySummary").textContent(),/public repositories|projects|repositories/i);
+  assert.ok((await desktop.locator("#weeklySummary").textContent()).includes(expected+"/"+expected),"Weekly report must state how many public repositories have metadata");
   console.log("PASS V1.2 weekly: last push review sourced from public metadata");
   console.log("PASS desktop: ${expected} public cards, 8 clusters, 5 metrics, Arabic RTL");
 
