@@ -140,3 +140,86 @@ test("GitHub App install must be owner-selected with read-only contents",()=>{
  assert.throws(()=>requireReadOnlyInstallation({...good,account:{id:999,login:"attacker"}},{ownerId:123456,ownerLogin:"abudoxali"}),/SELECTED/);
  assert.throws(()=>requireReadOnlyInstallation({...good,permissions:{metadata:"read"}},{ownerId:123456,ownerLogin:"abudoxali"}),/Contents: Read/);
 });
+
+test("Full OAuth login, owner identity, single-use state, session and logout",async()=>{
+ const states=new Set(),sessions=new Map();
+ const pool={async query(sql,args=[]){
+  if(sql.startsWith("INSERT INTO oauth_states")){states.add(args[0]);return {rowCount:1,rows:[]};}
+  if(sql.startsWith("DELETE FROM oauth_states")){
+   const present=states.delete(args[0]);return {rowCount:present?1:0,rows:present?[{state_hash:args[0]}]:[]};
+  }
+  if(sql.startsWith("INSERT INTO owner_sessions")){
+   sessions.set(args[0],{github_user_id:"123456",csrf_secret:args[2]});return {rowCount:1,rows:[]};
+  }
+  if(sql.startsWith("SELECT github_user_id")){
+   const value=sessions.get(args[0]);return {rows:value?[value]:[]};
+  }
+  if(sql.startsWith("DELETE FROM owner_sessions")){sessions.delete(args[0]);return {rowCount:1,rows:[]};}
+  return {rowCount:0,rows:[]};
+ }};
+ const called=[];
+ const fetchImpl=async(url,options)=>{
+  called.push(url);
+  if(url.includes("access_token"))return {ok:true,async json(){return {access_token:"test-only-session-token"};}};
+  if(url==="https://api.github.com/user"){
+   assert.match(options.headers.Authorization,/Bearer test-only-session-token/);
+   return {ok:true,async json(){return {id:123456,login:"abudoxali"};}};
+  }
+  throw Error("Unexpected OAuth URL");
+ };
+ const server=createServer({env,pool,github,fetchImpl});
+ try{
+  const start=await server.inject({url:"/auth/start"});
+  assert.equal(start.statusCode,302);
+  const redirect=new URL(start.headers.location);
+  const state=redirect.searchParams.get("state");
+  assert.ok(state&&state.length>=32);
+  assert.equal(redirect.searchParams.get("scope"),"read:user");
+  const stateCookie=String(start.headers["set-cookie"]).split(";")[0];
+  assert.match(stateCookie,/^__Host-abud_oauth=/);
+  const verified=await server.inject({url:"/auth/callback?code=samplecode&state="+encodeURIComponent(state),
+    headers:{cookie:stateCookie}});
+  assert.equal(verified.statusCode,302);
+  const rawSession=String(verified.headers["set-cookie"]).match(/__Host-abud_session=([a-f0-9]{64})/);
+  assert.ok(rawSession,"Owner login must set a secure opaque session cookie");
+  const loginCookie="__Host-abud_session="+rawSession[1];
+  const me=await server.inject({url:"/api/me",headers:{cookie:loginCookie}});
+  assert.equal(me.statusCode,200);
+  assert.equal(me.json().owner,"abudoxali");
+  assert.match(me.json().csrf,/^[a-f0-9]{64}$/);
+  const replay=await server.inject({url:"/auth/callback?code=samplecode&state="+encodeURIComponent(state),
+    headers:{cookie:stateCookie}});
+  assert.equal(replay.statusCode,403);
+  const logout=await server.inject({method:"POST",url:"/api/logout",
+    headers:{cookie:loginCookie,origin:"https://os.abud.fun","x-os-csrf":me.json().csrf}});
+  assert.equal(logout.statusCode,200);
+  assert.equal((await server.inject({url:"/api/me",headers:{cookie:loginCookie}})).statusCode,401);
+  assert.deepEqual(called,["https://github.com/login/oauth/access_token","https://api.github.com/user"]);
+ }finally{await server.close();}
+});
+test("OAuth rejects another GitHub user and does not issue a session",async()=>{
+ const states=new Set(),sessions=[];
+ const pool={async query(sql,args=[]){
+  if(sql.startsWith("INSERT INTO oauth_states")){states.add(args[0]);return {rowCount:1,rows:[]};}
+  if(sql.startsWith("DELETE FROM oauth_states")){
+   const exists=states.delete(args[0]);return {rowCount:exists?1:0,rows:exists?[{}]:[]};
+  }
+  if(sql.startsWith("INSERT INTO owner_sessions")){sessions.push(args[0]);return {rowCount:1,rows:[]};}
+  return {rowCount:0,rows:[]};
+ }};
+ const githubOAuth=async(url)=>({
+  ok:true,async json(){return url==="https://api.github.com/user"?{id:999999,login:"not-owner"}:{access_token:"fake-token"};}
+ });
+ const server=createServer({env,pool,github,fetchImpl:githubOAuth});
+ try{
+  const begin=await server.inject({url:"/auth/start"});
+  const state=new URL(begin.headers.location).searchParams.get("state");
+  const cookie=String(begin.headers["set-cookie"]).split(";")[0];
+  const done=await server.inject({url:"/auth/callback?code=samplecode&state="+encodeURIComponent(state),
+    headers:{cookie}});
+  assert.equal(done.statusCode,403);
+  assert.equal(done.json().error,"owner-only");
+  assert.equal(sessions.length,0);
+  assert.doesNotMatch(String(done.headers["set-cookie"]),/__Host-abud_session=/);
+ }finally{await server.close();}
+});
