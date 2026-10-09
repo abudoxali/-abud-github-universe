@@ -3,8 +3,40 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **PUBLIC CATALOG RECONCILED — LIVE HTTPS VERIFIED**
+State: **V1.1 DAILY COMMAND CENTER — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
 Owner visual/content review: **NOT YET RECORDED**.
+
+## V1.1 — Daily Command Center (2026-10-09)
+
+**Scope:** Convert the public sitemap into a practical daily reference without creating a backend or exposing the account's private projects.
+
+### Implemented
+- New **Daily Command Center** above the original hero: main priority, next two tracks, current public repository inventory and review reminders.
+- Dedicated, linkable **Project Hub** per public repository (`#project/<repo-name>`) rather than only a basic details drawer.
+- Project Hub shows curated current objective, status/review context, README / canonical `STATUS.md` links, and direct GitHub link.
+- **On-demand public GitHub evidence:** last branch commit SHA/message/time, latest workflow run and explicit outcome, language/stars/last push/default branch.
+- Public repository visibility is checked at each activity request; missing/failed APIs display unknown/unavailable, never fake successes. Public activity is distinct from product/runtime acceptance.
+- Priority handoff text can be copied directly from the project view.
+- Full Arabic RTL and English LTR treatment for the new dashboard, responsive to desktop and phone; legacy map/search/filter functionality preserved.
+- V1.1 source: `command-center.js` and `command-center.css`, plus additive changes to `index.html` / `app.js`.
+- GitHub Pages pipeline now validates, tests, packages and deploys the added assets.
+
+### Final verification
+- **Successful browser + deployment run:** https://github.com/abudoxali/-abud-github-universe/actions/runs/37896393335
+- Node syntax and static asset checks: **PASS**.
+- Playwright Chromium desktop: 28 public repository cards, 8 clusters, five KPIs, Arabic RTL, English LTR, search, clear and detail drawer: **PASS**.
+- V1.1 desktop: daily priorities and direct project page; mocked public last commit and passing CI are shown with distinct labels: **PASS**.
+- Public privacy gate: simulated private/deleted repository disappears, its direct project link is blocked, new public repository discovered, simulated private API row rejected: **PASS**.
+- Graph zoom and fit: **PASS**.
+- Playwright mobile: navigation backdrop, daily priorities, project hub, no page overflow or uncaught JS errors: **PASS**.
+- Pages deployment and actual public HTTPS fetch: **PASS**.
+
+### V1.1 known limitations
+- Public-only: 16 private repositories are not part of the deployed dashboard. An authenticated private workspace needs a separate secure architecture and approval.
+- GitHub API requests for project detail are subject to rate limits, network access and a 15-minute visitor-side cache. “Unknown” is a valid UI result.
+- Editorial `next action` is still manually curated and can become outdated after commits. Source files or a GitHub Actions status alone do not establish real product readiness.
+- Any older public Git commit containing a former all-repo list remains historically accessible; current-head cleanup does not purge historical commits.
+- Owner screenshot/content acceptance of the new UI is still **pending**. Code/test/HTTPS acceptance alone is not owner visual approval.
 
 ## Current inventory — verified via the connected GitHub account
 - **44 total repositories** under the account at review time.
