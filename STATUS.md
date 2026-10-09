@@ -33,7 +33,7 @@ Owner visual/content review: **NOT YET RECORDED**.
 ### Verified GitHub integration
 - App `abud-os-private-access`: App ID `5254197`; verified Installation ID `169700628`; owner `abudoxali` / `184322111`; selected-only with Metadata/Contents Read and no write permissions.
 - App authentication with the local PEM succeeded. One repository is selected and **zero private repositories** are selected, despite the owner reporting selection; the installation must be corrected or a private repository chosen. The PEM is installed at `/etc/abud-os/github-app.pem` (`0640 root:abudos`); App ID, Installation ID and key path are in `/etc/abud-os/private.env` (`0640 root:abudos`). Owner reports old OAuth secret and App key revoked; that revocation is not independently verifiable here.
-- OAuth Client ID and rotated Client Secret are absent from the agent environment and VPS env file, despite the owner choosing local environment variables. The value disclosed in chat was not used. Do not send credentials in chat.
+- The owner explicitly authorized temporary use of the existing OAuth credentials and plans rotation after deployment. `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are still absent from the agent environment and VPS env file. The chat-disclosed value was not used; make the credentials available through secure local environment variables or a restricted file, and rotate them as a high-priority post-deployment action. Do not send values in chat.
 
 ### Verified VPS, database, DNS and TLS
 - VPS: `vmi3595755`, `5.189.151.43`, Ubuntu 24.04.5; SSH port 22 (3130 timed out); Node `v22.23.2`; PostgreSQL `16.15`. Dedicated account `abudos`, database `abud_os`, and least-privilege login role `abud_os_app` exist. The pre-migration identity check matched `abud_os|abud_os_app`; only `oauth_states`, `owner_sessions`, `owner_workspaces` were migrated.
@@ -44,7 +44,7 @@ Owner visual/content review: **NOT YET RECORDED**.
 - Let’s Encrypt origin certificate for `os.abud.fun` is valid through 2027-01-07; direct-origin and Cloudflare-edge TLS validate. HTTP-01 issuance and Certbot staging dry-run passed. HTTPS currently returns 503 with `Cache-Control: private, no-store`; `/health/live` and `/api/repos` return 503 because the app service is inactive.
 
 ### Release gates and remaining acceptance
-1. Make `GITHUB_CLIENT_ID` and the rotated `GITHUB_CLIENT_SECRET` available through the selected secure local environment; they remain absent from the agent process. Do not send credentials in chat.
+1. Make `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` available through secure local environment variables or a restricted file; they remain absent from the agent process. Use only these securely provisioned values temporarily, then rotate both as a high-priority post-deployment action. Do not send credentials in chat.
 2. Make the installation report at least one specifically selected private test repository; current API verification still reports zero private repositories. Do not change it to All repositories.
 3. Feature and Nginx integration changes are pushed to `feat/v2-secure-os`; PR #1 remains OPEN / DRAFT. Actions passed on code commit `c6259c9`; no merge occurred.
 4. Owner should escrow `/etc/abud-os/backup.agekey` off-host for recovery after VPS loss and confirm disposition of the two retained verification databases.
