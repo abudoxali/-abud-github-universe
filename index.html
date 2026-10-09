@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="./command-center.css">
   <link rel="stylesheet" href="./intelligence.css">
   <link rel="stylesheet" href="./decisions.css">
+  <link rel="stylesheet" href="./workboard.css">
   <title>ABUD GitHub Universe — Project Command Center</title>
 </head>
 <body>
@@ -35,6 +36,7 @@
         <a class="nav-link" href="#library"><span class="nav-icon">▦</span><span data-i18n="navLibrary">كل المستودعات</span><span class="nav-short">03</span></a>
         <a class="nav-link" href="#relations"><span class="nav-icon">⌁</span><span data-i18n="navRelations">العلاقات والنسخ</span><span class="nav-short">04</span></a>
         <a class="nav-link" href="#decisions"><span class="nav-icon">◇</span><span id="navDecisions">قرارات المشاريع</span><span class="nav-short">05</span></a>
+        <a class="nav-link" href="#workboard"><span class="nav-icon">▦</span><span id="navWorkboard">لوحة التنفيذ</span><span class="nav-short">06</span></a>
         <a class="nav-link" href="#strategy"><span class="nav-icon">◎</span><span data-i18n="navStrategy">التركيز والقرارات</span><span class="nav-short">05</span></a>
       </nav>
       <div class="side-label" data-i18n="categoriesLabel">CATEGORIES / التصنيفات</div>
@@ -221,6 +223,35 @@
           <div class="relation-grid" id="relationGrid"></div>
         </section>
 
+        <section class="workboard-section" id="workboard" aria-labelledby="workTitle">
+          <div class="section-heading">
+            <div><div class="section-kicker">06 / MY EXECUTION WORKSPACE · V1.4</div>
+              <h2 id="workTitle">لوحة التنفيذ الشخصية</h2>
+              <p id="workSubtitle">اختار 3 مشاريع بالكتير للتركيز. المهام والقرارات محفوظة على جهازك فقط.</p>
+            </div>
+            <span class="work-local-tag"><span class="pulse-dot"></span> <span id="workStorageLabel">LOCAL BROWSER ONLY</span></span>
+          </div>
+          <div class="work-summary" id="workSummary" aria-live="polite"></div>
+          <div class="work-toolbar">
+            <div class="work-add">
+              <label for="workProjectSelect" id="workChooseLabel">اختار مشروع عام</label>
+              <select id="workProjectSelect" aria-label="Choose a public repository"></select>
+              <button type="button" id="workPin" class="btn btn-primary">+ أضف للتركيز</button>
+            </div>
+            <div class="work-files">
+              <button type="button" id="workExport" class="btn btn-outline">تصدير JSON</button>
+              <button type="button" id="workImport" class="btn btn-outline">استيراد JSON</button>
+              <input id="workImportFile" type="file" accept="application/json,.json" hidden>
+              <button type="button" id="workReset" class="btn btn-secondary">مسح بيانات الجهاز</button>
+            </div>
+          </div>
+          <div class="work-projects" id="workProjects" aria-live="polite"></div>
+          <div class="work-footer">
+            <p id="workPrivacy">لا تكتب كلمات مرور أو أسرار أو معلومات خاصة. البيانات محفوظة في نفس المتصفح ولا تنتقل تلقائيًا بين الأجهزة أو إلى GitHub.</p>
+            <span id="workSaveIndicator">SAVED LOCALLY</span>
+          </div>
+        </section>
+
         <section class="decision-section" id="decisions" aria-labelledby="decisionTitle">
           <div class="section-heading"><div>
             <div class="section-kicker">05 / PROJECT DECISIONS · V1.3</div>
@@ -271,5 +302,6 @@
   <script defer src="./command-center.js"></script>
   <script defer src="./intelligence.js"></script>
   <script defer src="./decisions.js"></script>
+  <script defer src="./workboard.js"></script>
 </body>
 </html>
