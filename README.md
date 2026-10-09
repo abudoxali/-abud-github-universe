@@ -42,6 +42,20 @@ The `intelligence.js` and `intelligence.css` modules are deployed alongside `com
 
 **Limit:** this is an inspection and coordination reference, *not* an authenticated private project-management backend or autonomous coding service.
 
+## V1.3 — Smarter Graph & Explainable Project Decisions
+
+V1.3 makes the project reference **actionable without overstating what GitHub can prove**:
+
+- **Six curated public-to-public relationships** are typed as potential scope overlap, succession, complementary workflows, or same-track portfolio links. Each has a bilingual rationale and a clear **EDITORIAL** provenance label. "Overlap" is not evidence of duplicate source code, nor is a visual relationship a confirmed dependency.
+- **Real repository-to-repository graph lines** are drawn on the existing pannable/zoomable universe. Filter relationship types, inspect both sides, and highlight a specific edge directly on the map. The drawing is recomputed after graph/search/visibility updates.
+- **Project Decisions** collects *review signals* instead of unverifiable automated completion scores: privacy-review categories, explicitly curated release gates, potential scope overlaps, unreviewed/new projects, and public repositories whose last known push was **90+ days ago**.
+- **Data coverage** is explicit: inactivity review only runs when an actual public GitHub `pushed_at` timestamp exists. No recent push is **not proof** of a broken, abandoned or unshipped product.
+- Signal filters and priority/name/oldest-push sorting are interactive on both desktop and mobile, with links to each public Project Hub.
+- Privacy is preserved end-to-end: when a repository becomes private or disappears from the public API, its public relationships, map lines, and associated review signals are removed at the next successful reconciliation.
+- The dashboard makes no destructive GitHub changes, and never merges or deletes repositories on a score or similarity guess.
+
+Implementation: `decisions.js` / `decisions.css`, typed editorial relationships in `data.js`, and a small sidebar navigation update in `app.js`. Existing V1.0–V1.2 workflows remain intact.
+
 ## Privacy boundaries
 
 The deployed site is public. It must contain **public repositories only**, even when the connected owner's GitHub integration can see private repositories. Never insert private names, sensitive records, environment values or credentials into site source files.
@@ -58,6 +72,7 @@ If GitHub's API is unavailable, the site uses its most recently reviewed public 
 - `app.js` — graph, search, filtering, localization, details, public API reconciliation
 - `command-center.js` / `command-center.css` — V1.1 daily workspace, project pages, public commit/CI evidence
 - `intelligence.js` / `intelligence.css` — V1.2 weekly activity, STATUS.md source and Agent 1/2 prompts
+- `decisions.js` / `decisions.css` — V1.3 explainable signals, relationship types and graph edge overlays
 - `scripts/sync-public.mjs` — safe public membership diff, preserves human assessments
 - `tests/smoke.mjs` — Chromium desktop/mobile and privacy-reconciliation checks
 - `.github/workflows/pages.yml` — sync, test, deploy, HTTPS smoke
