@@ -51,6 +51,8 @@ jobs:
           test -s decisions.css
           test -s workboard.js
           test -s workboard.css
+          test -s reports.js
+          test -s reports.css
           test -s data.js
           test -s favicon.svg
           node --check app.js
@@ -58,6 +60,7 @@ jobs:
           node --check intelligence.js
           node --check decisions.js
           node --check workboard.js
+          node --check reports.js
           node --check data.js
           node --check tests/smoke.mjs
           node --check scripts/sync-public.mjs
@@ -70,7 +73,7 @@ jobs:
       - name: Prepare static site artifact
         run: |
           mkdir -p _site
-          cp index.html styles.css command-center.css intelligence.css decisions.css workboard.css app.js command-center.js intelligence.js decisions.js workboard.js data.js favicon.svg _site/
+          cp index.html styles.css command-center.css intelligence.css decisions.css workboard.css reports.css app.js command-center.js intelligence.js decisions.js workboard.js reports.js data.js favicon.svg _site/
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
@@ -95,7 +98,9 @@ jobs:
                curl -fsSL --max-time 15 "${URL}decisions.js" -o /tmp/abud-universe-decisions.js &&
                grep -q "ABUD Universe V1.3" /tmp/abud-universe-decisions.js &&
                curl -fsSL --max-time 15 "${URL}workboard.js" -o /tmp/abud-universe-workboard.js &&
-               grep -q "ABUD OS V1.4" /tmp/abud-universe-workboard.js; then
+               grep -q "ABUD OS V1.4" /tmp/abud-universe-workboard.js &&
+               curl -fsSL --max-time 15 "${URL}reports.js" -o /tmp/abud-universe-reports.js &&
+               grep -q "ABUD OS V1.6" /tmp/abud-universe-reports.js; then
               echo "PASS live HTTPS: $URL"
               exit 0
             fi
