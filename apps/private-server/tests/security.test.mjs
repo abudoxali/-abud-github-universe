@@ -126,6 +126,8 @@ test("OAuth callback rejects missing state without calling GitHub",async()=>{
   assert.equal(login.statusCode,302);
   assert.match(login.headers.location,/github\.com\/login\/oauth\/authorize/);
   assert.match(login.headers["set-cookie"],/Secure/);
+  assert.match(login.headers["set-cookie"],/Path=\//);
+  assert.doesNotMatch(login.headers["set-cookie"],/Path=\/auth/);
  }finally{await server.close();}
 });
 
