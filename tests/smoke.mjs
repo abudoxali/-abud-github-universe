@@ -95,6 +95,7 @@ try {
   assert.equal(await desktop.locator("#dailyQueue .queue-card").count(),2);
   await desktop.locator('#repoGrid [data-hub="RootRay"]').first().click();
   await desktop.waitForURL(/#project\/RootRay$/);
+  await desktop.locator("#projectHub").waitFor({state:"visible"});
   assert.equal(await desktop.locator("body").getAttribute("class"),"project-mode");
   assert.equal(await desktop.locator("#hubTitle").textContent(),"RootRay");
   await desktop.locator("#hubCommit").getByText("test: verified public build").waitFor();
