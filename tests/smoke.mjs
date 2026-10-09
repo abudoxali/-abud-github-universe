@@ -62,8 +62,19 @@ try {
   assert.equal(await mobile.locator("#repoGrid .repo-card").count(),43);
   await mobile.locator("#mobileMenu").click();
   assert.equal(await mobile.locator("#mobileBackdrop").isVisible(),true);
-  await mobile.locator("#mobileBackdrop").click({position:{x:10,y:120}});
-  assert.equal(await mobile.locator("#mobileBackdrop").isVisible(),false);
+  const overlayHit = await mobile.evaluate(() => {
+    const overlay=document.getElementById("mobileBackdrop");
+    const menu=document.getElementById("sidebar");
+    const rect=overlay.getBoundingClientRect();
+    const nav=menu.getBoundingClientRect();
+    return {overlay:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},
+      sidebar:{x:nav.x,width:nav.width},
+      hit:document.elementFromPoint(10,120)?.id||document.elementFromPoint(10,120)?.tagName};
+  });
+  console.log("Mobile overlay debug:",JSON.stringify(overlayHit));
+  await mobile.mouse.click(10,120);
+  assert.equal(await mobile.locator("#mobileBackdrop").isVisible(),false,
+    "Overlay tap did not close mobile nav: "+JSON.stringify(overlayHit));
   const dimensions=await mobile.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth}));
   assert.ok(dimensions.scrollWidth<=dimensions.viewport+2,"Mobile horizontal overflow: "+JSON.stringify(dimensions));
   assert.equal(errors.length,0,"Uncaught browser errors: "+errors.join(" | "));
