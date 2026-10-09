@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./command-center.css">
   <link rel="stylesheet" href="./intelligence.css">
+  <link rel="stylesheet" href="./decisions.css">
   <title>ABUD GitHub Universe — Project Command Center</title>
 </head>
 <body>
@@ -33,6 +34,7 @@
         <a class="nav-link" href="#map"><span class="nav-icon">⌘</span><span data-i18n="navMap">خريطة المشاريع</span><span class="nav-short">02</span></a>
         <a class="nav-link" href="#library"><span class="nav-icon">▦</span><span data-i18n="navLibrary">كل المستودعات</span><span class="nav-short">03</span></a>
         <a class="nav-link" href="#relations"><span class="nav-icon">⌁</span><span data-i18n="navRelations">العلاقات والنسخ</span><span class="nav-short">04</span></a>
+        <a class="nav-link" href="#decisions"><span class="nav-icon">◇</span><span id="navDecisions">قرارات المشاريع</span><span class="nav-short">05</span></a>
         <a class="nav-link" href="#strategy"><span class="nav-icon">◎</span><span data-i18n="navStrategy">التركيز والقرارات</span><span class="nav-short">05</span></a>
       </nav>
       <div class="side-label" data-i18n="categoriesLabel">CATEGORIES / التصنيفات</div>
@@ -210,9 +212,36 @@
 
         <section class="relations-section" id="relations">
           <div class="section-heading"><div><div class="section-kicker">04 / PRODUCT LINEAGE</div><h2 data-i18n="relTitle">المشاريع المرتبطة ببعض</h2><p data-i18n="relSub">تمييز الـCanonical Repositories عن النسخ القديمة والمشاريع المتداخلة.</p></div></div>
+          
+          <div class="relation-controls">
+            <div id="relationModes" class="relation-modes" aria-label="Relationship type filters"></div>
+            <span id="relationCoverage" class="relation-coverage"></span>
+          </div>
+          <div class="relation-insights" id="relationInsights" aria-live="polite"></div>
           <div class="relation-grid" id="relationGrid"></div>
         </section>
 
+        <section class="decision-section" id="decisions" aria-labelledby="decisionTitle">
+          <div class="section-heading"><div>
+            <div class="section-kicker">05 / PROJECT DECISIONS · V1.3</div>
+            <h2 id="decisionTitle">قرارات المشاريع</h2>
+            <p id="decisionDescription">إشارات مراجعة قابلة للتفسير؛ لا نساوي بين توقف الـCommits وتعطّل المنتج.</p>
+          </div><span id="decisionTotal" class="section-count">PUBLIC ONLY</span></div>
+          <div class="decision-kpis" id="decisionKpis"></div>
+          <div class="decision-controls">
+            <div id="decisionFilters" class="decision-filters" aria-label="Decision filters"></div>
+            <div class="decision-sort"><label id="decisionSortLabel" for="decisionSort">الترتيب</label>
+              <select id="decisionSort" aria-label="Sort decision signals">
+                <option value="priority">Priority</option>
+                <option value="name">Name</option>
+                <option value="date">Last Push</option>
+              </select>
+            </div>
+          </div>
+          <div id="decisionContext" class="decision-context"></div>
+          <div class="decision-list" id="decisionList" aria-live="polite"></div>
+          <p id="decisionDisclaimer" class="decision-disclaimer"></p>
+        </section>
         <section class="principles-section">
           <div class="principle-card"><span class="principle-icon">◎</span><h3 data-i18n="principleA">ONE MAIN PROJECT</h3><p data-i18n="principleADesc">مشروع رئيسي واحد للتنفيذ؛ والباقي Maintenance أو Growth.</p></div>
           <div class="principle-card"><span class="principle-icon">✓</span><h3 data-i18n="principleB">REAL VERIFICATION</h3><p data-i18n="principleBDesc">الـRelease مش 100% إلا لما المستخدم أو الـGolden Path يتحقق فعليًا.</p></div>
@@ -241,5 +270,6 @@
   <script defer src="./app.js"></script>
   <script defer src="./command-center.js"></script>
   <script defer src="./intelligence.js"></script>
+  <script defer src="./decisions.js"></script>
 </body>
 </html>
