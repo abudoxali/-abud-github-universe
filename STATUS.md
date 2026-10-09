@@ -3,8 +3,38 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V1.2 PROJECT INTELLIGENCE — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
+State: **V1.3 GRAPH & PROJECT DECISIONS — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
 Owner visual/content review: **NOT YET RECORDED**.
+
+## V1.3 — Smarter Project Graph & Decision Dashboard (2026-10-09)
+
+**Scope:** Extend the existing public-only ABUD GitHub Universe; retain ABUD theme, Arabic RTL / English LTR, previous features, one STATUS.md, and GitHub Pages static deployment.
+
+### Verified implementation
+- **Six curated public-to-public relationships**, each carrying an explicit type, Arabic/English rationale, and `basis: editorial`: succession, potential scope overlap, complementary tools, or same-track portfolio. No unverified dependency, duplicate-code, or automatic merger claims.
+- **Interactive graph edges between actual repository nodes** on the existing zoomable/pannable map. Relationship type filters, focus/highlight, public-project detail links, and synchronized edge removal when a repo becomes private or unavailable.
+- **Decision Dashboard** aggregates conservative, explainable review signals from public-only catalog labels and optional public GitHub `pushed_at` metadata: privacy review, curated release gates, potential overlap, unreviewed/new projects, and 90+ days since last public push.
+- **Filters and sorts** by signal type, priority, name and oldest push, including stated public-data coverage.
+- Inactivity is **not** product abandonment; scope overlap is **not** proof of duplicated source; CI does **not** prove real production acceptance. No automated write, archive, delete, or merge operations.
+- Bilingual responsive `decisions.js` and `decisions.css`, updated main navigation, data relationship rationale, unchanged deployment model.
+- The public catalog remains **28 public repositories** at the last documented connected audit; private repositories are not included.
+
+### Automated + public verification
+- Latest successful code/test/production deployment before this status-document change:
+  https://github.com/abudoxali/-abud-github-universe/actions/runs/37903150115 — **SUCCESS** (commit `424f38e90b103050e6587b8f69bffb7b2826b80a`).
+- Node syntax and static asset validation **PASS**.
+- Playwright Chromium desktop **PASS**: six typed relations, graph line focus, relation filters, privacy/release/overlap signals, sorting, Arabic and English, earlier V1.1/V1.2 coverage.
+- Dynamic public API reconciliation **PASS**: private/deleted repo removed from cards, edges and relationship explorer, new public repo discovered, private API row ignored.
+- 90+ day synthetic public push **PASS**: inactivity appears as a review signal with an explicit no-failure qualification.
+- Playwright Chromium mobile **PASS**: existing navigation, project hub, public cards, no page overflow and zero uncaught JavaScript errors.
+- GitHub Pages deployment + actual HTTPS checks of index, app, command-center, intelligence and decisions modules **PASS**.
+- Manual owner visual/content acceptance: **PENDING**.
+
+### Boundaries / next acceptance
+- GitHub Actions and `pushed_at` are not business/completion telemetry. Review labels are editorial until updated with recent project STATUS and genuine runtime evidence.
+- GitHub Pages remains **public-only**. Former private repo names may still exist in historical public Git commits, which were not force-rewritten.
+- The authenticated private workspace and V1.4 functionality have not been implemented or approved.
+- Recommended next step after owner visual acceptance: examine secure access architecture and objective-based review automation without broadening the public data exposure.
 
 ## V1.2 — Public Project Intelligence & AI Workflow (2026-10-09)
 
