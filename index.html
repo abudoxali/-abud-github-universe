@@ -246,6 +246,29 @@
             </div>
           </div>
           <div class="work-projects" id="workProjects" aria-live="polite"></div>
+          <section class="work-history" id="workHistory" aria-labelledby="historyTitle">
+            <div class="work-history-header">
+              <div><div class="section-kicker">V1.5 / LOCAL EXECUTION JOURNAL</div>
+                <h3 id="historyTitle">سجل الإنجاز والقرارات</h3>
+                <p id="historyIntro">أحداث أنت سجلتها على الجهاز؛ منفصلة عن GitHub activity.</p></div>
+              <div class="work-history-controls">
+                <label id="historyFilterLabel" for="historyFilter">الفترة</label>
+                <select id="historyFilter">
+                  <option value="7">7 Days</option>
+                  <option value="30">30 Days</option>
+                  <option value="all">All</option>
+                </select>
+              </div>
+            </div>
+            <form class="work-note-form" id="workNoteForm">
+              <select id="workNoteProject" aria-label="Choose focus project for journal entry"></select>
+              <input id="workNoteText" name="note" maxlength="120" required autocomplete="off" placeholder="سجل قرار أو عقبة قصيرة...">
+              <button type="submit" id="workNoteAdd" class="btn btn-secondary">+ أضف قرار</button>
+            </form>
+            <div id="workHistoryMetrics" class="work-history-metrics"></div>
+            <ol id="workHistoryList" class="work-history-list" aria-live="polite"></ol>
+          </section>
+          
           <div class="work-footer">
             <p id="workPrivacy">لا تكتب كلمات مرور أو أسرار أو معلومات خاصة. البيانات محفوظة في نفس المتصفح ولا تنتقل تلقائيًا بين الأجهزة أو إلى GitHub.</p>
             <span id="workSaveIndicator">SAVED LOCALLY</span>
