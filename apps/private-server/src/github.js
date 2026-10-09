@@ -4,7 +4,21 @@ import {repoName,statusClaims} from "./security.js";
 export async function createGitHubInstallation(env,config){
   const pem=await readFile(env.GITHUB_APP_PRIVATE_KEY_PATH,"utf8");
   const app=new App({appId:env.GITHUB_APP_ID,privateKey:pem});
-  const installation=await app.getInstallationOctokit(Number(env.GITHUB_INSTALLATION_ID));
+  const id=Number(env.GITHUB_INSTALLATION_ID);
+  const installationRecord=(await app.octokit.request("GET /app/installations/{installation_id}",{
+    installation_id:id
+  })).data;
+  if(installationRecord.account?.id!==config.ownerId||
+     installationRecord.account?.login?.toLowerCase()!==config.ownerLogin.toLowerCase()||
+     installationRecord.repository_selection!=="selected")
+    throw Error("GitHub App must be installed on the owner's explicitly SELECTED repositories");
+  // A mistaken installation must fail before accessing private metadata.
+  for(const [name,permission] of Object.entries(installationRecord.permissions||{})){
+    if(permission!=="read")throw Error("GitHub App has a non-read-only permission: "+name);
+  }
+  if(installationRecord.permissions?.contents!=="read")
+    throw Error("GitHub App installation needs Contents: Read");
+  const installation=await app.getInstallationOctokit(id);
   async function list(){
     const output=[],used=new Set();
     for(let page=1;page<=10;page++){
