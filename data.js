@@ -1,6 +1,7 @@
-/* ABUD GitHub Universe — curated static classifications.
-   Public repository metadata may be refreshed in-browser separately.
-   Owner decisions and completion labels are NOT inferred from GitHub activity. */
+/* ABUD GitHub Universe - public-only GitHub snapshot.
+ * Never add private/hidden repository names or business details.
+ * Public API refresh reconciles additions and removals.
+ * Editorial product statuses require manual review. */
 window.ABUD_DATA = {
   "owner": "abudoxali",
   "reviewed": "2026-10-09",
@@ -66,42 +67,42 @@ window.ABUD_DATA = {
     {
       "name": "Video_Factory",
       "category": "active",
-      "status": "MAIN FOCUS",
+      "status": "PRODUCTION GATE",
       "ar": "منصة عربية لإنتاج الفيديوهات تلقائيًا بالذكاء الاصطناعي",
       "en": "Arabic-first automated AI video production and distribution",
       "nextAr": "تجربة Golden Path حقيقية بعد إعداد الاعتمادات الخارجية",
       "nextEn": "Run the real Golden Path with external provider credentials",
-      "note": "Production verification blocked by external AI/R2/OAuth credentials"
+      "note": "STATUS.md explicitly says NOT READY; full live-service Golden Path awaits real credentials."
     },
     {
       "name": "ReplyOps",
       "category": "active",
-      "status": "NEXT",
+      "status": "99% / LIVE GATE",
       "ar": "منصة عمليات دعم العملاء وRAG والرد الآلي متعدد القنوات",
       "en": "Multi-tenant AI customer operations, RAG, approvals and channel delivery",
       "nextAr": "إجراء اختبار Live Acceptance لـTelegram ثم WhatsApp",
       "nextEn": "Complete Telegram, then WhatsApp, live channel acceptance",
-      "note": "Internal platform mature; external channel verification remains"
+      "note": "STATUS.md records internal completion but pending live Telegram and Meta WhatsApp acceptance."
     },
     {
       "name": "RootRay",
       "category": "active",
-      "status": "GROWTH",
+      "status": "v0.3.0 / GROWTH",
       "ar": "أداة تربط عناصر واجهة المستخدم بالكود المصدر مباشرة",
       "en": "Local-first UI-to-source inspector for developers",
       "nextAr": "زيادة المستخدمين وقياس Adoption بدل إضافة مزايا بلا دليل",
       "nextEn": "Acquire real users and measure adoption",
-      "note": "v0.3.0 published; focus on distribution"
+      "note": "STATUS.md records stable published v0.3.0; next stage is adoption, not speculative features."
     },
     {
       "name": "short-studio-server",
       "category": "active",
-      "status": "GROWTH",
+      "status": "v2.6.1 / GA",
       "ar": "استوديو محلي لإنتاج الفيديوهات القصيرة بالـAI والرندر",
       "en": "Local-first short-video studio with rendering and AI integrations",
       "nextAr": "اختبار الاستخدام الفعلي وتحسين التوزيع والتجربة",
       "nextEn": "Distribution, onboarding and genuine usage",
-      "note": "Short Studio 2.6.1 GA"
+      "note": "Latest release commit dated October 5 prepared accepted GA 2.6.1."
     },
     {
       "name": "ThreadForm",
@@ -111,97 +112,37 @@ window.ABUD_DATA = {
       "en": "Browser-based 2D/3D apparel mockup SaaS",
       "nextAr": "إنهاء مسار الـ3D/2D الأساسي قبل أي Scope جديد",
       "nextEn": "Finish the core studio workflow before expanding scope",
-      "note": "Verify fidelity of garment/artwork/export/reopen flow"
+      "note": "STATUS.md reports approximately 52% overall completion, with a functional 3D core but significant scope remaining."
     },
     {
       "name": "VoidShift",
       "category": "active",
-      "status": "VISUAL REVIEW",
+      "status": "40% / VISUAL REVIEW",
       "ar": "تجربة قتال سينمائي تفاعلي WebGL مبنية بالكود",
       "en": "Code-driven cinematic WebGL battle experience",
       "nextAr": "اعتماد الشخصيات والحركة بصريًا من النسخة الحية",
       "nextEn": "Visual acceptance of characters and choreography",
-      "note": "Last accepted status: 40%"
+      "note": "STATUS.md: 40% is last owner-accepted figure, not automatically increasing."
     },
     {
       "name": "Grantly",
       "category": "live",
-      "status": "LIVE",
+      "status": "LIVE / VERIFIED",
       "ar": "منصة منح دراسية عربية وإنجليزية مع لوحة إدارة",
       "en": "Bilingual global scholarships and discovery platform",
       "nextAr": "نمو المحتوى ومتابعة تشغيل الإنتاج",
       "nextEn": "Grow catalog and operate production",
-      "note": "Verified production launch in project status"
-    },
-    {
-      "name": "ELHABAK-Construction-System-V1",
-      "category": "live",
-      "status": "DELIVERED",
-      "ar": "نظام إدارة العمليات والمبيعات للمقاولات",
-      "en": "Client construction operations platform",
-      "nextAr": "صيانة عند الحاجة وعرض Case Study بإذن العميل",
-      "nextEn": "Maintenance and permissioned client case study",
-      "note": "Client-owned work: confirm public source approval"
+      "note": "STATUS.md documents production HTTPS verification, admin/student Golden Paths and 60/60 tests."
     },
     {
       "name": "GuestFlow",
       "category": "live",
-      "status": "PRODUCT",
+      "status": "LIVE / v0.3.3",
       "ar": "منصة لإدارة الضيافة والحجوزات والتشغيل",
       "en": "Hospitality and property operations platform",
       "nextAr": "التركيز على التمييز التجاري ومستخدمين حقيقيين",
       "nextEn": "Product differentiation and real users",
-      "note": "Overlaps in scope with ClientFlow CRM"
-    },
-    {
-      "name": "ClientFlow-CRM",
-      "category": "live",
-      "status": "FROZEN v1.1",
-      "ar": "نظام CRM وتشغيل ضيافة بعناصر مالية وملاك",
-      "en": "Hospitality CRM and owner operations",
-      "nextAr": "تعديلات عملاء أو Bugs فقط",
-      "nextEn": "Only client requests and confirmed bugs",
-      "note": "Commercial v1.1 closed and frozen"
-    },
-    {
-      "name": "Mohamy",
-      "category": "live",
-      "status": "COMMERCIAL CLOSED",
-      "ar": "MohamyPhone: نظام إداري وتجاري لمكاتب المحاماة",
-      "en": "MohamyPhone legal-office commercial product",
-      "nextAr": "نشر أو بيع أو تسليم للمشتري",
-      "nextEn": "Sell, publish or buyer handoff",
-      "note": "Technical closure reported; confirm buyer/store acceptance separately"
-    },
-    {
-      "name": "nuvora_erp",
-      "category": "live",
-      "status": "CANONICAL ERP",
-      "ar": "ERP تجاري متعدد المنصات يدعم الويب والديسكتوب والموبايل",
-      "en": "Commercial ERP for web, Windows desktop and mobile",
-      "nextAr": "توزيع تجاري، مراجعة المشتري، وتوقيع الإصدارات",
-      "nextEn": "Commercial distribution and buyer acceptance",
-      "note": "Canonical ERP direction"
-    },
-    {
-      "name": "og-erp-commercial",
-      "category": "live",
-      "status": "OLDER ERP",
-      "ar": "إصدار تجاري أقدم من منظومة ERP",
-      "en": "Older commercial ERP product line",
-      "nextAr": "فحص الميزات الفريدة قبل الأرشفة",
-      "nextEn": "Check unique modules before archive",
-      "note": "Legacy relationship with Nuvora ERP"
-    },
-    {
-      "name": "erp-system",
-      "category": "live",
-      "status": "OLDER ERP",
-      "ar": "نظام ERP أقدم متعدد المستأجرين",
-      "en": "Older multi-tenant ERP implementation",
-      "nextAr": "أرشفة النسخة المتكررة بعد مقارنة الموديولات",
-      "nextEn": "Archive duplicate after comparing unique modules",
-      "note": "Do not confuse legacy documentation with latest production state"
+      "note": "STATUS.md documents real HTTPS E2E and performance pass; 37 unit tests and 14 Playwright tests."
     },
     {
       "name": "RepoRadar-Ai",
@@ -211,7 +152,7 @@ window.ABUD_DATA = {
       "en": "Developer-oriented repository intelligence tool",
       "nextAr": "تجهيز Demo وREADME وإصدار صالح للتجربة",
       "nextEn": "Demo, README and usable release",
-      "note": "Local-first and no paid AI by default"
+      "note": "STATUS.md documents 63 passing tests in 12 files. Packaging and release readiness require independent verification."
     },
     {
       "name": "abud-prompt-engine",
@@ -246,12 +187,12 @@ window.ABUD_DATA = {
     {
       "name": "Source-of-Truth",
       "category": "revive",
-      "status": "RENAME",
-      "ar": "تجربة لتحليل بيانات الطعام المصرية",
-      "en": "Egyptian food data analysis project",
-      "nextAr": "إعادة تسمية الريبو وصنع قصة منتج واضحة",
-      "nextEn": "Rename and create credible case study",
-      "note": "Working name is too generic"
+      "status": "99% / DEPLOY CHECK",
+      "ar": "محلل بيانات الغذاء المصري: المنتج الأساسي 99% وتحديث الموبايل متنفذ؛ المتبقي نشر النسخة الأخيرة والتحقق لايف.",
+      "en": "Egyptian food analyzer: core product 99%, responsive redesign committed, pending redeploy and live-device verification.",
+      "nextAr": "انشر آخر تحديث واختبره على أجهزة فعلية",
+      "nextEn": "Redeploy latest UI and validate on real devices",
+      "note": "STATUS.md reports 99% core completion; latest redesign live-device acceptance remains."
     },
     {
       "name": "iqtida",
@@ -262,16 +203,6 @@ window.ABUD_DATA = {
       "nextAr": "مراجعة علمية بشرية قبل النشر",
       "nextEn": "Human subject-matter review before promotion",
       "note": "No unverified religious claims"
-    },
-    {
-      "name": "UIUX-Multiverse",
-      "category": "revive",
-      "status": "POLISH",
-      "ar": "معرض تفاعلي لأعمال وتجارب UI/UX",
-      "en": "Interactive UI/UX portfolio experience",
-      "nextAr": "تحسين العرض والـREADME والنشر",
-      "nextEn": "Polish, README and publish",
-      "note": "Showcase implementation and design decisions"
     },
     {
       "name": "Personal-Task-Manager-Telegram-Bot",
@@ -316,12 +247,12 @@ window.ABUD_DATA = {
     {
       "name": "One-Bullet-Arena",
       "category": "showcase",
-      "status": "GAME",
+      "status": "v3.16.0",
       "ar": "لعبة أكشن 2D تعتمد على طلقة واحدة يجب استعادتها",
       "en": "2D action game built around one recoverable bullet",
       "nextAr": "Demo واختبارات لعب ومراقبة التجربة",
       "nextEn": "Demo, playtest and distribution",
-      "note": "Browser and Windows distribution ambitions"
+      "note": "STATUS.md reports mobile combat controls v3.16.0, 161/161 automated tests at that release."
     },
     {
       "name": "Shadow-Runner",
@@ -334,24 +265,14 @@ window.ABUD_DATA = {
       "note": "Avoid distracting from flagship products"
     },
     {
-      "name": "abud",
-      "category": "personal",
-      "status": "MAIN WEBSITE",
-      "ar": "الموقع الشخصي الرسمي ABUD FUN",
-      "en": "Official ABUD FUN platform and portfolio",
-      "nextAr": "صيانة الموقع ودراسات حالة دقيقة",
-      "nextEn": "Maintain portfolio and credible case studies",
-      "note": "Reference design system for this dashboard"
-    },
-    {
       "name": "3bud-ZC",
       "category": "personal",
-      "status": "PROFILE",
+      "status": "PUBLIC PROFILE",
       "ar": "مستودع البروفايل الخاص بـGitHub",
       "en": "GitHub profile README / identity repository",
       "nextAr": "توحيد الاسم والهوية مع abudoxali",
       "nextEn": "Align profile with current handle and brand",
-      "note": "GitHub profile lineage"
+      "note": "Public GitHub profile repository. Align outdated redirects and badges with the canonical handle."
     },
     {
       "name": "-abud-github-universe",
@@ -365,43 +286,13 @@ window.ABUD_DATA = {
     },
     {
       "name": "Flouka-Party",
-      "category": "personal",
-      "status": "ARCHIVE REVIEW",
+      "category": "cleanup",
+      "status": "SECURITY REVIEW",
       "ar": "صفحة لتجربة أو حدث قديم",
       "en": "Past event microsite",
-      "nextAr": "مراجعة الملفات والبيئة قبل الأرشفة",
-      "nextEn": "Audit configuration before archiving",
-      "note": "Review previously exposed environment configuration"
-    },
-    {
-      "name": "joud",
-      "category": "personal",
-      "status": "PERSONAL",
-      "ar": "تجربة موقع شخصي صغير",
-      "en": "Personal microsite experiment",
-      "nextAr": "أرشفة أو جعله خاصًا",
-      "nextEn": "Archive or make private",
-      "note": "Personal archive candidate"
-    },
-    {
-      "name": "loji",
-      "category": "personal",
-      "status": "PERSONAL",
-      "ar": "تجربة ويب شعرية شخصية",
-      "en": "Poetic personal web experiment",
-      "nextAr": "أرشفة أو جعله خاصًا",
-      "nextEn": "Archive or make private",
-      "note": "Personal archive candidate"
-    },
-    {
-      "name": "Maryouma",
-      "category": "personal",
-      "status": "PERSONAL",
-      "ar": "مشروع شخصي صغير",
-      "en": "Personal microsite",
-      "nextAr": "أرشفة أو جعله خاصًا",
-      "nextEn": "Archive or make private",
-      "note": "Personal archive candidate"
+      "nextAr": "راجع ملفات البيئة والتاريخ قبل استمرار النشر",
+      "nextEn": "Review config and Git history for exposures before continued publication",
+      "note": "Prior public environment configuration concerns; inspect carefully and avoid sharing secrets."
     },
     {
       "name": "MoHIamySuite",
@@ -412,16 +303,6 @@ window.ABUD_DATA = {
       "nextAr": "عدم إعادة الفتح بدون حاجة سوق واضحة",
       "nextEn": "Freeze unless a concrete market reason emerges",
       "note": "Distinct from current MohamyPhone commercial product"
-    },
-    {
-      "name": "swaya-platform",
-      "category": "freeze",
-      "status": "R&D",
-      "ar": "منصة تجريبية بحثية ذات سياق سريري",
-      "en": "Clinical-oriented research platform",
-      "nextAr": "تجميد لحين وجود شريك متخصص",
-      "nextEn": "Hold until relevant specialist partner exists",
-      "note": "Requires domain-specific safety and validation"
     },
     {
       "name": "vps_bot",
@@ -444,16 +325,6 @@ window.ABUD_DATA = {
       "note": "Superseded by abud-prompt-engine"
     },
     {
-      "name": "Beni-Suef-National",
-      "category": "cleanup",
-      "status": "URGENT PRIVACY",
-      "ar": "تجربة بوابة تعليمية تتطلب مراجعة خصوصية عاجلة",
-      "en": "Education portal requiring urgent privacy review",
-      "nextAr": "جعل المستودع خاصًا وتنظيف التاريخ بعد التدقيق",
-      "nextEn": "Make private and purge exposed data/history after review",
-      "note": "Potential sensitive personal data in repository"
-    },
-    {
       "name": "Egyptian-Russian-University",
       "category": "cleanup",
       "status": "PRIVACY REVIEW",
@@ -461,75 +332,57 @@ window.ABUD_DATA = {
       "en": "University-style portal prototype",
       "nextAr": "جعله خاصًا أو أرشفته",
       "nextEn": "Make private or archive",
-      "note": "Avoid confusing public viewers with official institution"
+      "note": "Public university-style portal prototype; review records and avoid misrepresenting institutional affiliation."
     },
     {
-      "name": "myu.hnu.edu.eg",
-      "category": "cleanup",
-      "status": "PRIVACY REVIEW",
-      "ar": "نموذج تعليمي غير رسمي",
-      "en": "Unofficial educational portal prototype",
-      "nextAr": "جعله خاصًا أو أرشفته",
-      "nextEn": "Make private or archive",
-      "note": "Avoid institutional impersonation confusion"
-    },
-    {
-      "name": "zewailcity",
-      "category": "cleanup",
-      "status": "PRIVACY REVIEW",
-      "ar": "بوابة جامعية تجريبية",
-      "en": "University portal prototype",
-      "nextAr": "جعله خاصًا أو أرشفته",
-      "nextEn": "Make private or archive",
-      "note": "Avoid institutional impersonation confusion"
-    },
-    {
-      "name": "3BUD-Store-Telegram-Mini-App",
-      "category": "cleanup",
-      "status": "EMPTY",
-      "ar": "مستودع Telegram Mini App فارغ",
-      "en": "Empty Telegram Mini App repository",
-      "nextAr": "حذفه بعد التأكد من عدم وجود استخدام",
-      "nextEn": "Delete after confirming no dependents",
-      "note": "No code found in previous audit"
+      "name": "stickman-video-factory",
+      "category": "revive",
+      "status": "NEW / EMPTY",
+      "ar": "مستودع جديد فارغ لإنتاج فيديوهات Stickman آليًا.",
+      "en": "New empty repository reserved for an automated Stickman video production project.",
+      "nextAr": "حدد نطاق أول نسخة وابدأ التنفيذ الفعلي",
+      "nextEn": "Define the first executable slice and implement it",
+      "note": "Confirmed repository size=0 at audit time; no production readiness implied."
     }
   ],
   "relationships": [
     {
-      "from": "erp-system",
-      "to": "nuvora_erp",
-      "ar": "السلف → النسخة الأساسية",
-      "en": "legacy → canonical"
-    },
-    {
-      "from": "og-erp-commercial",
-      "to": "nuvora_erp",
-      "ar": "السلف → النسخة الأساسية",
-      "en": "legacy → canonical"
-    },
-    {
       "from": "promptforge",
       "to": "abud-prompt-engine",
-      "ar": "استُبدل بـ",
-      "en": "superseded by"
+      "ar": "من مشروع البرومبت القديم للمنظومة الأساسية",
+      "en": "older prompt project to canonical engine"
     },
     {
-      "from": "ClientFlow-CRM",
-      "to": "GuestFlow",
-      "ar": "تداخل نطاق العمل",
-      "en": "scope overlap"
+      "from": "Video_Factory",
+      "to": "short-studio-server",
+      "ar": "أدوات إنتاج فيديو متقاربة — ليست تبعية برمجية",
+      "en": "related video products; no code dependency implied"
     },
     {
-      "from": "3bud-ZC",
-      "to": "abud",
-      "ar": "الهوية → المنصة الأساسية",
-      "en": "profile → main platform"
+      "from": "RootRay",
+      "to": "RepoRadar-Ai",
+      "ar": "أدوات تطوير وتوثيق مكملة لبعض",
+      "en": "complementary developer tooling"
     },
     {
-      "from": "-abud-github-universe",
-      "to": "abud",
-      "ar": "مرجع المشاريع → الموقع الرئيسي",
-      "en": "reference → main site"
+      "from": "VoidShift",
+      "to": "One-Bullet-Arena",
+      "ar": "مشروعات ويب تفاعلية / ألعاب",
+      "en": "interactive web and game experiences"
+    },
+    {
+      "from": "OmniAgent",
+      "to": "abud-prompt-engine",
+      "ar": "أدوات الـAgents والبرومبت",
+      "en": "related agent/prompt tools"
+    },
+    {
+      "from": "flyrank-ai-portfolio",
+      "to": "flyrank-opportunity-workflow",
+      "ar": "نفس مسار تدريب FlyRank",
+      "en": "FlyRank training and capstone"
     }
-  ]
+  ],
+  "snapshot": "PUBLIC_ONLY",
+  "catalogPolicy": "Only public repositories are included. Private repositories are excluded. Status labels are curated, not inferred from commit activity."
 };
