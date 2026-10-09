@@ -27,10 +27,33 @@ async function mockPublicGitHub(page){
       body:JSON.stringify(url.searchParams.get("page")==="1"?livePublic:[])
     });
   });
+  await page.route(/^https:\/\/api\.github\.com\/repos\/abudoxali\/[^/]+(?:\?|\/|$)/,async route=>{
+    const target=new URL(route.request().url());
+    const parts=target.pathname.split("/");
+    const name=decodeURIComponent(parts[3]||"");
+    const exists=livePublic.find(r=>r.name===name&&r.private===false);
+    if(!exists || target.pathname.includes("/contents/")){
+      await route.fulfill({status:404,contentType:"application/json",body:"{}"});return;
+    }
+    let payload;
+    if(target.pathname.includes("/commits"))payload=[];
+    else if(target.pathname.includes("/actions/runs"))payload={workflow_runs:[]};
+    else payload={
+      name,owner:{login:"abudoxali"},visibility:"public",private:false,
+      default_branch:"main",language:"JavaScript",stargazers_count:0,
+      pushed_at:new Date().toISOString()
+    };
+    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(payload)});
+  });
   await page.route(/^https:\/\/api\.github\.com\/repos\/abudoxali\/RootRay(?:\?|\/|$)/,async route=>{
     const url=route.request().url();
     let payload;
-    if(url.includes("/commits?"))payload=[{
+    if(url.includes("/contents/STATUS.md"))payload={
+      type:"file",encoding:"base64",sha:"aabbccddeeff0011223344556677889900aabbcc",
+      size:126,
+      content:Buffer.from("# RootRay\nUpdated: 2026-10-09\nStatus: VERIFIED IN DOCUMENT\nNext Action: Public release review\nAPI_KEY=example-secret-value\n","utf8").toString("base64")
+    };
+    else if(url.includes("/commits?"))payload=[{
       sha:"aaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       commit:{message:"test: verified public build",committer:{date:"2026-10-09T08:15:00Z"}}
     }];
@@ -50,7 +73,7 @@ async function mockPublicGitHub(page){
 const server = http.createServer(async (req,res) => {
   try {
     const name = decodeURI((req.url || "/").split("?")[0]).replace(/^\/+/, "") || "index.html";
-    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","favicon.svg"].includes(name)) {
+    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","favicon.svg"].includes(name)) {
       res.writeHead(404).end("Not found");return;
     }
     const buf = await readFile(resolve(root,name));
@@ -73,6 +96,9 @@ try {
   assert.equal(await desktop.locator("#graphClusters .graph-cluster").count(),8,"All 8 clusters should render");
   assert.equal(await desktop.locator("#metrics .stat").count(),5,"Metrics should render");
   assert.equal(await desktop.locator("html").getAttribute("dir"),"rtl","Default is Arabic RTL");
+  await desktop.waitForFunction(()=>document.querySelector("#weeklyIndicator")?.textContent==="PUBLIC GITHUB");
+  assert.match(await desktop.locator("#weeklySummary").textContent(),/public repositories|projects|repositories/i);
+  console.log("PASS V1.2 weekly: last push review sourced from public metadata");
   console.log("PASS desktop: ${expected} public cards, 8 clusters, 5 metrics, Arabic RTL");
 
   await desktop.locator("#languageButton").click();
@@ -106,6 +132,23 @@ try {
   await desktop.locator("#hubBack").click();
   await desktop.waitForURL(/#daily$/);
   assert.equal(await desktop.locator("#projectHub").isVisible(),false);
+
+  // V1.2: status facts are displayed as source claims, not execution instructions.
+  await desktop.locator("#intelligenceState").getByText("FOUND / PUBLIC").waitFor();
+  const statusText=await desktop.locator("#intelligenceFacts").textContent();
+  assert.match(statusText,/VERIFIED IN DOCUMENT/);
+  assert.ok(!statusText.includes("example-secret-value"));
+  const handoff=await desktop.locator("#agentPrompt").inputValue();
+  assert.match(handoff,/Agent 1/);
+  assert.match(handoff,/aabbccddeeff/);
+  assert.match(handoff,/Latest publicly observed commit SHA:/);
+  assert.doesNotMatch(handoff,/example-secret-value/);
+  await desktop.locator("#agentExecute").click();
+  const exec=await desktop.locator("#agentPrompt").inputValue();
+  assert.match(exec,/Agent 2/);
+  assert.match(exec,/Inspect → Run → Diagnose → Execute → Test → Verify → Update STATUS.md/);
+  assert.ok(exec.includes("CI outcome alone is not product acceptance"));
+  console.log("PASS V1.2: safe public STATUS source, Agent 1/2 prompts, qualified commit and CI evidence");
   console.log("PASS V1.1: daily priorities, routed project hub, mocked public commit and CI");
 
   // Mock a newly private/deleted repository and a new public repository.
@@ -181,6 +224,8 @@ try {
   await mobile.waitForURL(/#project\/Video_Factory$/);
   await mobile.locator("#projectHub").waitFor({state:"visible"});
   assert.equal(await mobile.locator("#projectHub").isVisible(),true);
+  await mobile.locator("#intelligenceState").getByText("NOT FOUND").waitFor();
+  assert.match(await mobile.locator("#intelligenceExcerpt").textContent(),/STATUS.md/);
   assert.equal(errors.length,0);
   console.log("PASS mobile: public cards, daily priorities, project hub, no overflow, zero errors");
 } finally {
