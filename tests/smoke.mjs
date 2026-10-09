@@ -73,7 +73,7 @@ async function mockPublicGitHub(page){
 const server = http.createServer(async (req,res) => {
   try {
     const name = decodeURI((req.url || "/").split("?")[0]).replace(/^\/+/, "") || "index.html";
-    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","favicon.svg"].includes(name)) {
+    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","decisions.js","decisions.css","favicon.svg"].includes(name)) {
       res.writeHead(404).end("Not found");return;
     }
     const buf = await readFile(resolve(root,name));
@@ -99,6 +99,8 @@ try {
   await desktop.waitForFunction(()=>document.querySelector("#weeklyIndicator")?.textContent==="PUBLIC GITHUB");
   assert.ok((await desktop.locator("#weeklySummary").textContent()).includes(expected+"/"+expected),"Weekly report must state how many public repositories have metadata");
   console.log("PASS V1.2 weekly: last push review sourced from public metadata");
+  assert.match(await desktop.locator("#decisionTitle").textContent(),/قرارات المشاريع/);
+  assert.equal(await desktop.locator("#decisionKpis .decision-kpi").count(),4);
   console.log("PASS desktop: ${expected} public cards, 8 clusters, 5 metrics, Arabic RTL");
 
   await desktop.locator("#languageButton").click();
@@ -114,6 +116,31 @@ try {
   await desktop.locator("#drawerClose").click();
   assert.equal(await desktop.locator("#projectDrawer").getAttribute("aria-hidden"),"true");
   console.log("PASS interactions: English LTR, search/reset, detail drawer");
+  // V1.3 — strict curated relationship type and explainable decision signals.
+  await desktop.waitForFunction(()=>document.querySelectorAll("#graphLines .repo-connection").length===6);
+  assert.equal(await desktop.locator("#relationGrid .relation-card").count(),6);
+  assert.equal(await desktop.locator("#decisionKpis .decision-kpi").count(),4);
+  await desktop.locator('#relationModes [data-relation-type="overlap"]').click();
+  assert.equal(await desktop.locator("#relationGrid .relation-card").count(),1);
+  assert.match(await desktop.locator("#relationGrid .relation-explanation").textContent(),/Potential|scope overlap/i);
+  await desktop.locator("#relationGrid [data-edge]").click();
+  await desktop.waitForFunction(()=>document.querySelectorAll("#graphLines .repo-connection.is-focused").length===1);
+  assert.equal(await desktop.locator("#graphClusters .graph-repo.is-related-focus").count(),2);
+  await desktop.locator('#relationModes [data-relation-type="all"]').click();
+  assert.equal(await desktop.locator("#relationGrid .relation-card").count(),6);
+  await desktop.locator('#decisionFilters [data-decision-filter="security"]').click();
+  assert.equal(await desktop.locator("#decisionList .decision-item").count(),2);
+  await desktop.locator('#decisionFilters [data-decision-filter="release"]').click();
+  assert.equal(await desktop.locator("#decisionList .decision-item").count(),4);
+  await desktop.locator('#decisionFilters [data-decision-filter="overlap"]').click();
+  assert.equal(await desktop.locator("#decisionList .decision-item").count(),1);
+  await desktop.locator('#decisionFilters [data-decision-filter="all"]').click();
+  assert.equal(await desktop.locator("#decisionList .decision-item").count(),10);
+  await desktop.locator("#decisionSort").selectOption("name");
+  assert.equal(await desktop.locator("#decisionSort").inputValue(),"name");
+  assert.match(await desktop.locator("#decisionDisclaimer").textContent(),/not verified duplication/i);
+  console.log("PASS V1.3: six editorial edges, graph focus, filters, release/privacy/overlap signals and sorting");
+
 
   // V1.1: daily homepage and deep-linked detail show *real mocked* GitHub evidence,
   // rather than inferring production readiness from the CI outcome.
@@ -176,7 +203,11 @@ try {
   assert.equal(await desktop.locator("#projectHub").isVisible(),false,
     "Stale deep links cannot reveal a removed/private repository");
   console.log("PASS V1.1 privacy: private/removed deep links are blocked");
-  assert.equal(await desktop.locator('#relationGrid [data-open="RootRay"]').count(),0);
+  assert.equal(await desktop.locator("#relationGrid .relation-card").count(),5,
+    "Private or removed repo relationships must disappear");
+  assert.ok(!(await desktop.locator("#relationGrid").textContent()).includes("RootRay"));
+  await desktop.waitForFunction(()=>document.querySelectorAll("#graphLines .repo-connection").length===5);
+  assert.ok(!(await desktop.locator("#decisionList").textContent()).includes("synthetic-private-test-repo"));
   assert.equal(await desktop.getByText("synthetic-private-test-repo").count(),0);
   console.log("PASS public reconciliation: hidden/deleted removed; new public discovered; private rejected");
 
@@ -219,7 +250,10 @@ try {
   const dimensions=await mobile.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth}));
   assert.ok(dimensions.scrollWidth<=dimensions.viewport+2,"Mobile horizontal overflow: "+JSON.stringify(dimensions));
   assert.equal(errors.length,0,"Uncaught browser errors: "+errors.join(" | "));
-  await mobile.locator("#dailyLead h3").waitFor();
+  await mobile.locator("#decisionKpis .decision-kpi").first().waitFor();
+  assert.equal(await mobile.locator("#decisionKpis .decision-kpi").count(),4);
+  assert.equal(await mobile.locator("#relationGrid .relation-card").count(),6);
+    await mobile.locator("#dailyLead h3").waitFor();
   assert.equal(await mobile.locator("#dailyQueue .queue-card").count(),2);
   await mobile.locator("#dailyLead a").first().click();
   await mobile.waitForURL(/#project\/Video_Factory$/);
