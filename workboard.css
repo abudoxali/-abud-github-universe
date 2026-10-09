@@ -43,3 +43,5 @@
 .work-task-counter{color:#9f8fb0;font:500 10px var(--latin)}
 @media(max-width:1300px){.work-projects{grid-template-columns:repeat(2,minmax(0,1fr))}.work-summary{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.work-projects{grid-template-columns:1fr}.work-files{width:100%}.work-files .btn{flex:1;font-size:10px}.work-add{width:100%}.work-add select{width:100%}.work-footer{flex-direction:column;align-items:flex-start}.work-summary-card{padding:13px}.work-summary-card strong{font-size:23px}}
+
+body.project-mode .content>.workboard-section{display:none!important}
