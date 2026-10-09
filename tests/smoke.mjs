@@ -179,6 +179,7 @@ try {
   assert.equal(await mobile.locator("#dailyQueue .queue-card").count(),2);
   await mobile.locator("#dailyLead a").first().click();
   await mobile.waitForURL(/#project\/Video_Factory$/);
+  await mobile.locator("#projectHub").waitFor({state:"visible"});
   assert.equal(await mobile.locator("#projectHub").isVisible(),true);
   assert.equal(errors.length,0);
   console.log("PASS mobile: public cards, daily priorities, project hub, no overflow, zero errors");
