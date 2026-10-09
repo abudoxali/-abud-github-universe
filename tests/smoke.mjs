@@ -3,10 +3,31 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import { chromium } from "playwright";
+import { runInNewContext } from "node:vm";
 
 const root = process.cwd();
 const types = {".html":"text/html",".css":"text/css",".js":"text/javascript",".svg":"image/svg+xml"};
 const errors = [];
+const context = {window:{}};
+runInNewContext(await readFile(resolve(root,"data.js"),"utf8"),context);
+const catalog = context.window.ABUD_DATA;
+assert.ok(catalog && catalog.snapshot==="PUBLIC_ONLY");
+const expected = catalog.repos.length;
+assert.ok(expected > 0);
+const publicSnapshot=catalog.repos.map(r=>({
+  name:r.name,owner:{login:"abudoxali"},visibility:"public",private:false,
+  stargazers_count:2,language:"TypeScript",pushed_at:"2026-10-09T10:00:00Z"
+}));
+let livePublic=publicSnapshot.slice();
+async function mockPublicGitHub(page){
+  await page.route(/^https:\/\/api\.github\.com\/users\/abudoxali\/repos\?/,async route=>{
+    const url=new URL(route.request().url());
+    await route.fulfill({
+      status:200,contentType:"application/json",
+      body:JSON.stringify(url.searchParams.get("page")==="1"?livePublic:[])
+    });
+  });
+}
 const server = http.createServer(async (req,res) => {
   try {
     const name = decodeURI((req.url || "/").split("?")[0]).replace(/^\/+/, "") || "index.html";
@@ -26,13 +47,14 @@ const browser = await chromium.launch({headless:true,args:["--no-sandbox"]});
 try {
   const desktop = await browser.newPage({viewport:{width:1440,height:900}});
   desktop.on("pageerror",(error)=>errors.push(error.message));
+  await mockPublicGitHub(desktop);
   await desktop.goto(url,{waitUntil:"domcontentloaded"});
   await desktop.locator("#repoGrid .repo-card").first().waitFor();
-  assert.equal(await desktop.locator("#repoGrid .repo-card").count(),43,"All 43 repositories should render");
+  assert.equal(await desktop.locator("#repoGrid .repo-card").count(),expected,"The public repository catalog should render");
   assert.equal(await desktop.locator("#graphClusters .graph-cluster").count(),8,"All 8 clusters should render");
   assert.equal(await desktop.locator("#metrics .stat").count(),5,"Metrics should render");
   assert.equal(await desktop.locator("html").getAttribute("dir"),"rtl","Default is Arabic RTL");
-  console.log("PASS desktop: 43 cards, 8 clusters, 5 metrics, Arabic RTL");
+  console.log("PASS desktop: ${expected} public cards, 8 clusters, 5 metrics, Arabic RTL");
 
   await desktop.locator("#languageButton").click();
   assert.equal(await desktop.locator("html").getAttribute("lang"),"en");
@@ -40,13 +62,36 @@ try {
   await desktop.locator("#repoSearch").fill("RootRay");
   assert.equal(await desktop.locator("#repoGrid .repo-card").count(),1,"Search should filter");
   await desktop.locator("#clearFilters").click();
-  assert.equal(await desktop.locator("#repoGrid .repo-card").count(),43,"Clear restores all");
+  assert.equal(await desktop.locator("#repoGrid .repo-card").count(),expected,"Clear restores the public catalog");
   await desktop.locator('#repoGrid [data-open="RootRay"]').first().click();
   assert.equal(await desktop.locator("#projectDrawer").getAttribute("aria-hidden"),"false");
   assert.match(await desktop.locator("#drawerGithub").getAttribute("href"),/RootRay$/);
   await desktop.locator("#drawerClose").click();
   assert.equal(await desktop.locator("#projectDrawer").getAttribute("aria-hidden"),"true");
   console.log("PASS interactions: English LTR, search/reset, detail drawer");
+
+  // Mock a newly private/deleted repository and a new public repository.
+  // These are synthetic names, not names from the user's hidden repositories.
+  livePublic = publicSnapshot.filter(r=>r.name!=="RootRay");
+  livePublic.push({
+    name:"synthetic-public-test-repo",owner:{login:"abudoxali"},
+    visibility:"public",private:false,stargazers_count:0,language:"JavaScript",
+    pushed_at:"2026-10-09T10:00:00Z"
+  });
+  livePublic.push({
+    name:"synthetic-private-test-repo",owner:{login:"abudoxali"},
+    visibility:"private",private:true,stargazers_count:0
+  });
+  await desktop.locator("#syncButton").click();
+  await desktop.waitForFunction(()=>{
+    return [...document.querySelectorAll("#repoGrid .repo-name")]
+      .some(el=>el.textContent==="synthetic-public-test-repo");
+  });
+  assert.equal(await desktop.locator("#repoGrid .repo-card").count(),expected);
+  assert.equal(await desktop.locator('#repoGrid [data-open="RootRay"]').count(),0);
+  assert.equal(await desktop.locator('#relationGrid [data-open="RootRay"]').count(),0);
+  assert.equal(await desktop.getByText("synthetic-private-test-repo").count(),0);
+  console.log("PASS public reconciliation: hidden/deleted removed; new public discovered; private rejected");
 
   const before = await desktop.locator("#zoomValue").textContent();
   await desktop.locator("#zoomIn").click();
@@ -57,9 +102,10 @@ try {
 
   const mobile = await browser.newPage({viewport:{width:390,height:844},isMobile:true,deviceScaleFactor:1});
   mobile.on("pageerror",(error)=>errors.push(error.message));
+  await mockPublicGitHub(mobile);
   await mobile.goto(url,{waitUntil:"domcontentloaded"});
   await mobile.locator("#repoGrid .repo-card").first().waitFor();
-  assert.equal(await mobile.locator("#repoGrid .repo-card").count(),43);
+  assert.equal(await mobile.locator("#repoGrid .repo-card").count(),expected);
   await mobile.locator("#mobileMenu").click();
   assert.equal(await mobile.locator("#mobileBackdrop").isVisible(),true);
   const overlayHit = await mobile.evaluate(() => {
@@ -84,7 +130,7 @@ try {
   const dimensions=await mobile.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth}));
   assert.ok(dimensions.scrollWidth<=dimensions.viewport+2,"Mobile horizontal overflow: "+JSON.stringify(dimensions));
   assert.equal(errors.length,0,"Uncaught browser errors: "+errors.join(" | "));
-  console.log("PASS mobile: 43 cards, menu/backdrop, no page overflow, zero JS errors");
+  console.log("PASS mobile: ${expected} public cards, menu/backdrop, no page overflow, zero JS errors");
 } finally {
   await browser.close();
   server.close();
