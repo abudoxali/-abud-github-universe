@@ -476,7 +476,7 @@
       if(!top)return;
       $$(".nav-link").forEach(a=>a.classList.toggle("current",a.getAttribute("href")==="#"+top.target.id));
     },{rootMargin:"-15% 0px -60% 0px",threshold:[0,.2,.55]});
-    ["overview","strategy","map","library","relations"].forEach(id=>{
+    ["overview","strategy","map","library","relations","decisions"].forEach(id=>{
       const target=document.getElementById(id);if(target)observer.observe(target);
     });
     $("#syncButton").addEventListener("click",syncGitHub);
