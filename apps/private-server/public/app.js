@@ -214,7 +214,7 @@
    finally{$("save").disabled=false;}
  };
  $("logout").onclick=async()=>{try{await api("/api/logout",{method:"POST",headers:{"X-OS-CSRF":csrf}});}catch{}
-   csrf="";repos=[];workspace={version:1,focus:[],projects:{},events:[]};
+   csrf="";repos=[];changed=false;workspace={version:1,focus:[],projects:{},events:[]};
    location.replace("/");};
  async function start(){
    try{
