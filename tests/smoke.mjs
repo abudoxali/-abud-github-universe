@@ -143,6 +143,8 @@ try {
   await desktop.locator("#fitMap").click();
   console.log("PASS map: zoom and fit controls");
 
+  // Restore the full public snapshot after the preceding privacy-removal scenario.
+  livePublic = publicSnapshot.slice();
   const mobile = await browser.newPage({viewport:{width:390,height:844},isMobile:true,deviceScaleFactor:1});
   mobile.on("pageerror",(error)=>errors.push(error.message));
   await mockPublicGitHub(mobile);
