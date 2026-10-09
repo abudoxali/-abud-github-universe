@@ -32,10 +32,10 @@
       workspace:"WORKSPACE / مساحة العمل",navOverview:"نظرة عامة",navMap:"خريطة المشاريع",
       navLibrary:"كل المستودعات",navRelations:"العلاقات والنسخ",navStrategy:"التركيز والقرارات",
       categoriesLabel:"CATEGORIES / التصنيفات",dataSource:"SOURCE OF TRUTH",
-      dataSourceDetail:"تصنيفات يدوية مدروسة + بيانات GitHub عامة عند الطلب.",
-      openProfile:"فتح GitHub Profile",snapshot:"SNAPSHOT / لقطة موثقة",
+      dataSourceDetail:"يظهر على الموقع العام Repositories العامة فقط، ويُراجع GitHub تلقائيًا.",
+      openProfile:"فتح GitHub Profile",snapshot:"PUBLIC ONLY / نسخة مراجَعة",
       sync:"تحديث GitHub",heroTitle:"كل مشاريعي.<br><em>صورة واحدة واضحة.</em>",
-      heroDesc:"مرجع تفاعلي يجمع كل Repositories بتاعتي، يوضح اللي شغّال، اللي خلص، اللي محتاج قرار، وإيه الخطوة الصح بعد كده.",
+      heroDesc:"مرجع تفاعلي لمشاريع GitHub العامة فقط: اللي شغّال، اللي خلص، اللي محتاج قرار، وإيه الخطوة الصح بعد كده. المشاريع الخاصة مستبعدة.",
       exploreMap:"استكشف الخريطة ↗",browseRepo:"تصفح المستودعات ←",
       focusTitle:"احنا مركزين على إيه دلوقتي؟",focusSub:"مش كل نشاط على GitHub معناه تقدم. هنا الأولوية حسب القيمة الفعلية.",
       mapTitle:"خريطة المشاريع التفاعلية",mapSub:"حرّك الخريطة، كبّر، وافتح أي Repo لمعرفة موقعه والخطوة التالية.",
@@ -50,8 +50,8 @@
       footer:"مرجع مشاريع قابل للتحديث — بيانات GitHub العامة منفصلة عن تقييم الجاهزية.",
       drawerAbout:"عن المشروع / ABOUT",drawerNext:"الخطوة التالية / NEXT ACTION",
       drawerNote:"ملاحظة / REVIEW NOTE",drawerGitHub:"معلومات GitHub / PUBLIC METADATA",
-      publicNote:"التصنيفات هنا إدارية وليست إثباتًا لجاهزية Production. الموقع عام — لا تخزّن أسرارًا داخله.",
-      viewGitHub:"افتح Repository على GitHub",total:"TOTAL REPOS",active:"CURRENT FOCUS",
+      publicNote:"يعرض الموقع المشاريع العامة فقط. حالة المشروع تقييم إداري وليست إثباتًا لجاهزية Production، ولا يجب تخزين أسرار هنا.",
+      viewGitHub:"افتح Repository على GitHub",total:"PUBLIC REPOS",active:"CURRENT FOCUS",
       shipped:"SHIPPED / COMMERCIAL",review:"NEEDS REVIEW",growth:"GROWTH TRACK",
       snapshotHint:"تصنيف يدوي",metadataHint:"نشاط عام فقط",
       detail:"تفاصيل",repo:"GitHub ↗",all:"كل المشاريع",
@@ -69,10 +69,10 @@
       workspace:"WORKSPACE",navOverview:"Overview",navMap:"Project map",navLibrary:"Repositories",
       navRelations:"Relationships",navStrategy:"Focus & decisions",
       categoriesLabel:"CATEGORIES",dataSource:"SOURCE OF TRUTH",
-      dataSourceDetail:"Curated decisions + optional public GitHub metadata.",
-      openProfile:"Open GitHub Profile",snapshot:"REVIEWED SNAPSHOT",
+      dataSourceDetail:"Only public repositories are shown. GitHub visibility is rechecked on page load.",
+      openProfile:"Open GitHub Profile",snapshot:"PUBLIC REPOS / REVIEWED",
       sync:"Sync GitHub",heroTitle:"Every project.<br><em>One clear picture.</em>",
-      heroDesc:"A living reference for all my GitHub repositories: what is active, what has shipped, what deserves attention, and the single most valuable action to take next.",
+      heroDesc:"A living map of my public GitHub repositories, showing what is active, what has shipped, and what deserves attention. Private repositories are excluded.",
       exploreMap:"Explore the map ↗",browseRepo:"Browse repositories →",
       focusTitle:"What deserves attention right now?",focusSub:"GitHub activity is not product progress. Priorities are based on real outcomes.",
       mapTitle:"Interactive project sitemap",mapSub:"Pan, zoom and open any repository to see its purpose and next action.",
@@ -87,8 +87,8 @@
       footer:"Curated readiness labels are distinct from public GitHub activity.",
       drawerAbout:"PROJECT / OVERVIEW",drawerNext:"NEXT ACTION",drawerNote:"REVIEW NOTE",
       drawerGitHub:"PUBLIC GITHUB METADATA",
-      publicNote:"These are editorial status decisions, not proof of production readiness. This is a public website: never store secrets here.",
-      viewGitHub:"Open repository on GitHub",total:"TOTAL REPOS",active:"CURRENT FOCUS",
+      publicNote:"Only public repositories are displayed. Editorial assessments do not prove production readiness. Never store secrets here.",
+      viewGitHub:"Open repository on GitHub",total:"PUBLIC REPOS",active:"CURRENT FOCUS",
       shipped:"SHIPPED / COMMERCIAL",review:"NEEDS REVIEW",growth:"GROWTH TRACK",
       snapshotHint:"Curated snapshot",metadataHint:"Public activity only",
       detail:"Details",repo:"GitHub ↗",all:"All repositories",
@@ -141,7 +141,9 @@
       el.placeholder = C()[el.dataset.i18nPlaceholder] || "";
     });
     $("#languageButton").textContent = state.lang === "ar" ? "EN" : "AR";
-    $("#sourceStamp").textContent = "REVIEWED · " + DATA.reviewed;
+    $("#sourceStamp").textContent = "PUBLIC ONLY · REVIEWED " + DATA.reviewed;
+    const orb=$("#heroRepoCount"); if(orb)orb.textContent=state.repos.length;
+    const orbital=$("#orbRepoLabel");if(orbital)orbital.textContent="GITHUB · "+state.repos.length;
     $("#syncLabel").lastElementChild.textContent = state.lastSync
       ? C().synced + " · " + new Date(state.lastSync).toLocaleTimeString(state.lang==="ar"?"ar-EG":"en-US",{hour:"2-digit",minute:"2-digit"})
       : C().snapshot;
@@ -477,13 +479,15 @@
     $("#syncButton").addEventListener("click",syncGitHub);
   }
 
-  async function syncGitHub() {
+  async function syncGitHub({silent=false}={}) {
     const btn=$("#syncButton");
     btn.disabled=true;
-    $("#syncLabel").lastElementChild.textContent=C().syncing;
+    if(!silent) $("#syncLabel").lastElementChild.textContent=C().syncing;
     let found=[];
     try {
-      for(let page=1;page<=3;page++){
+      // GitHub's public user endpoint does not expose private repositories.
+      // Never use owner-authenticated private repository data in the browser.
+      for(let page=1;page<=10;page++){
         const url=`https://api.github.com/users/${encodeURIComponent(DATA.owner)}/repos?per_page=100&type=owner&sort=updated&page=${page}`;
         const response=await fetch(url,{headers:{"Accept":"application/vnd.github+json"}});
         if(response.status===403||response.status===429)throw new Error("LIMIT");
@@ -492,34 +496,50 @@
         if(!Array.isArray(batch))throw new Error("INVALID API RESPONSE");
         found=found.concat(batch);
         if(batch.length<100)break;
+        if(page===10)throw new Error("INCOMPLETE PUBLIC LIST");
       }
+      const publicRows=found.filter(r=>
+        r && typeof r.name==="string" && r.owner?.login?.toLowerCase()===DATA.owner.toLowerCase() &&
+        r.private!==true && (r.visibility===undefined || r.visibility==="public")
+      );
+      // Avoid turning a rate-limited or unexpected response into mass deletion.
+      if(!publicRows.some(r=>r.name==="-abud-github-universe"))throw new Error("INCOMPLETE PUBLIC LIST");
+
+      const publicNames=new Set(publicRows.map(r=>r.name));
+      const curatedByName=new Map(state.repos.map(r=>[r.name,r]));
       const nextMeta={};
-      for(const repo of found){
-        if(!repo||typeof repo.name!=="string")continue;
+      const nextRepos=[];
+      for(const repo of publicRows){
+        if(nextMeta[repo.name])continue; // de-duplicate overlapping pages
         nextMeta[repo.name]={
           stargazers_count:Number(repo.stargazers_count)||0,
           language:typeof repo.language==="string"?repo.language:null,
           pushed_at:repo.pushed_at||null,
-          archived:!!repo.archived,
-          private:!!repo.private
+          archived:!!repo.archived
         };
-        if(!state.repos.some(r=>r.name===repo.name)){
-          state.repos.push({
-            name:repo.name,category:"revive",status:"UNREVIEWED",
-            ar:"مستودع جديد من GitHub يحتاج مراجعة وتصنيف يدوي.",
-            en:"New repository discovered on GitHub; needs manual classification.",
-            nextAr:"راجع أهدافه ثم حدّد تصنيفه",nextEn:"Review scope and assign a curated category",
-            note:"Discovered via public GitHub API. Not yet assessed."
-          });
-        }
+        const curated=curatedByName.get(repo.name);
+        nextRepos.push(curated || {
+          name:repo.name,category:"revive",status:"UNREVIEWED",
+          ar:"مستودع عام جديد يحتاج مراجعة وتصنيف يدوي.",
+          en:"New public GitHub repository awaiting a human review and classification.",
+          nextAr:"افحص المشروع وحدد حالته بناءً على أدلة",
+          nextEn:"Inspect the project and assign an evidence-backed status",
+          note:"Discovered through the public GitHub API. Not yet assessed."
+        });
       }
+      // Reconcile the actual public set: PRIVATE and DELETED repos disappear.
+      state.repos=nextRepos;
+      if(state.selected && !publicNames.has(state.selected))closeProject();
       state.metadata=nextMeta;
       state.lastSync=Date.now();
-      try{localStorage.setItem(metadataStore,JSON.stringify({timestamp:state.lastSync,metadata:state.metadata}))}catch(_){}
-      renderAll();toast(C().syncSuccess);
+      try{localStorage.setItem(metadataStore,JSON.stringify({timestamp:state.lastSync,metadata:nextMeta}))}catch(_){}
+      renderAll();
+      if(!silent)toast(C().syncSuccess);
     }catch(error){
+      // On network failure, retain only the last audited public snapshot.
+      // This is not proof of current visibility; fresh status requires API access.
       $("#syncLabel").lastElementChild.textContent=state.lastSync?C().synced:C().snapshot;
-      toast(error.message==="LIMIT"?C().syncLimit:C().syncFailure);
+      if(!silent)toast(error.message==="LIMIT"?C().syncLimit:C().syncFailure);
     }finally{
       btn.disabled=false;
     }
@@ -539,4 +559,6 @@
   renderAll();
   bindUI();
   bindMap();
+  // Reconcile public visibility automatically on every visit.
+  void syncGitHub({silent:true});
 })();
