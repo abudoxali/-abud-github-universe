@@ -45,3 +45,24 @@
 @media(max-width:760px){.work-projects{grid-template-columns:1fr}.work-files{width:100%}.work-files .btn{flex:1;font-size:10px}.work-add{width:100%}.work-add select{width:100%}.work-footer{flex-direction:column;align-items:flex-start}.work-summary-card{padding:13px}.work-summary-card strong{font-size:23px}}
 
 body.project-mode .content>.workboard-section{display:none!important}
+
+/* V1.5: locally authored progress/decision journal */
+.work-history{margin-top:18px;background:radial-gradient(ellipse at 15% 0,rgba(147,51,234,.12),transparent 60%),#0e0b16;border:1px solid #3e2a51;border-radius:17px;padding:24px}
+.work-history-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:15px}
+.work-history-header h3{font-size:21px;margin:3px 0 5px;color:#f4eafa}
+.work-history-header p{color:#a899b6;font-size:11px;line-height:1.8;margin:0}
+.work-history-controls{display:flex;align-items:center;gap:10px;color:#af9aba;font-size:11px}
+.work-history-controls select,.work-note-form select,.work-note-form input{border:1px solid #4b3558;border-radius:9px;background:#16101e;color:#f2e6f7;padding:10px;font-size:11px}
+.work-note-form{display:flex;align-items:stretch;gap:8px;margin-bottom:17px}
+.work-note-form select{min-width:155px;max-width:235px}
+.work-note-form input{flex:1;min-width:0}
+.work-history-metrics{display:flex;gap:10px;flex-wrap:wrap;color:#bfa6cf;font:600 11px var(--latin);margin-bottom:12px}
+.work-history-metrics span{border:1px solid #483052;background:#1b1224;border-radius:7px;padding:6px 9px}
+.work-history-list{list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0;margin:0}
+.work-history-event{display:flex;gap:13px;padding:13px;border-radius:10px;border:1px solid #342641;background:#150f1e;min-width:0}
+.work-history-event .event-sign{width:32px;height:32px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;background:#392047;color:#d2b4eb;font:700 14px var(--latin)}
+.work-history-event strong{display:block;color:#ecdef4;font-size:11px;overflow-wrap:anywhere}
+.work-history-event p{margin:5px 0 0;color:#baaac6;font-size:11px;line-height:1.65;overflow-wrap:anywhere}
+.work-history-event small{display:block;color:#8f7fa0;font:500 10px var(--latin);margin-top:8px}
+.work-history-empty{grid-column:1/-1;border:1px dashed #3b2c46;padding:24px;text-align:center;border-radius:10px;color:#ac9ab6;font-size:12px}
+@media(max-width:790px){.work-history-list{grid-template-columns:1fr}.work-history{padding:17px}.work-history-header{flex-direction:column}.work-note-form{flex-direction:column}.work-note-form select{max-width:none;width:100%}.work-note-form .btn{width:100%}}
