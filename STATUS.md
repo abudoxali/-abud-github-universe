@@ -1,11 +1,39 @@
 # ABUD GitHub Universe — STATUS
 
-Updated: 2026-10-09
+Updated: 2026-10-10
 Repository: `abudoxali/-abud-github-universe`
 Production: https://os.abud.fun/
 Public GitHub Pages: https://abudoxali.github.io/-abud-github-universe/
-State: **V2.0 LIVE — CORE HEALTH AND SECURITY CHECKS PASSED; OWNER END-TO-END ACCEPTANCE PENDING**
+State: **Original-Universe restoration is local-only for owner review; V2.0 production remains unchanged**
 Owner visual/content review: **PENDING**.
+
+## Local Original-Universe Restoration Review (2026-10-10)
+
+**No push or deployment was performed.** The current V2.0 production service and GitHub Pages were not modified. This implementation is on local branch `feat/restore-original-universe`, based on remote `feat/v2-secure-os` at `5b96753fe1c76e208c88ca02b55764a576af6f5d`. A recoverable local backup branch `backup/v2-secure-os-before-universe-restore` points at the same verified V2.0 source commit. The original source snapshot at `abud-github-universe-main` remains untouched.
+
+### Original product retained
+- The secure origin now serves the shared original Universe `index.html` and its existing public-only visual/data assets, rather than a separate dashboard identity.
+- Preserved the dark `#050508` / purple `#9333ea` palette, IBM Plex Sans Arabic and Space Grotesk, ABUD brand/navigation, bilingual RTL/LTR support, original category filters, repository cards, interactive pan/zoom/fit graph, curated relationship explorer, public Project Hub, Daily Command Center, intelligence, decisions, local public-only reports and mobile layout.
+- Added an explicit authorized-access graph cluster and repository card treatment for unique repositories outside the public catalog. Private entries are labelled, do not enter `data.js` or the public runtime catalog, and have no fabricated lineage/dependency edges. Duplicate public membership is counted once.
+- Added a generic public runtime filter/map-size hook and mobile horizontal-overflow clipping; neither contains private names, OAuth material or private API data.
+
+### ABUD OS integration
+- The private Fastify origin composes the original Universe shell and loads the private client extension only on that origin. The Pages workflow and static artifact remain public-only; private server files are not in the Pages allowlist.
+- Owner GitHub login/logout, selected GitHub App repository membership, public + selected-private discovery, read-only STATUS.md evidence, owner stages/tasks, focus, decisions/blockers, save/reload, optimistic 409 conflict handling, private server reports, and validated opt-in JSON import/export use the existing protected API and PostgreSQL workspace.
+- Private workspace data remains in memory until explicit save; it is not written to browser localStorage. Public-only browser state remains separate. Unauthenticated callers see the public Universe and sign-in link only.
+
+### Verification performed locally
+- JavaScript syntax checks: **PASS** for the original app modules and private server/client/test modules. `git diff --check`: **PASS**.
+- Private backend security and route tests: **12 passed, 0 failed**. PostgreSQL integration: **PASS**, 1 integration test, 0 skipped, against a newly created isolated local `abud_os_test` database; production database records were not touched.
+- Chromium desktop and mobile with synthetic private fixture data: **PASS** for original eight graph categories, secure access cluster, pan/zoom/fit, category/search/library, original public Hub and STATUS evidence, curated relationship/decision filters, private Hub and server STATUS, task/stage/decision save and reload, 409 conflict, private report download, guest isolation, no private localStorage, Arabic RTL, English LTR, mobile navigation and no horizontal overflow.
+- This is not live owner OAuth or live GitHub App acceptance. The integrated UI’s authenticated APIs were mocked in the browser suite; server OAuth/access controls and PostgreSQL persistence were tested separately.
+- Review screenshots use synthetic private fixtures and are saved in `C:\Users\Abud\Desktop\ABUD-Universe-Owner-Review\` (9 desktop/mobile PNGs).
+
+### Remaining owner gates
+- Local-only commit `0ec4809` could not be found: the supplied `abud-github-universe-main` folder has no `.git` metadata, and the commit is absent from the fetched `main` and `feat/v2-secure-os` refs. The source snapshot was left untouched; the V2.0 remote branch has a separate backup branch. Recover the original checkout/commit if preserving its unpushed redesign work is still required.
+- Owner must visually review/approve the screenshots and confirm this original-Universe-based branch as the intended replacement. Real owner OAuth, live selected-private access, and final owner-account visual acceptance remain pending.
+- Do not merge into `main`, push, deploy Pages, or replace `os.abud.fun` until the owner explicitly approves the visual review and separately authorizes the publication/deployment action.
+
 ## V2.0 — Secure Owner-Only Workspace (2026-10-09)
 
 **Deployment state:** LIVE on the owner-only origin. Core health, unauthenticated access controls, server-side GitHub integration and database persistence were verified. Full owner acceptance remains pending; do not represent V2.0 as fully accepted until the owner completes the checks below.

@@ -42,9 +42,38 @@ export async function createGitHubInstallation(env, config) {
     }
     return output.sort((a, b) => a.name.localeCompare(b.name));
   }
+  async function listPublic() {
+    const output = [], used = new Set();
+    for (let page = 1; page <= 10; page++) {
+      const response = await fetch("https://api.github.com/users/" + encodeURIComponent(config.ownerLogin) + "/repos?per_page=100&type=owner&sort=updated&page=" + page, {
+        headers: { "Accept": "application/vnd.github+json", "User-Agent": "ABUD-OS-Public-Repository-Discovery" }
+      });
+      if (!response.ok) throw Error("Public GitHub inventory unavailable: " + response.status);
+      const batch = await response.json();
+      if (!Array.isArray(batch)) throw Error("Invalid public GitHub inventory response");
+      for (const repo of batch) {
+        if (repo?.owner?.id !== config.ownerId || repo.owner.login?.toLowerCase() !== config.ownerLogin.toLowerCase() ||
+          repo.private !== false || (repo.visibility && repo.visibility !== "public") || !repoName(repo.name) || used.has(repo.name)) continue;
+        used.add(repo.name);
+        output.push({
+          name: repo.name, private: false, archived: repo.archived === true,
+          updatedAt: repo.pushed_at || null, defaultBranch: repo.default_branch || null, htmlUrl: repo.html_url
+        });
+      }
+      if (batch.length < 100) break;
+      if (page === 10) throw Error("Incomplete public GitHub inventory");
+    }
+    return output.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async function listAll() {
+    const [publicRepos, selectedRepos] = await Promise.all([listPublic(), list()]);
+    const merged = new Map(publicRepos.map(repo => [repo.name, repo]));
+    for (const repo of selectedRepos) merged.set(repo.name, repo);
+    return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
   async function getStatus(name) {
     if (!repoName(name)) return null;
-    const approved = await list(); // fresh installation membership; no inferred access
+    const approved = await list();
     const target = approved.find(r => r.name === name);
     if (!target) return null;
     try {
@@ -59,5 +88,19 @@ export async function createGitHubInstallation(env, config) {
       throw error;
     }
   }
-  return { list, getStatus };
+  async function getPublicStatus(name) {
+    if (!repoName(name)) return null;
+    const target = (await listPublic()).find(repo => repo.name === name);
+    if (!target) return null;
+    const url = "https://api.github.com/repos/" + encodeURIComponent(config.ownerLogin) + "/" + encodeURIComponent(name) + "/contents/STATUS.md" +
+      (target.defaultBranch ? "?ref=" + encodeURIComponent(target.defaultBranch) : "");
+    const response = await fetch(url, { headers: { "Accept": "application/vnd.github+json", "User-Agent": "ABUD-OS-Public-Status" } });
+    if (response.status === 404) return { exists: false, reason: "not-found" };
+    if (!response.ok) throw Error("Public STATUS.md unavailable: " + response.status);
+    const data = await response.json();
+    if (Array.isArray(data) || data.type !== "file" || data.encoding !== "base64" || data.size > 150000) return { exists: false, reason: "unavailable" };
+    const text = Buffer.from(data.content.replace(/\s/g, ""), "base64").toString("utf8");
+    return { exists: true, sha: data.sha, claims: statusClaims(text), checkedAt: new Date().toISOString() };
+  }
+  return { list, listPublic, listAll, getStatus, getPublicStatus };
 }

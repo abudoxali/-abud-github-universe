@@ -81,6 +81,27 @@ test("Unauthenticated callers never access private metadata or workspace", async
     assert.equal(p.statusCode, 401);
   } finally { await server.close(); }
 });
+test("Authenticated origin serves the shared Universe shell and keeps private client code off the public catalog", async () => {
+  const server = app();
+  try {
+    const page = await server.inject({ url: "/" });
+    assert.equal(page.statusCode, 200);
+    assert.match(page.body, /id="mapWorld"/);
+    assert.match(page.body, /id="graphClusters"/);
+    assert.match(page.body, /name="robots" content="noindex,nofollow,noarchive"/);
+    assert.ok(page.body.indexOf("/assets/universe.js") < page.body.indexOf("./command-center.js"));
+    const secureClient = await server.inject({ url: "/assets/universe.js" });
+    assert.equal(secureClient.statusCode, 200);
+    assert.match(secureClient.body, /\/api\/workboard/);
+    const publicCatalog = await server.inject({ url: "/data.js" });
+    assert.equal(publicCatalog.statusCode, 200);
+    assert.match(publicCatalog.body, /snapshot: "PUBLIC_ONLY"|"snapshot": "PUBLIC_ONLY"/);
+    assert.doesNotMatch(publicCatalog.body, /repo-private-fixture|sample-private/);
+    assert.equal((await server.inject({ url: "/index.html" })).statusCode, 404);
+    assert.equal((await server.inject({ url: "/apps/private-server/public/app.js" })).statusCode, 404);
+  } finally { await server.close(); }
+});
+
 test("Owner session, scoped installation membership, origin and CSRF gate", async () => {
   const server = app();
   try {
@@ -121,6 +142,42 @@ test("Owner session, scoped installation membership, origin and CSRF gate", asyn
 
   } finally { await server.close(); }
 });
+test("Public catalog and selected private membership merge without duplicates for owner workspace", async () => {
+  const publicRepos = [
+    { name: "sample-public", private: false, archived: false, defaultBranch: "main", htmlUrl: "https://github.com/abudoxali/sample-public" },
+    { name: "sample-private", private: false, archived: false, defaultBranch: "main", htmlUrl: "https://github.com/abudoxali/sample-private" }
+  ];
+  const selected = [{ ...validRepo[0], htmlUrl: "https://github.com/abudoxali/sample-private" }];
+  const server = createServer({
+    env, pool: mockPool(), github: {
+      async list() { return selected; },
+      async listPublic() { return publicRepos; },
+      async listAll() {
+        const merged = new Map(publicRepos.map(repo => [repo.name, repo]));
+        for (const repo of selected) merged.set(repo.name, repo);
+        return [...merged.values()];
+      },
+      async getStatus(name) { return name === "sample-private" ? { exists: true, claims: [] } : null; },
+      async getPublicStatus(name) { return name === "sample-public" ? { exists: true, claims: [{ key: "Status", value: "PUBLIC CLAIM" }] } : null; }
+    }
+  });
+  try {
+    const repos = await server.inject({ url: "/api/repos", headers: authenticated });
+    assert.equal(repos.statusCode, 200);
+    assert.equal(repos.json().repos.length, 2);
+    assert.equal(repos.json().repos.find(repo => repo.name === "sample-private").private, true);
+    assert.equal((await server.inject({ url: "/api/repos/sample-public/status", headers: authenticated })).json().claims[0].value, "PUBLIC CLAIM");
+    assert.equal((await server.inject({ url: "/api/repos/hidden-private/status", headers: authenticated })).statusCode, 404);
+    const saved = await server.inject({
+      method: "PUT", url: "/api/workboard",
+      headers: { ...authenticated, origin: "https://os.abud.fun", "x-os-csrf": "b".repeat(64) },
+      payload: { revision: 0, data: { version: 1, focus: ["sample-public", "sample-private", "hidden-private"], projects: {}, events: [] } }
+    });
+    assert.equal(saved.statusCode, 200);
+    assert.deepEqual(saved.json().data.focus, ["sample-public", "sample-private"]);
+  } finally { await server.close(); }
+});
+
 test("OAuth callback rejects missing state without calling GitHub", async () => {
   const server = app();
   try {
