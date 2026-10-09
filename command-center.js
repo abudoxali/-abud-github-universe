@@ -244,6 +244,7 @@
       c.pushed+": "+(dateLabel(data.repo.pushed_at)||c.unknown),
       c.stale+": "+dateLabel(data.obtainedAt)
     ].map(x=>'<span>'+escapeHTML(x)+'</span>').join("")+'</div>';
+    window.dispatchEvent(new Event("abud:project-activity"));
   }
   function route(){
     const hash=window.location.hash;
