@@ -8,8 +8,9 @@
   if(!DB||!api)return;
   const $=q=>document.querySelector(q);
   const store="abud-os-workboard-v1";
-  const MAX_FOCUS=3,MAX_TASKS=20,MAX_TITLE=120;
+  const MAX_FOCUS=3,MAX_TASKS=20,MAX_TITLE=120,MAX_EVENTS=150;
   const stages=["backlog","progress","blocked","review","done"];
+  const eventTypes=["focus","unfocus","stage","task_add","task_done","task_undo","task_remove","note"];
   const defaults=["Video_Factory","ReplyOps","RootRay"];
   const isArabic=()=>document.documentElement.lang!=="en";
   const choose=(a,en)=>isArabic()?a:en;
@@ -22,7 +23,7 @@
   const textOK=value=>value.length>0&&!blockSecrets.test(value);
   const repoPath=name=>"https://github.com/"+DB.owner+"/"+encodeURIComponent(name);
   const now=()=>new Date().toISOString();
-  const initial=()=>({version:1,focus:defaults.filter(name=>names().has(name)).slice(0,MAX_FOCUS),projects:{},updatedAt:now()});
+  const initial=()=>({version:1,focus:defaults.filter(name=>names().has(name)).slice(0,MAX_FOCUS),projects:{},events:[],updatedAt:now()});
   function validate(raw){
     if(!raw||typeof raw!=="object"||Array.isArray(raw)||raw.version!==1)throw new Error("Unsupported workspace format");
     if(!Array.isArray(raw.focus)||raw.focus.length>MAX_FOCUS)throw new Error("Focus limit exceeded");
@@ -51,7 +52,16 @@
         if(seen.has(task.id))return false;seen.add(task.id);return true;
       })};
     }
-    return {version:1,focus,projects,updatedAt:now()};
+    const events=Array.isArray(raw.events)?raw.events.slice(0,MAX_EVENTS).filter(x=>{
+      return x&&typeof x==="object"&&allowed.has(x.project)&&eventTypes.includes(x.kind)&&
+        typeof x.at==="string"&&!Number.isNaN(Date.parse(x.at));
+    }).map(x=>({
+      id:typeof x.id==="string"&&/^[A-Za-z0-9_-]{1,64}$/.test(x.id)?x.id:generateId(),
+      project:x.project,kind:x.kind,
+      detail:textOK(scrubText(x.detail))?scrubText(x.detail):"",
+      at:new Date(x.at).toISOString()
+    })).filter(x=>x.detail):[];
+    return {version:1,focus,projects,events,updatedAt:now()};
   }
   function generateId(){
     if(typeof crypto!=="undefined"&&typeof crypto.randomUUID==="function")return crypto.randomUUID();
@@ -131,8 +141,15 @@
     const old=JSON.stringify(state);
     state.focus=state.focus.filter(name=>allowed.has(name)).slice(0,MAX_FOCUS);
     state.projects=Object.fromEntries(Object.entries(state.projects).filter(([name])=>allowed.has(name)));
+    state.events=(state.events||[]).filter(item=>allowed.has(item.project)).slice(0,MAX_EVENTS);
     // Invalidate hidden- or deleted-project records in browser storage too.
     if(JSON.stringify(state)!==old)persist();
+  }
+  function addEvent(project,kind,detail){
+    if(!validName(project)||!eventTypes.includes(kind))return;
+    const value=scrubText(detail);
+    if(!textOK(value))return;
+    state.events=[{id:generateId(),project,kind,detail:value,at:now()},...(state.events||[])].slice(0,MAX_EVENTS);
   }
   function summary(w){
     const focus=state.focus.filter(validName),records=focus.map(name=>record(name));
@@ -173,6 +190,63 @@
       '<button type="submit" title="'+safe(w.taskAdd)+'">+</button></form>'+
       '<a class="work-project-link" href="#project/'+encodeURIComponent(name)+'">'+safe(w.link)+' ↗</a></article>';
   }
+  function renderHistory(){
+    const w=phrases();
+    const ar=isArabic();
+    const word=ar?{
+      title:"سجل الإنجاز والقرارات",intro:"أحداث سجلتها على هذا الجهاز، وليست بيانات GitHub أو دليل تشغيل Production.",
+      choose:"اختار مشروع التركيز",hint:"اكتب قرارًا أو عقبة قصيرة...",add:"أضف قرار",
+      filter:"الفترة",week:"7 أيام",month:"30 يومًا",all:"كل السجل",
+      count:"حدث محلي",done:"مهمة مكتملة",notes:"ملاحظات وقرارات",empty:"مفيش أحداث محفوظة في الفترة دي.",
+      eventNames:{focus:"تركيز جديد",unfocus:"خرج من التركيز",stage:"تغيير الحالة",
+        task_add:"مهمة جديدة",task_done:"إنجاز مهمة",task_undo:"إلغاء الإنجاز",task_remove:"حذف مهمة",note:"قرار مسجل"}
+    }:{
+      title:"Progress & Decision Journal",intro:"Locally recorded actions, not GitHub commits or verified production evidence.",
+      choose:"Choose focus project",hint:"Record a brief decision or blocker...",add:"Add decision",
+      filter:"Period",week:"7 days",month:"30 days",all:"Full history",
+      count:"local events",done:"completed tasks",notes:"decision notes",empty:"No locally recorded events in this period.",
+      eventNames:{focus:"Added focus",unfocus:"Removed focus",stage:"Changed stage",
+        task_add:"New task",task_done:"Completed task",task_undo:"Reopened task",task_remove:"Removed task",note:"Decision note"}
+    };
+    $("#historyTitle").textContent=word.title;
+    $("#historyIntro").textContent=word.intro;
+    $("#historyFilterLabel").textContent=word.filter;
+    const select=$("#historyFilter"),period=select.value;
+    select.querySelector('option[value="7"]').textContent=word.week;
+    select.querySelector('option[value="30"]').textContent=word.month;
+    select.querySelector('option[value="all"]').textContent=word.all;
+    select.value=period||"7";
+    $("#workNoteText").placeholder=word.hint;
+    $("#workNoteText").setAttribute("aria-label",word.hint);
+    $("#workNoteAdd").textContent="+ "+word.add;
+    const projects=$("#workNoteProject"),before=projects.value;
+    projects.replaceChildren();
+    for(const n of state.focus.filter(validName)){
+      const o=document.createElement("option");o.value=n;o.textContent=n;projects.appendChild(o);
+    }
+    if([...projects.options].some(o=>o.value===before))projects.value=before;
+    $("#workNoteAdd").disabled=!projects.options.length;
+    $("#workNoteText").disabled=!projects.options.length;
+    const threshold=period==="all"?-Infinity:Date.now()-Number(period||7)*86400000;
+    const events=(state.events||[]).filter(e=>validName(e.project)&&new Date(e.at).getTime()>=threshold);
+    $("#workHistoryMetrics").innerHTML=[
+      events.length+" "+word.count,
+      events.filter(x=>x.kind==="task_done").length+" "+word.done,
+      events.filter(x=>x.kind==="note").length+" "+word.notes
+    ].map(x=>'<span>'+safe(x)+'</span>').join("");
+    $("#workHistoryList").innerHTML=events.length?events.slice(0,50).map(event=>{
+      const label=word.eventNames[event.kind]||event.kind;
+      return '<li class="work-history-event"><div class="event-sign">'+safe(event.kind==="task_done"?"✓":event.kind==="note"?"✎":"↗")+'</div>'+
+      '<div><strong>'+safe(event.project)+' · '+safe(label)+'</strong><p>'+safe(event.detail)+'</p>'+
+      '<small>'+safe(new Date(event.at).toLocaleString(ar?"ar-EG":"en-GB"))+'</small></div></li>';
+    }).join(""):'<li class="work-history-empty">'+safe(word.empty)+'</li>';
+  }
+  function addNote(project,value){
+    if(!state.focus.includes(project)||!validName(project))return;
+    const note=scrubText(value);
+    if(!textOK(note)){announce(phrases().rejected);return;}
+    addEvent(project,"note",note);persist();render();
+  }
   function render(){
     reconcile();
     const w=phrases();
@@ -199,20 +273,22 @@
     $("#workProjects").innerHTML=state.focus.length?
       state.focus.map((name,i)=>projectCard(name,i,w)).join(""):
       '<div class="work-empty">'+safe(w.empty)+'</div>';
+    renderHistory();
   }
   function focus(name){
     if(!validName(name)||state.focus.includes(name))return;
     if(state.focus.length>=MAX_FOCUS){announce(phrases().cap);return;}
-    state.focus.push(name);record(name);persist();render();
+    state.focus.push(name);record(name);addEvent(name,"focus","Added to daily focus");persist();render();
   }
   function removeFocus(name){
     state.focus=state.focus.filter(n=>n!==name);
+    addEvent(name,"unfocus","Removed from daily focus");
     // Keep tasks for this still-public repo, so re-adding does not erase work.
     persist();render();
   }
   function updateStage(name,stage){
     if(!state.focus.includes(name)||!stages.includes(stage)||!validName(name))return;
-    record(name).stage=stage;persist();render();
+    record(name).stage=stage;addEvent(name,"stage","Stage changed to "+stage);persist();render();
   }
   function addTask(name,value){
     if(!validName(name)||!state.focus.includes(name))return;
@@ -220,14 +296,14 @@
     if(!textOK(title)){announce(phrases().rejected);return;}
     const p=record(name);
     if(p.tasks.length>=MAX_TASKS){announce(phrases().maxTasks);return;}
-    p.tasks.push({id:generateId(),title,done:false});persist();render();
+    p.tasks.push({id:generateId(),title,done:false});addEvent(name,"task_add",title);persist();render();
   }
   function taskChange(name,id,kind,checked){
     if(!validName(name)||!state.focus.includes(name))return;
     const p=record(name),task=p.tasks.find(t=>t.id===id);
     if(!task)return;
-    if(kind==="remove")p.tasks=p.tasks.filter(t=>t.id!==id);
-    else if(kind==="toggle")task.done=checked;
+    if(kind==="remove"){p.tasks=p.tasks.filter(t=>t.id!==id);addEvent(name,"task_remove",task.title);}
+    else if(kind==="toggle"){task.done=checked;addEvent(name,checked?"task_done":"task_undo",task.title);}
     persist();render();
   }
   function exported(){
@@ -236,7 +312,8 @@
       version:1,source:"ABUD OS Personal Workboard — Local Browser Export",
       exportedAt:now(),
       focus:state.focus.filter(x=>allowed.has(x)),
-      projects:Object.fromEntries(Object.entries(state.projects).filter(([name])=>allowed.has(name)))
+      projects:Object.fromEntries(Object.entries(state.projects).filter(([name])=>allowed.has(name))),
+      events:(state.events||[]).filter(event=>allowed.has(event.project)).slice(0,MAX_EVENTS)
     };
   }
   function download(){
@@ -257,6 +334,12 @@
       state=clean;persist();render();announce(phrases().imported);
     }catch(_){announce(phrases().invalid);}
   }
+  $("#historyFilter").addEventListener("change",renderHistory);
+  $("#workNoteForm").addEventListener("submit",e=>{
+    e.preventDefault();
+    addNote($("#workNoteProject").value,$("#workNoteText").value);
+    $("#workNoteText").value="";
+  });
   $("#workPin").addEventListener("click",()=>focus($("#workProjectSelect").value));
   $("#workExport").addEventListener("click",download);
   $("#workImport").addEventListener("click",()=>$("#workImportFile").click());
@@ -266,7 +349,7 @@
   $("#workReset").addEventListener("click",()=>{
     if(!window.confirm(phrases().confirm))return;
     try{localStorage.removeItem(store);}catch(_){}
-    state={version:1,focus:[],projects:{},updatedAt:now()};
+    state={version:1,focus:[],projects:{},events:[],updatedAt:now()};
     persist();render();announce(phrases().cleared);
   });
   $("#workProjects").addEventListener("submit",e=>{
