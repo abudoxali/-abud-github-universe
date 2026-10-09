@@ -211,6 +211,20 @@ try {
   assert.equal(await desktop.getByText("synthetic-private-test-repo").count(),0);
   console.log("PASS public reconciliation: hidden/deleted removed; new public discovered; private rejected");
 
+  // A 90+-day public push gap is a *review signal*, never proof of abandonment.
+  livePublic=livePublic.map(r=>r.name==="ThreadForm"?{...r,pushed_at:"2025-01-01T00:00:00Z"}:r);
+  await desktop.locator("#syncButton").click();
+  await desktop.waitForFunction(()=>{
+    return [...document.querySelectorAll("#decisionFilters [data-decision-filter]")]
+      .some(b=>b.dataset.decisionFilter==="quiet"&&b.textContent.includes("1"));
+  });
+  await desktop.locator('#decisionFilters [data-decision-filter="quiet"]').click();
+  assert.equal(await desktop.locator("#decisionList .decision-item").count(),1);
+  assert.match(await desktop.locator("#decisionList").textContent(),/ThreadForm/);
+  assert.match(await desktop.locator("#decisionList").textContent(),/does not mean.*broken/i);
+  await desktop.locator('#decisionFilters [data-decision-filter="all"]').click();
+  console.log("PASS V1.3 low-activity: 90+ day public push signal, not product failure");
+
   const before = await desktop.locator("#zoomValue").textContent();
   await desktop.locator("#zoomIn").click();
   const after = await desktop.locator("#zoomValue").textContent();
