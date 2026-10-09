@@ -310,6 +310,16 @@
       document.body.classList.remove("project-mode");
     });
   }
-  window.ABUD_COMMAND={renderDaily,route};
+  window.ABUD_COMMAND={
+    renderDaily,route,
+    getPublicActivity:(name)=>{
+      if(renderedName!==name || !activity?.repo)return null;
+      return {
+        sha:activity.commit?.sha||null,
+        ci:activity.latestRun?.conclusion||activity.latestRun?.status||null,
+        observedAt:activity.obtainedAt||null
+      };
+    }
+  };
   start();
 })();
