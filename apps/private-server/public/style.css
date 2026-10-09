@@ -35,3 +35,13 @@ button,a,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity
 @media(max-width:1000px){.grid{grid-template-columns:1fr}.sidebar{display:none}.shell{display:block}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:570px){.bar{padding:12px 15px}.brand small{font-size:7px}.secure{display:none}.content{padding:23px 15px}.heading{align-items:start;flex-direction:column}.metrics article,.panel{padding:15px}.task-form{flex-direction:column}.owner{font-size:9px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+.project-editor #projectStage{margin-bottom:12px}
+.journal{border-top:1px solid #433051;margin-top:17px;padding-top:12px}
+.journal ol{list-style:none;padding:0;margin:10px 0;max-height:245px;overflow:auto;display:grid;gap:6px}
+.journal li{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border:1px solid #342641;border-radius:9px;background:#15101e;overflow-wrap:anywhere;font-size:11px;color:#cbb8d9}
+.journal li small{color:#9985aa;font-size:10px}
+.import-box{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(147,51,234,.08);border:1px dashed #765497;border-radius:12px;padding:13px;margin-top:16px}
+.import-box strong{font-size:12px;color:#e4c7f8}.import-box p{font-size:10px;color:#b19fc2;margin:4px 0 0;line-height:1.7}
+.import-box button{flex-shrink:0}
+@media(max-width:570px){.import-box{align-items:stretch;flex-direction:column}}
