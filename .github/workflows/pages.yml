@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -23,6 +25,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Refresh public repository membership
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/sync-public.mjs
+      - name: Persist verified public-only inventory
+        run: |
+          if ! git diff --quiet -- data.js; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data.js
+            git commit -m "chore(data): reconcile public GitHub repos"
+            git push origin HEAD:main
+          fi
       - name: Verify static assets and JavaScript syntax
         run: |
           test -s index.html
@@ -33,6 +48,7 @@ jobs:
           node --check app.js
           node --check data.js
           node --check tests/smoke.mjs
+          node --check scripts/sync-public.mjs
       - name: Install browser smoke-test dependencies
         run: |
           npm install --no-save playwright
