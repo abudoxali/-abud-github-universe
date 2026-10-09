@@ -65,7 +65,7 @@ try{
  await page.locator("#language").click();
  assert.equal(await page.locator("html").getAttribute("dir"),"ltr");
  assert.equal(await page.locator("#projectStage").inputValue(),"blocked");
- assert.equal(await page.locator("#reportTitle").textContent(),"Authenticated owner reports");
+ assert.equal(await page.locator("#privateReports h2").textContent(),"Authenticated owner reports");
  await page.locator("#repoList button.repo").filter({hasText:"repo-private"}).click();
  await page.locator("#statusFacts .fact").first().waitFor();
  assert.match(await page.locator("#statusFacts").textContent(),/REVIEW/);
