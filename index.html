@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050508">
+  <meta name="description" content="ABUD GitHub Universe — interactive bilingual map of all 43 GitHub repositories, current priorities and product lineage.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ABUD GitHub Universe — Project Command Center">
+  <meta property="og:description" content="43 repositories. One clear map.">
+  <meta property="og:url" content="https://abudoxali.github.io/-abud-github-universe/">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <title>ABUD GitHub Universe — Project Command Center</title>
+</head>
+<body>
+  <a class="skip-link" href="#overview">Skip to content</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
+      <a class="brand" href="#overview" aria-label="ABUD Universe home">
+        <span class="brand-logo"><span>A</span><i></i></span>
+        <span class="brand-copy"><strong>ABUD<span>OS</span></strong><small>GITHUB UNIVERSE</small></span>
+      </a>
+      <div class="side-label" data-i18n="workspace">WORKSPACE / مساحة العمل</div>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a class="nav-link current" href="#overview"><span class="nav-icon">◈</span><span data-i18n="navOverview">نظرة عامة</span><span class="nav-short">01</span></a>
+        <a class="nav-link" href="#map"><span class="nav-icon">⌘</span><span data-i18n="navMap">خريطة المشاريع</span><span class="nav-short">02</span></a>
+        <a class="nav-link" href="#library"><span class="nav-icon">▦</span><span data-i18n="navLibrary">كل المستودعات</span><span class="nav-short">03</span></a>
+        <a class="nav-link" href="#relations"><span class="nav-icon">⌁</span><span data-i18n="navRelations">العلاقات والنسخ</span><span class="nav-short">04</span></a>
+        <a class="nav-link" href="#strategy"><span class="nav-icon">◎</span><span data-i18n="navStrategy">التركيز والقرارات</span><span class="nav-short">05</span></a>
+      </nav>
+      <div class="side-label" data-i18n="categoriesLabel">CATEGORIES / التصنيفات</div>
+      <div id="sidebarCategories" class="sidebar-categories"></div>
+      <div class="sidebar-bottom">
+        <div class="source-card">
+          <div class="source-row"><span class="source-led"></span><strong data-i18n="dataSource">SOURCE OF TRUTH</strong></div>
+          <p data-i18n="dataSourceDetail">تصنيفات يدوية مدروسة + بيانات GitHub عامة عند الطلب.</p>
+          <span class="source-stamp" id="sourceStamp">REVIEWED · OCT 09, 2026</span>
+        </div>
+        <a class="side-github" href="https://github.com/abudoxali" target="_blank" rel="noopener noreferrer">↗ <span data-i18n="openProfile">فتح GitHub Profile</span></a>
+      </div>
+    </aside>
+
+    <main class="main" id="overview">
+      <header class="topbar">
+        <div class="breadcrumbs"><button id="mobileMenu" class="icon-button mobile-menu" aria-label="Open navigation">☰</button><span>WORKSPACE</span><span class="crumb-chevron">/</span><strong>GITHUB UNIVERSE</strong></div>
+        <div class="top-actions">
+          <div class="last-sync" id="syncLabel"><span class="tiny-dot"></span><span data-i18n="snapshot">SNAPSHOT / لقطة موثقة</span></div>
+          <button id="syncButton" class="btn btn-secondary" type="button" title="Refresh public GitHub metadata"><span class="icon">↻</span><span data-i18n="sync">تحديث GitHub</span></button>
+          <button id="languageButton" class="btn btn-ghost lang-button" type="button" aria-label="Change language">EN</button>
+          <a class="avatar" href="https://github.com/abudoxali" target="_blank" rel="noopener noreferrer" title="abudoxali">A</a>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="hero" aria-labelledby="heroTitle">
+          <div class="hero-content">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> ABUD FUN <span class="slash">/</span> SYSTEM OVERVIEW <span class="slash">/</span> V1.0</div>
+            <h1 id="heroTitle" data-i18n="heroTitle">كل مشاريعي.<br><em>صورة واحدة واضحة.</em></h1>
+            <p class="hero-description" data-i18n="heroDesc">مرجع تفاعلي يجمع كل Repositories بتاعتي، يوضح اللي شغّال، اللي خلص، اللي محتاج قرار، وإيه الخطوة الصح بعد كده.</p>
+            <div class="hero-buttons">
+              <a href="#map" class="btn btn-primary" data-i18n="exploreMap">استكشف الخريطة <span class="arrow">↗</span></a>
+              <a href="#library" class="btn btn-outline" data-i18n="browseRepo">تصفح المستودعات <span class="arrow">→</span></a>
+            </div>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="orb-ring ring-a"></div><div class="orb-ring ring-b"></div><div class="orb-ring ring-c"></div>
+            <div class="orb-core"><span>A</span><small>43</small></div>
+            <span class="orb-satellite sat-a"></span><span class="orb-satellite sat-b"></span><span class="orb-satellite sat-c"></span><span class="orb-satellite sat-d"></span>
+            <span class="orb-label orb-label-1">GITHUB · 43</span><span class="orb-label orb-label-2">8 CLUSTERS</span>
+          </div>
+        </section>
+
+        <section class="stats" aria-label="Portfolio summary" id="metrics"></section>
+
+        <section class="priority-section" id="strategy">
+          <div class="section-heading"><div><div class="section-kicker">01 / STRATEGIC FOCUS</div><h2 data-i18n="focusTitle">احنا مركزين على إيه دلوقتي؟</h2><p data-i18n="focusSub">مش كل نشاط على GitHub معناه تقدم. هنا الأولوية حسب القيمة الفعلية.</p></div><span class="section-count">CURRENT CYCLE</span></div>
+          <div class="focus-grid" id="focusCards"></div>
+        </section>
+
+        <section class="map-section" id="map">
+          <div class="section-heading"><div><div class="section-kicker">02 / INTERACTIVE PROJECT GRAPH</div><h2 data-i18n="mapTitle">خريطة المشاريع التفاعلية</h2><p data-i18n="mapSub">حرّك الخريطة، كبّر، وافتح أي Repo لمعرفة موقعه والخطوة التالية.</p></div><div class="map-key"><span><b style="--key:#f97373"></b> ACTIVE</span><span><b style="--key:#34d399"></b> SHIPPED</span><span><b style="--key:#fb7185"></b> CLEANUP</span></div></div>
+          <div class="map-shell">
+            <div class="map-topline">
+              <div class="map-breadcrumb"><span class="map-online"></span><span data-i18n="mapMode">SITEMAP MODE</span><span class="map-caption" id="graphSummary"></span></div>
+              <div class="map-controls">
+                <button class="map-ctrl" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+                <span id="zoomValue" class="zoom-value">100%</span>
+                <button class="map-ctrl" id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+                <button class="map-ctrl fit-control" id="fitMap" data-i18n="fit">Fit</button>
+                <button class="map-ctrl fit-control" id="resetMap" data-i18n="reset">Reset</button>
+              </div>
+            </div>
+            <div class="map-viewport" id="mapViewport" tabindex="0" aria-label="Interactive repository relationship map">
+              <div class="map-world" id="mapWorld">
+                <svg class="graph-lines" id="graphLines" viewBox="0 0 2260 1640" aria-hidden="true"></svg>
+                <div class="graph-center" id="graphCenter"><div class="core-glyph">✧</div><strong>ABUD OS</strong><span>REPOSITORY UNIVERSE</span><div id="graphTotal">43 REPOS</div></div>
+                <div id="graphClusters"></div>
+              </div>
+            </div>
+            <div class="map-bottomline"><span data-i18n="mapHint">اسحب للتحريك · استخدم +/− للتكبير · اضغط على أي مشروع للتفاصيل</span><span class="map-coordinates">WORKSPACE / ABUDOXALI</span></div>
+          </div>
+        </section>
+
+        <section class="registry-section" id="library">
+          <div class="section-heading"><div><div class="section-kicker">03 / COMPLETE REPOSITORY REGISTRY</div><h2 data-i18n="registryTitle">كل الـRepositories</h2><p data-i18n="registrySub">بحث وتصنيف وتفاصيل لكل مشروع — مع روابط GitHub المباشرة.</p></div><div id="resultCount" class="section-count">43 / 43</div></div>
+          <div class="registry-tools">
+            <label class="search-box"><span>⌕</span><input id="repoSearch" type="search" autocomplete="off" data-i18n-placeholder="search" placeholder="ابحث باسم المشروع، حالته، أو وظيفته..."><kbd>/</kbd></label>
+            <button id="clearFilters" class="btn btn-outline" type="button" data-i18n="clear">مسح الفلاتر</button>
+          </div>
+          <div class="filter-chips" id="filterChips"></div>
+          <div class="repository-grid" id="repoGrid"></div>
+          <div id="emptyState" class="empty-state" hidden><div class="empty-graphic">⌕</div><h3 data-i18n="emptyTitle">مفيش نتائج مطابقة</h3><p data-i18n="emptyBody">جرّب بحث تاني أو امسح الفلاتر.</p></div>
+        </section>
+
+        <section class="relations-section" id="relations">
+          <div class="section-heading"><div><div class="section-kicker">04 / PRODUCT LINEAGE</div><h2 data-i18n="relTitle">المشاريع المرتبطة ببعض</h2><p data-i18n="relSub">تمييز الـCanonical Repositories عن النسخ القديمة والمشاريع المتداخلة.</p></div></div>
+          <div class="relation-grid" id="relationGrid"></div>
+        </section>
+
+        <section class="principles-section">
+          <div class="principle-card"><span class="principle-icon">◎</span><h3 data-i18n="principleA">ONE MAIN PROJECT</h3><p data-i18n="principleADesc">مشروع رئيسي واحد للتنفيذ؛ والباقي Maintenance أو Growth.</p></div>
+          <div class="principle-card"><span class="principle-icon">✓</span><h3 data-i18n="principleB">REAL VERIFICATION</h3><p data-i18n="principleBDesc">الـRelease مش 100% إلا لما المستخدم أو الـGolden Path يتحقق فعليًا.</p></div>
+          <div class="principle-card"><span class="principle-icon">↗</span><h3 data-i18n="principleC">DISTRIBUTE, DON'T JUST BUILD</h3><p data-i18n="principleCDesc">النتيجة مش عدد الـRepos — النتيجة مستخدمين، دخل، وفرص حقيقية.</p></div>
+        </section>
+        <footer class="footer"><span>© ABUD FUN · GITHUB UNIVERSE</span><span data-i18n="footer">مرجع مشاريع قابل للتحديث — بيانات GitHub العامة منفصلة عن تقييم الجاهزية.</span><a href="https://abud.fun" target="_blank" rel="noopener noreferrer">abud.fun ↗</a></footer>
+      </div>
+    </main>
+  </div>
+  <div id="mobileBackdrop" class="mobile-backdrop" hidden></div>
+  <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
+  <aside id="projectDrawer" class="project-drawer" role="dialog" aria-modal="true" aria-label="Project details" aria-hidden="true" tabindex="-1">
+    <div class="drawer-header"><div><span class="drawer-kicker" id="drawerCategory">PROJECT INTELLIGENCE</span><h2 id="drawerName"></h2><span class="drawer-pill" id="drawerStatus">STATUS</span></div><button id="drawerClose" class="icon-button" type="button" aria-label="Close details">✕</button></div>
+    <div class="drawer-content">
+      <div class="drawer-field"><span data-i18n="drawerAbout">عن المشروع / ABOUT</span><p id="drawerDescription"></p></div>
+      <div class="drawer-field"><span data-i18n="drawerNext">الخطوة التالية / NEXT ACTION</span><p id="drawerNextValue"></p></div>
+      <div class="drawer-field"><span data-i18n="drawerNote">ملاحظة / REVIEW NOTE</span><p id="drawerNoteValue"></p></div>
+      <div class="drawer-field" id="drawerMetaWrap"><span data-i18n="drawerGitHub">معلومات GitHub / PUBLIC METADATA</span><div id="drawerMeta" class="drawer-metadata"></div></div>
+      <div class="drawer-warning" data-i18n="publicNote">التصنيفات هنا إدارية وليست إثباتًا لجاهزية Production. الموقع عام — لا تخزّن أسرارًا داخله.</div>
+      <a id="drawerGithub" class="btn btn-primary drawer-link" href="#" target="_blank" rel="noopener noreferrer"><span data-i18n="viewGitHub">افتح Repository على GitHub</span> ↗</a>
+    </div>
+  </aside>
+  <div id="toast" role="status" aria-live="polite" class="toast"></div>
+  <script defer src="./data.js"></script>
+  <script defer src="./app.js"></script>
+</body>
+</html>
