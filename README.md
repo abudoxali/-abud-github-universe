@@ -84,6 +84,33 @@ The workboard now includes a **local execution timeline**:
 - **V2.0 Secure ABUD OS:** authenticated, private workspace with GitHub App/OAuth authorization and server-side API access, encrypted credentials, least-privilege permissions, audited private repository access and a backend/database hosted separately from public GitHub Pages. A static Pages site cannot guarantee private project confidentiality.
 - A complete private backend **must not be represented as shipped** without deployment, authorization, end-to-end tests and owner acceptance.
 
+## V1.6 — Local Reports & Weekly Review
+
+The project dashboard can now generate a localized execution report from the **currently public** repo list, local Workboard and public GitHub metadata:
+
+- Select the previous 7 or 30 days; review owner-defined focus, stages, completed/open tasks, blocked stages, and journal events.
+- Show the public GitHub metadata coverage ratio and recent `pushed_at` counts separately. A push or passing CI run is *not* interpreted as product completion, customers or validated production health.
+- Download a standalone UTF-8 Markdown review using browser-only Blob export, or invoke the browser's Print/PDF dialog with a white-background A4 print view.
+- The export is generated on demand from the current filtered public inventory and does not automatically send local data to GitHub or an external server.
+- Any post-snapshot repository privacy change still requires a successful public GitHub sync before the browser has a fresh visibility determination.
+
+Implementation: `reports.js` / `reports.css`. The feature builds on `workboard.js` and retains the single `STATUS.md`.
+
+## V1.7 — Reliability, Accessibility and Static Publication Audit
+
+- Browser-delivered **Content Security Policy** (via HTML meta) restricts script loading to same-origin assets, public GitHub API as the only application network endpoint, trusted styles/fonts sources, and prevents object/embed content. GitHub Pages controls actual HTTP headers; a meta-delivered CSP is **not equivalent** to a custom server security-headers policy.
+- `referrer=no-referrer` avoids sharing page URLs in outgoing requests.
+- Visible `:focus-visible` keyboard outlines, `prefers-reduced-motion` support, and forced-colors focus adjustments.
+- Publish only an exact allowlist of the **15 static assets** needed by the site. `scripts/audit-static.mjs` checks deployment artifact membership, public-only catalog structure, stale relationship references, CSP/referrer metadata, and high-confidence credential signatures in catalog assets. The site is not served from the repo root.
+- Build verifies syntax, public API visibility reconciliation, real Chromium desktop/mobile behavior, safe weekly reports, Markdown export, Print/PDF trigger, private/deleted filtering and actual public HTTPS fetches.
+- No historical Git rewrite was performed. Old publicly available Git commits may still contain previously published private project names or other source artifacts; this release **does not remediate their historical exposure**.
+
+## V2.0 security contract — design-only
+
+The private multi-device workspace is defined in [docs/V2_SECURE_WORKSPACE.md](docs/V2_SECURE_WORKSPACE.md).
+
+**Not shipped:** authentication, secure private GitHub API access, backend, database synchronization, private repository reports and live production permission testing. Those require an explicit backend host/domain, GitHub authorization installation, and external-service deployment acceptance. Never simulate private access using client-side GitHub tokens or static Pages assets.
+
 ## Privacy boundaries
 
 The deployed site is public. It must contain **public repositories only**, even when the connected owner's GitHub integration can see private repositories. Never insert private names, sensitive records, environment values or credentials into site source files.
@@ -102,6 +129,8 @@ If GitHub's API is unavailable, the site uses its most recently reviewed public 
 - `intelligence.js` / `intelligence.css` — V1.2 weekly activity, STATUS.md source and Agent 1/2 prompts
 - `decisions.js` / `decisions.css` — V1.3 explainable signals, relationship types and graph edge overlays
 - `workboard.js` / `workboard.css` — V1.4–V1.5 device-local focus, tasks, stages, progress journal and safe JSON export/import
+- `reports.js` / `reports.css` — V1.6 printable/Markdown local reports
+- `scripts/audit-static.mjs` — V1.7 publish-time artifact/privacy allowlist
 - `scripts/sync-public.mjs` — safe public membership diff, preserves human assessments
 - `tests/smoke.mjs` — Chromium desktop/mobile and privacy-reconciliation checks
 - `.github/workflows/pages.yml` — sync, test, deploy, HTTPS smoke
