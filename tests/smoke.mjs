@@ -73,7 +73,7 @@ async function mockPublicGitHub(page){
 const server = http.createServer(async (req,res) => {
   try {
     const name = decodeURI((req.url || "/").split("?")[0]).replace(/^\/+/, "") || "index.html";
-    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","decisions.js","decisions.css","favicon.svg"].includes(name)) {
+    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","decisions.js","decisions.css","workboard.js","workboard.css","favicon.svg"].includes(name)) {
       res.writeHead(404).end("Not found");return;
     }
     const buf = await readFile(resolve(root,name));
@@ -179,6 +179,62 @@ try {
 
   console.log("PASS V1.1: daily priorities, routed project hub, mocked public commit and CI");
 
+  // V1.4: user-owned project focus, short tasks, stage, persistence and safe import.
+  assert.equal(await desktop.locator("#workProjects .work-project").count(),3);
+  assert.equal(await desktop.locator("#workPin").isDisabled(),true);
+  await desktop.locator('#workProjects [data-task-form="RootRay"] input').fill("Review the public release checklist");
+  await desktop.locator('#workProjects [data-task-form="RootRay"] button[type="submit"]').click();
+  assert.equal(await desktop.locator('#workProjects [data-work-project="RootRay"] .work-task').count(),1);
+  await desktop.locator('#workProjects [data-task-toggle="RootRay"]').check();
+  await desktop.locator('#workProjects [data-work-stage="RootRay"]').selectOption("review");
+  const workSaved=await desktop.evaluate(()=>{
+    const raw=JSON.parse(localStorage.getItem("abud-os-workboard-v1")||"null");
+    return raw&&{focus:raw.focus,stage:raw.projects.RootRay.stage,done:raw.projects.RootRay.tasks[0].done};
+  });
+  assert.equal(workSaved.stage,"review");
+  assert.equal(workSaved.done,true);
+  assert.equal(workSaved.focus.length,3);
+  await desktop.reload({waitUntil:"domcontentloaded"});
+  await desktop.locator('#workProjects [data-work-project="RootRay"] .work-task.done').waitFor();
+  assert.equal(await desktop.locator('#workProjects [data-work-stage="RootRay"]').inputValue(),"review");
+  await desktop.locator('#workProjects [data-unpin="RootRay"]').click();
+  assert.equal(await desktop.locator("#workProjects .work-project").count(),2);
+  await desktop.locator("#workProjectSelect").selectOption("ThreadForm");
+  await desktop.locator("#workPin").click();
+  assert.equal(await desktop.locator("#workProjects .work-project").count(),3);
+  assert.equal(await desktop.locator("#dailyQueue .queue-card").count(),2);
+  const exported=await desktop.evaluate(()=>window.ABUD_WORKBOARD.getSnapshot());
+  assert.equal(exported.version,1);
+  assert.equal(exported.focus.includes("ThreadForm"),true);
+  assert.equal(exported.projects.RootRay.tasks.length,1);
+
+  const safeImport={
+    version:1,focus:["ThreadForm","Video_Factory","synthetic-private-test-repo"],
+    projects:{
+      ThreadForm:{stage:"blocked",tasks:[{id:"t1",title:"Verify real 3D workflow",done:false}]},
+      "synthetic-private-test-repo":{stage:"blocked",tasks:[{id:"secret",title:"Never display private data",done:false}]}
+    }
+  };
+  await desktop.locator("#workImportFile").setInputFiles({
+    name:"workboard.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(safeImport))
+  });
+  assert.equal(await desktop.locator("#workProjects .work-project").count(),2);
+  assert.equal(await desktop.locator('#workProjects [data-work-stage="ThreadForm"]').inputValue(),"blocked");
+  assert.ok(!(await desktop.locator("#workProjects").textContent()).includes("synthetic-private-test-repo"));
+  const sanitized=await desktop.evaluate(()=>window.ABUD_WORKBOARD.getSnapshot());
+  assert.ok(!Object.keys(sanitized.projects).includes("synthetic-private-test-repo"));
+  assert.ok(!sanitized.focus.includes("synthetic-private-test-repo"));
+  // Restore initial editorial focus for unrelated acceptance checks.
+  await desktop.evaluate(()=>{
+    localStorage.removeItem("abud-os-workboard-v1");
+    location.reload();
+  });
+  await desktop.locator('#workProjects [data-work-project="RootRay"]').waitFor();
+  assert.equal(await desktop.locator("#dailyLead h3").textContent(),"Video_Factory");
+  assert.equal(await desktop.locator("#workProjects .work-project").count(),3);
+  console.log("PASS V1.4: 3-project WIP cap, tasks, progress, persistence, custom daily focus, sanitized JSON import");
+
+
   // Mock a newly private/deleted repository and a new public repository.
   // These are synthetic names, not names from the user's hidden repositories.
   livePublic = publicSnapshot.filter(r=>r.name!=="RootRay");
@@ -198,6 +254,11 @@ try {
   });
   assert.equal(await desktop.locator("#repoGrid .repo-card").count(),expected);
   assert.equal(await desktop.locator('#repoGrid [data-open="RootRay"]').count(),0);
+  assert.equal(await desktop.locator('#workProjects [data-work-project="RootRay"]').count(),0);
+  const pruned=await desktop.evaluate(()=>JSON.parse(localStorage.getItem("abud-os-workboard-v1")));
+  assert.ok(!pruned.focus.includes("RootRay"));
+  assert.ok(!Object.keys(pruned.projects).includes("RootRay"));
+
   await desktop.goto(url+"#project/RootRay",{waitUntil:"domcontentloaded"});
   await desktop.waitForURL(/#daily$/);
   assert.equal(await desktop.locator("#projectHub").isVisible(),false,
@@ -267,6 +328,7 @@ try {
   await mobile.locator("#decisionKpis .decision-kpi").first().waitFor();
   assert.equal(await mobile.locator("#decisionKpis .decision-kpi").count(),4);
   assert.equal(await mobile.locator("#relationGrid .relation-card").count(),6);
+    assert.equal(await mobile.locator("#workProjects .work-project").count(),3);
     await mobile.locator("#dailyLead h3").waitFor();
   assert.equal(await mobile.locator("#dailyQueue .queue-card").count(),2);
   await mobile.locator("#dailyLead a").first().click();
