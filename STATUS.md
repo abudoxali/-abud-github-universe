@@ -23,6 +23,13 @@ Owner visual/content review: **NOT YET RECORDED**.
 - Deployment references: isolated Nginx TLS vhost, isolated systemd service example, explicit fresh-database checks and live security acceptance checklist.
 - CI pipeline `.github/workflows/private-ci.yml` is separate from public Pages pipeline. It runs Node security tests and isolated PostgreSQL 16 integration tests in GitHub Actions, with no real OAuth/installation credentials.
 
+### Automated verification — PASS
+- Isolated private-backend CI: https://github.com/abudoxali/-abud-github-universe/actions/runs/37912814286 — **SUCCESS**.
+- Node.js 22 security tests and actual temporary PostgreSQL 16 integration: **6/6 PASS, 0 FAIL, 0 SKIP**. The DB test was initially incorrectly skipped; this was discovered and corrected, and the final rerun executed it successfully.
+- Confirmed owner-session checks, unauthenticated private API/report denial, CSRF+Origin refusal, unauthorized installation repo denial, strict GitHub App permissions and selected-repo requirement, OAuth state cookie format, simulated report privacy, DB one-time OAuth state consumption, and optimistic DB revision concurrency.
+- Public GitHub Pages artifact isolation check passed. Real production OAuth/DNS/VPS/private repo end-to-end remains unverified.
+- Draft PR for review: https://github.com/abudoxali/-abud-github-universe/pull/1 — intentionally **NOT MERGED** to protect the working public site.
+
 ### Verified boundaries
 - Source tree contains only code and examples, not live app secrets. `.env.example` contains placeholders.
 - Existing public GitHub Pages `_site` allowlist and deployed dashboard are unchanged by this feature branch.
