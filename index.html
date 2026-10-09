@@ -15,6 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./command-center.css">
+  <link rel="stylesheet" href="./intelligence.css">
   <title>ABUD GitHub Universe — Project Command Center</title>
 </head>
 <body>
@@ -70,6 +71,16 @@
             <div class="daily-queue" id="dailyQueue"></div>
           </div>
           <div class="daily-notes" id="dailyNotes"></div>
+          <section class="weekly-review" id="weeklyReview" aria-labelledby="weeklyTitle">
+            <div class="weekly-header">
+              <div><div class="section-kicker">V1.2 / PUBLIC GITHUB ACTIVITY</div>
+                <h3 id="weeklyTitle">آخر 7 أيام على GitHub</h3>
+                <p id="weeklyDescription">ملخص آخر Push للمشاريع العامة، مش نسبة الإنجاز.</p></div>
+              <span id="weeklyIndicator" class="weekly-pill">WAITING FOR GITHUB</span>
+            </div>
+            <div class="weekly-summary" id="weeklySummary"></div>
+            <div class="weekly-entries" id="weeklyEntries" aria-live="polite"></div>
+          </section>
         </section>
         <section class="project-hub" id="projectHub" hidden aria-labelledby="hubTitle">
           <div class="hub-toolbar">
@@ -105,6 +116,36 @@
             <div class="hub-extra-card"><h3 id="hubEvidenceLabel">SOURCE & EVIDENCE</h3><div id="hubEvidence"></div></div>
             <div class="hub-extra-card"><h3 id="hubMetaLabel">GITHUB METADATA</h3><div id="hubInfo"></div></div>
           </div>
+          
+          <section class="intelligence" id="projectIntelligence" aria-labelledby="intelligenceTitle">
+            <div class="intelligence-header">
+              <div><div class="section-kicker">V1.2 / SOURCE EVIDENCE</div>
+                <h2 id="intelligenceTitle">حالة المشروع من STATUS.md</h2>
+                <p id="intelligenceIntro">بيانات عامة من الريبو، منفصلة عن التأكيد التنفيذي.</p></div>
+              <button class="btn btn-outline" type="button" id="intelligenceRefresh">↻ <span id="intelligenceRefreshText">فحص الملف</span></button>
+            </div>
+            <div class="intelligence-grid">
+              <article class="intelligence-card">
+                <div class="intelligence-card-title"><span id="intelligenceSourceTitle">DOCUMENT EVIDENCE</span><span class="intelligence-state" id="intelligenceState">WAITING</span></div>
+                <div id="intelligenceFacts" class="intelligence-facts" aria-live="polite"></div>
+                <div id="intelligenceExcerpt" class="intelligence-excerpt"></div>
+                <div class="intelligence-actions"><a id="intelligenceSourceLink" href="#" target="_blank" rel="noopener noreferrer">Open STATUS.md ↗</a></div>
+              </article>
+              <article class="intelligence-card intelligence-agent">
+                <div class="intelligence-card-title"><span id="agentTitle">AI AGENT HANDOFF</span><span class="intelligence-state" id="agentSourceStatus">PUBLIC ONLY</span></div>
+                <p id="agentDescription">برومبت تنفيذي مبني على حالة الريبو الحالية والمعلومات المتاحة.</p>
+                <div class="agent-tabs" role="group" aria-label="Select agent prompt">
+                  <button type="button" id="agentHandoff" class="agent-tab active" aria-pressed="true">Agent 1 · Handoff</button>
+                  <button type="button" id="agentExecute" class="agent-tab" aria-pressed="false">Agent 2 · Execute</button>
+                </div>
+                <textarea id="agentPrompt" class="agent-prompt" readonly spellcheck="false" aria-label="Ready-to-copy agent prompt"></textarea>
+                <div class="agent-actions">
+                  <button type="button" id="agentCopy" class="btn btn-primary">نسخ Prompt</button>
+                  <span id="agentPromptNote">يجب التحقق من الكود محليًا قبل التنفيذ.</span>
+                </div>
+              </article>
+            </div>
+          </section>
           <p id="hubDisclaimer" class="hub-disclaimer"></p>
         </section>
         <section class="hero" aria-labelledby="heroTitle">
@@ -199,5 +240,6 @@
   <script defer src="./data.js"></script>
   <script defer src="./app.js"></script>
   <script defer src="./command-center.js"></script>
+  <script defer src="./intelligence.js"></script>
 </body>
 </html>
