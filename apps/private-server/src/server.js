@@ -29,6 +29,25 @@ export function createServer({env=process.env,pool,github,fetchImpl=fetch}={}){
     reply.header("Strict-Transport-Security","max-age=31536000; includeSubDomains");
     reply.header("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self' https://github.com; frame-ancestors 'none'; object-src 'none'");
   });
+  const oauthRateBuckets=new Map();
+  function authRateLimited(request,reply){
+    // Per-process throttling is a fallback, not a substitute for an Nginx edge limit.
+    const ip=request.ip||"unknown",clock=Date.now();
+    const current=oauthRateBuckets.get(ip);
+    const entry=current&&clock-current.start<60000?current:{start:clock,hits:0};
+    entry.hits++;oauthRateBuckets.set(ip,entry);
+    if(oauthRateBuckets.size>2048){
+      for(const [key,val] of oauthRateBuckets){
+        if(clock-val.start>=60000)oauthRateBuckets.delete(key);
+      }
+      if(oauthRateBuckets.size>2048)oauthRateBuckets.delete(oauthRateBuckets.keys().next().value);
+    }
+    if(entry.hits>20){
+      reply.header("Retry-After","60").code(429).send({error:"auth-rate-limited"});
+      return true;
+    }
+    return false;
+  }
   server.setErrorHandler((error,request,reply)=>{
     if(error.statusCode===400||error.statusCode===413)reply.code(error.statusCode).send({error:"invalid-request"});
     else{
@@ -69,6 +88,7 @@ export function createServer({env=process.env,pool,github,fetchImpl=fetch}={}){
     reply.type("text/css; charset=utf-8");return readFile(self("../public/style.css"),"utf8");
   });
   server.get("/auth/start",async(request,reply)=>{
+    if(authRateLimited(request,reply))return;
     const state=randomSecret(),until=new Date(Date.now()+600000);
     await pool.query("INSERT INTO oauth_states(state_hash,expires_at) VALUES ($1,$2)",[hash(state),until]);
     reply.setCookie(OAUTH,state,{...COOKIE,maxAge:600,path:"/"});
@@ -80,6 +100,7 @@ export function createServer({env=process.env,pool,github,fetchImpl=fetch}={}){
     return reply.redirect(url.toString());
   });
   server.get("/auth/callback",async(request,reply)=>{
+    if(authRateLimited(request,reply))return;
     const {code,state}=request.query||{};
     const cookieState=request.cookies?.[OAUTH];
     reply.clearCookie(OAUTH,{path:"/",secure:true,sameSite:"lax"});
