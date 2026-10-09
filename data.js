@@ -350,39 +350,64 @@ window.ABUD_DATA = {
       "from": "promptforge",
       "to": "abud-prompt-engine",
       "ar": "من مشروع البرومبت القديم للمنظومة الأساسية",
-      "en": "older prompt project to canonical engine"
+      "en": "older prompt project to canonical engine",
+      "type": "succession",
+      "arWhy": "اتجاه Prompt قديم إلى نظام برومبت أحدث؛ علاقة تخطيطية تحتاج تأكيد مقارنة الكود",
+      "enWhy": "Editorial legacy-to-canonical direction; confirm unique code before archive",
+      "basis": "editorial"
     },
     {
       "from": "Video_Factory",
       "to": "short-studio-server",
       "ar": "أدوات إنتاج فيديو متقاربة — ليست تبعية برمجية",
-      "en": "related video products; no code dependency implied"
+      "en": "related video products; no code dependency implied",
+      "type": "overlap",
+      "arWhy": "منتجان لإنشاء الفيديو بينهما تداخل محتمل في الوظائف؛ ليسا نسخة واحدة أو تبعية كود مؤكدة",
+      "enWhy": "Potential video-production scope overlap, not a verified duplicate or code dependency",
+      "basis": "editorial"
     },
     {
       "from": "RootRay",
       "to": "RepoRadar-Ai",
       "ar": "أدوات تطوير وتوثيق مكملة لبعض",
-      "en": "complementary developer tooling"
+      "en": "complementary developer tooling",
+      "type": "complement",
+      "arWhy": "أداتان للمطورين تخدمان مرحلتين مختلفتين: الواجهة والكود مقابل تحليل الريبو",
+      "enWhy": "Complementary developer workflows: UI inspection versus repository intelligence",
+      "basis": "editorial"
     },
     {
       "from": "VoidShift",
       "to": "One-Bullet-Arena",
       "ar": "مشروعات ويب تفاعلية / ألعاب",
-      "en": "interactive web and game experiences"
+      "en": "interactive web and game experiences",
+      "type": "same-track",
+      "arWhy": "تجربتان في الألعاب والويب التفاعلي؛ ليس هناك اعتماد تقني مثبت",
+      "enWhy": "Related interactive/game portfolio, no verified technical dependency",
+      "basis": "editorial"
     },
     {
       "from": "OmniAgent",
       "to": "abud-prompt-engine",
       "ar": "أدوات الـAgents والبرومبت",
-      "en": "related agent/prompt tools"
+      "en": "related agent/prompt tools",
+      "type": "complement",
+      "arWhy": "مساران محتملان متكاملان لتشغيل الإيجنتات وإدارة البرومبتات",
+      "enWhy": "Potentially complementary agent execution and prompt tooling",
+      "basis": "editorial"
     },
     {
       "from": "flyrank-ai-portfolio",
       "to": "flyrank-opportunity-workflow",
       "ar": "نفس مسار تدريب FlyRank",
-      "en": "FlyRank training and capstone"
+      "en": "FlyRank training and capstone",
+      "type": "same-track",
+      "arWhy": "مشروعا تدريب أو بورتفوليو ضمن مسار FlyRank نفسه",
+      "enWhy": "Projects grouped under the same FlyRank learning track",
+      "basis": "editorial"
     }
   ],
   "snapshot": "PUBLIC_ONLY",
-  "catalogPolicy": "Only public repositories are included. Private repositories are excluded. Status labels are curated, not inferred from commit activity."
+  "catalogPolicy": "Only public repositories are included. Private repositories are excluded. Status labels are curated, not inferred from commit activity.",
+  "relationshipSchema": "V1.3: curated relationship type and bilingual rationale. Overlap does NOT establish duplication. No inferred technical dependencies."
 };
