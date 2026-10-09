@@ -14,6 +14,19 @@ An ABUD-styled visual command center with a project graph, status filters, searc
 - GitHub Actions refreshes the checked-in public catalog on push, manual runs, and approximately **every six hours** (schedules can be delayed by GitHub).
 - Human-curated product assessments are *not* changed by commit activity and should be verified against `STATUS.md` in each project before editing.
 
+## V1.1 — Daily Command Center
+
+The public GitHub Universe is now usable as a daily project reference:
+
+- **Daily Command Center** appears at the top of the homepage, emphasizing a single main focus and two adjacent tracks (currently Video Factory, ReplyOps, RootRay), plus a privacy-safe public-only inventory summary.
+- **Project Hub** pages use deep links like `#project/RootRay` and include the project's curated objective, review note, README/STATUS links, last public commit, latest GitHub Actions workflow and public repository metadata.
+- **Real-time evidence is read only and on demand**: public GitHub API requests are made only when a project detail page is opened, rechecking its public visibility first. Results are cached in the visitor's browser for 15 minutes. A missing workflow or failed API request is never shown as passing.
+- **Repository/CI activity is not product readiness**. A successful workflow run does not justify promoting a project to production-ready.
+- **Bilingual and responsive:** Arabic RTL / English LTR, direct project links, copyable next-action handoff, desktop and mobile layouts.
+- **Safety:** stale or private/deleted repo deep links are rejected after the public list refresh; no private repositories are deliberately requested or embedded in the site.
+
+V1.1 is still **public-only**. An authenticated private workspace is a separate product milestone and must not be implemented by shipping private records or OAuth credentials through GitHub Pages.
+
 ## Privacy boundaries
 
 The deployed site is public. It must contain **public repositories only**, even when the connected owner's GitHub integration can see private repositories. Never insert private names, sensitive records, environment values or credentials into site source files.
@@ -28,6 +41,7 @@ If GitHub's API is unavailable, the site uses its most recently reviewed public 
 - `styles.css` — site-aligned ABUD visual tokens and responsive layouts
 - `data.js` — public-only curated repository snapshot and relationships
 - `app.js` — graph, search, filtering, localization, details, public API reconciliation
+- `command-center.js` / `command-center.css` — V1.1 daily workspace, project pages, public commit/CI evidence
 - `scripts/sync-public.mjs` — safe public membership diff, preserves human assessments
 - `tests/smoke.mjs` — Chromium desktop/mobile and privacy-reconciliation checks
 - `.github/workflows/pages.yml` — sync, test, deploy, HTTPS smoke
@@ -47,7 +61,7 @@ The optional GitHub browser refresh needs network access and may be limited by t
 
 ## CI / publication
 
-All pushes to `main`, scheduled inventory checks and manual GitHub Actions runs validate JS source, test the dashboard in real Chromium (desktop and mobile), deploy via GitHub Pages and fetch the public HTTPS site.
+All pushes to `main`, scheduled inventory checks and manual GitHub Actions runs validate JS source, test the dashboard and V1.1 project hub in real Chromium (desktop and mobile), deploy via GitHub Pages and fetch the public HTTPS site.
 
 [Latest Actions](https://github.com/abudoxali/-abud-github-universe/actions)
 
