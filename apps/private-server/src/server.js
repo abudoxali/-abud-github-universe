@@ -71,7 +71,7 @@ export function createServer({env=process.env,pool,github,fetchImpl=fetch}={}){
   server.get("/auth/start",async(request,reply)=>{
     const state=randomSecret(),until=new Date(Date.now()+600000);
     await pool.query("INSERT INTO oauth_states(state_hash,expires_at) VALUES ($1,$2)",[hash(state),until]);
-    reply.setCookie(OAUTH,state,{...COOKIE,maxAge:600,path:"/auth"});
+    reply.setCookie(OAUTH,state,{...COOKIE,maxAge:600,path:"/"});
     const url=new URL("https://github.com/login/oauth/authorize");
     url.searchParams.set("client_id",env.GITHUB_CLIENT_ID);
     url.searchParams.set("redirect_uri",config.origin+"/auth/callback");
@@ -82,7 +82,7 @@ export function createServer({env=process.env,pool,github,fetchImpl=fetch}={}){
   server.get("/auth/callback",async(request,reply)=>{
     const {code,state}=request.query||{};
     const cookieState=request.cookies?.[OAUTH];
-    reply.clearCookie(OAUTH,{path:"/auth",secure:true,sameSite:"lax"});
+    reply.clearCookie(OAUTH,{path:"/",secure:true,sameSite:"lax"});
     if(typeof code!=="string"||code.length>300||typeof state!=="string"||!equal(state,cookieState)){
       return reply.code(403).send({error:"invalid-oauth-state"});
     }
