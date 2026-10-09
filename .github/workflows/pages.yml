@@ -43,9 +43,12 @@ jobs:
           test -s index.html
           test -s styles.css
           test -s app.js
+          test -s command-center.js
+          test -s command-center.css
           test -s data.js
           test -s favicon.svg
           node --check app.js
+          node --check command-center.js
           node --check data.js
           node --check tests/smoke.mjs
           node --check scripts/sync-public.mjs
@@ -58,7 +61,7 @@ jobs:
       - name: Prepare static site artifact
         run: |
           mkdir -p _site
-          cp index.html styles.css app.js data.js favicon.svg _site/
+          cp index.html styles.css command-center.css app.js command-center.js data.js favicon.svg _site/
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
@@ -75,7 +78,9 @@ jobs:
             if curl -fsSL --max-time 15 "$URL" -o /tmp/abud-universe-index.html &&
                grep -q "ABUD GitHub Universe" /tmp/abud-universe-index.html &&
                curl -fsSL --max-time 15 "${URL}app.js" -o /tmp/abud-universe-app.js &&
-               grep -q "ABUD GitHub Universe" /tmp/abud-universe-app.js; then
+               grep -q "ABUD GitHub Universe" /tmp/abud-universe-app.js &&
+               curl -fsSL --max-time 15 "${URL}command-center.js" -o /tmp/abud-universe-command.js &&
+               grep -q "Daily Command Center" /tmp/abud-universe-command.js; then
               echo "PASS live HTTPS: $URL"
               exit 0
             fi
