@@ -223,3 +223,50 @@ test("OAuth rejects another GitHub user and does not issue a session",async()=>{
   assert.doesNotMatch(String(done.headers["set-cookie"]),/__Host-abud_session=/);
  }finally{await server.close();}
 });
+
+test("Revoking GitHub App repository membership hides private workboard, reports and STATUS",async()=>{
+ let installed=true;
+ const stored={version:1,focus:["sample-private"],projects:{
+   "sample-private":{stage:"blocked",tasks:[{id:"test",title:"Confidential internal task",done:false}]}
+ },events:[{project:"sample-private",kind:"note",detail:"Internal owner note",at:new Date().toISOString()}]};
+ const server=createServer({env,pool:{async query(sql){
+   if(sql.startsWith("SELECT github_user_id"))return {rows:[{github_user_id:"123456",csrf_secret:"b".repeat(64)}]};
+   if(sql.startsWith("SELECT revision"))return {rows:[{revision:8,data:stored}]};
+   return {rowCount:0,rows:[]};
+ }},github:{
+   async list(){return installed?validRepo:[];},
+   async getStatus(){if(!installed)throw Error("Revoked repo must not be fetched");
+     return {exists:true,claims:[],sha:"abc"};}
+ },fetchImpl:async()=>{throw Error("No outbound network");}});
+ try{
+  const before=await server.inject({url:"/api/workboard",headers:authenticated});
+  assert.equal(before.statusCode,200);
+  assert.equal(before.json().data.focus[0],"sample-private");
+  installed=false;
+  const repos=await server.inject({url:"/api/repos",headers:authenticated});
+  assert.deepEqual(repos.json().repos,[]);
+  const denied=await server.inject({url:"/api/repos/sample-private/status",headers:authenticated});
+  assert.equal(denied.statusCode,404);
+  const after=await server.inject({url:"/api/workboard",headers:authenticated});
+  assert.equal(after.statusCode,200);
+  assert.deepEqual(after.json().data.focus,[]);
+  assert.deepEqual(after.json().data.projects,{});
+  assert.deepEqual(after.json().data.events,[]);
+  const report=await server.inject({url:"/api/report.md",headers:authenticated});
+  assert.equal(report.statusCode,200);
+  assert.doesNotMatch(report.body,/Confidential internal task|Internal owner note|sample-private/);
+ }finally{await server.close();}
+});
+test("OAuth start and callback are rate limited before untrusted database growth",async()=>{
+ const server=createServer({env,pool:mockPool(),github,fetchImpl:async()=>{throw Error("No network");}});
+ try{
+  for(let i=0;i<20;i++){
+   const r=await server.inject({url:"/auth/start",remoteAddress:"192.0.2.50"});
+   assert.equal(r.statusCode,302,"First 20 requests allowed");
+  }
+  const blocked=await server.inject({url:"/auth/start",remoteAddress:"192.0.2.50"});
+  assert.equal(blocked.statusCode,429);
+  assert.equal(blocked.headers["retry-after"],"60");
+  assert.deepEqual(blocked.json(),{error:"auth-rate-limited"});
+ }finally{await server.close();}
+});
