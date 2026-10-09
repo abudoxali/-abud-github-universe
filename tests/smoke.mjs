@@ -71,7 +71,13 @@ try {
       sidebar:{x:nav.x,width:nav.width},
       hit:document.elementFromPoint(10,120)?.id||document.elementFromPoint(10,120)?.tagName};
   });
-  console.log("Mobile overlay debug:",JSON.stringify(overlayHit));
+  await mobile.waitForFunction(() => {
+    const menu=document.getElementById("sidebar");
+    const box=menu.getBoundingClientRect();
+    return menu.classList.contains("mobile-open") &&
+      box.left >= -3 && box.right <= window.innerWidth + 3;
+  },null,{timeout:5000});
+  console.log("Mobile sidebar visually opened; initial overlay debug:",JSON.stringify(overlayHit));
   await mobile.mouse.click(10,120);
   assert.equal(await mobile.locator("#mobileBackdrop").isVisible(),false,
     "Overlay tap did not close mobile nav: "+JSON.stringify(overlayHit));
