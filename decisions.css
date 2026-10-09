@@ -1,0 +1,53 @@
+/* ABUD Universe V1.3: decision intelligence and relational edges */
+.relation-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 13px;flex-wrap:wrap}
+.relation-modes,.decision-filters{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.relation-type-btn,.decision-filter-btn{background:#11101b;border:1px solid #30263c;color:#aaa0b7;padding:8px 12px;border-radius:9px;font:600 11px var(--latin);transition:background .15s,border-color .15s;color:#aaa0b7}
+.relation-type-btn:hover,.decision-filter-btn:hover{border-color:#8758af;color:#e8d4f6}
+.relation-type-btn.active,.decision-filter-btn.active{border-color:#8d56bb;background:rgba(147,51,234,.21);color:#eed8ff}
+.relation-type-btn .type-count{margin-inline-start:5px;color:#907ca1}
+.relation-coverage{color:#90819f;font:500 10px var(--latin)}
+.relation-insights{border:1px solid #463059;background:radial-gradient(ellipse at 15% 30%,rgba(130,52,196,.16),transparent 70%),#100e19;border-radius:14px;padding:19px;margin-bottom:13px;display:grid;grid-template-columns:1fr auto;gap:15px;align-items:center}
+.relation-insights h3{font:700 16px var(--latin);margin:0 0 8px;color:#f1e5fb}
+.relation-insights p{font-size:12px;color:#afa1bd;line-height:1.9;margin:0}
+.relation-insights small{font:600 10px var(--latin);color:#aa83ce}
+.relation-insights button{border:1px solid #7c4c9b;background:#38214c;border-radius:9px;color:#e9d6f6;font-size:11px;padding:10px 13px;white-space:nowrap}
+.relation-card{transition:border-color .2s,transform .2s}
+.relation-card.is-focused{border-color:#a873cc;box-shadow:0 0 0 1px rgba(147,51,234,.25),0 7px 30px rgba(147,51,234,.13)}
+.relation-card .relation-explanation{font-size:11px;line-height:1.9;color:#b4a8c1;margin:15px 0 13px;min-height:42px}
+.relation-card .relation-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.relation-card .relation-actions button{border:1px solid #3b3048;border-radius:8px;background:#201728;color:#e0c8f1;padding:6px 10px;font:600 10px var(--latin)}
+.relation-card .relation-actions button:hover{border-color:#ac74d2}
+.relation-card .relation-actions .relation-source{color:#9985aa;font:600 9px var(--latin);margin-inline-start:auto}
+.relation-empty{grid-column:1/-1;text-align:center;border:1px dashed #342943;border-radius:13px;padding:30px;color:#a797b8}
+.graph-lines .repo-connection{pointer-events:none;stroke-width:2.4;opacity:.72;fill:none;stroke-linecap:round;stroke-dasharray:7 7}
+.graph-lines .repo-connection.is-focused{stroke-width:5;opacity:1;stroke-dasharray:none;filter:drop-shadow(0 0 8px rgba(192,132,252,.6))}
+.graph-lines .repo-connection.is-dimmed{opacity:.13}
+.graph-repo.is-related-focus{border-color:#d0a2fa;box-shadow:0 0 0 2px rgba(192,132,252,.15),0 0 20px rgba(192,132,252,.25);background:#392149}
+.map-relationship-note{display:flex;gap:8px;align-items:center;color:#bd9cd2;font:600 10px var(--latin);white-space:nowrap}
+.map-relationship-note i{display:block;width:25px;height:0;border-top:2px dashed #b382e0}
+.decision-section{scroll-margin-top:95px;margin:0 0 58px}
+.decision-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:15px}
+.decision-kpi{border:1px solid #30243d;border-radius:13px;padding:15px;background:linear-gradient(135deg,#11101b,#0b0b12);min-height:112px}
+.decision-kpi .kpi-label{font:600 10px var(--latin);color:#aea0bc;line-height:1.65}
+.decision-kpi strong{display:block;font:700 27px var(--latin);color:var(--kpi-color,#dbb9f5);margin-top:10px}
+.decision-kpi small{font-size:10px;color:#786e88}
+.decision-controls{display:flex;align-items:center;justify-content:space-between;gap:11px;margin-bottom:12px;flex-wrap:wrap}
+.decision-sort{display:flex;align-items:center;gap:9px;font-size:11px;color:#a393b1}
+.decision-sort select{border:1px solid #40304e;border-radius:9px;padding:9px;background:#15101f;color:#ede0f5;font:600 11px var(--latin)}
+.decision-context{font-size:11px;color:#9185a1;line-height:1.8;margin-bottom:13px}
+.decision-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.decision-item{border:1px solid #30253b;background:linear-gradient(155deg,#13101d,#0c0a12);border-radius:14px;padding:19px;display:flex;flex-direction:column;min-width:0;gap:10px}
+.decision-item:hover{border-color:#6f4d86}
+.decision-topline{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.decision-severity{color:var(--signal-color,#c084fc);font:700 10px var(--latin);letter-spacing:.75px;border:1px solid color-mix(in srgb,var(--signal-color),transparent 65%);border-radius:7px;padding:4px 8px;background:color-mix(in srgb,var(--signal-color),transparent 93%)}
+.decision-data-tag{color:#8b7b9e;font:600 10px var(--latin);text-align:end}
+.decision-item h3{font:700 16px var(--latin);line-height:1.55;margin:0;color:#f4eaff;overflow-wrap:anywhere}
+.decision-item p{font-size:11px;color:#aea0bb;line-height:1.95;margin:0;flex:1}
+.decision-bottom{border-top:1px solid #332641;margin-top:3px;padding-top:12px;display:flex;gap:9px;align-items:center;justify-content:space-between}
+.decision-bottom button,.decision-bottom a{border:1px solid #453055;background:#24172f;border-radius:8px;padding:7px 11px;color:#e5ccef;font:600 11px var(--latin)}
+.decision-bottom a{background:transparent}
+.decision-bottom button:hover,.decision-bottom a:hover{border-color:#b479d9}
+.decision-no-results{grid-column:1/-1;background:#100e17;border:1px dashed #403151;border-radius:12px;text-align:center;color:#ad9eb8;padding:28px}
+.decision-disclaimer{border-inline-start:3px solid #79549b;background:rgba(147,51,234,.05);padding:10px 14px;color:#8e819d;font-size:11px;line-height:2;margin:17px 0 0}
+@media(max-width:1150px){.decision-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.decision-list{grid-template-columns:1fr}}
+@media(max-width:720px){.relation-insights{grid-template-columns:1fr;padding:15px}.relation-insights button{width:100%}.decision-kpis{gap:8px}.decision-kpi{padding:12px;min-height:105px}.decision-kpi strong{font-size:22px}.decision-controls{align-items:flex-start;flex-direction:column}.decision-list{gap:9px}.decision-item{padding:15px}.relation-coverage{width:100%}}
