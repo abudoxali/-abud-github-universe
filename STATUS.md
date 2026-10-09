@@ -31,6 +31,8 @@ Owner visual/content review: **NOT YET RECORDED**.
 - PASS: Chromium CSP/no-referrer and reduced-motion verification; mobile smoke, no horizontal overflow and no uncaught JavaScript errors.
 - PASS: Static publication audit: 28 public repositories, **15 allowlisted site assets**, security checks and no stale relationships.
 - PASS: Real GitHub Pages deployment and public HTTPS fetch of the actual site and its added report JavaScript.
+- Final post-documentation regression verification: https://github.com/abudoxali/-abud-github-universe/actions/runs/37909267666 — **SUCCESS**, revision `a39ff9c98cf98a75306a8dcc6f711730ace98efb`. Browser, static audit, and public HTTPS passed.
+- A timing-sensitive V1.2 regression was caught in a CI rerun: the agent prompt could be rendered before public GitHub commit/CI evidence arrived. Fixed by dispatching `abud:project-activity` after the project activity panel updates and regenerating the prompt. The follow-up complete Playwright/HTTPS run passed. No commit/CI evidence is fabricated when requests have not completed.
 - Owner's **manual visual approval: PENDING**, independent of CI/HTTPS success.
 
 ### V2 status — defined, NOT SHIPPED
