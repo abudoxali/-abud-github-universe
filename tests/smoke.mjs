@@ -194,6 +194,14 @@ try {
   assert.equal(workSaved.stage,"review");
   assert.equal(workSaved.done,true);
   assert.equal(workSaved.focus.length,3);
+  assert.ok((await desktop.locator("#workHistoryList .work-history-event").count())>=3);
+  await desktop.locator("#workNoteProject").selectOption("RootRay");
+  await desktop.locator("#workNoteText").fill("Release blockers need review");
+  await desktop.locator("#workNoteAdd").click();
+  assert.match(await desktop.locator("#workHistoryList").textContent(),/Release blockers need review/);
+  await desktop.locator("#historyFilter").selectOption("all");
+  assert.equal(await desktop.locator("#historyFilter").inputValue(),"all");
+  console.log("PASS V1.5: local task/stage journal and authored project decision");
   await desktop.reload({waitUntil:"domcontentloaded"});
   await desktop.locator('#workProjects [data-work-project="RootRay"] .work-task.done').waitFor();
   assert.equal(await desktop.locator('#workProjects [data-work-stage="RootRay"]').inputValue(),"review");
@@ -207,13 +215,19 @@ try {
   assert.equal(exported.version,1);
   assert.equal(exported.focus.includes("ThreadForm"),true);
   assert.equal(exported.projects.RootRay.tasks.length,1);
+  assert.ok(exported.events.some(event=>event.project==="RootRay"&&event.kind==="note"));
+  assert.ok(exported.events.some(event=>event.project==="RootRay"&&event.kind==="task_done"));
 
   const safeImport={
     version:1,focus:["ThreadForm","Video_Factory","synthetic-private-test-repo"],
     projects:{
       ThreadForm:{stage:"blocked",tasks:[{id:"t1",title:"Verify real 3D workflow",done:false}]},
       "synthetic-private-test-repo":{stage:"blocked",tasks:[{id:"secret",title:"Never display private data",done:false}]}
-    }
+    },
+    events:[
+      {id:"private1",project:"synthetic-private-test-repo",kind:"note",detail:"Do not import this",at:"2026-10-09T08:00:00Z"},
+      {id:"public1",project:"ThreadForm",kind:"note",detail:"Check 3D flow",at:"2026-10-09T08:00:00Z"}
+    ]
   };
   await desktop.locator("#workImportFile").setInputFiles({
     name:"workboard.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(safeImport))
@@ -224,6 +238,9 @@ try {
   const sanitized=await desktop.evaluate(()=>window.ABUD_WORKBOARD.getSnapshot());
   assert.ok(!Object.keys(sanitized.projects).includes("synthetic-private-test-repo"));
   assert.ok(!sanitized.focus.includes("synthetic-private-test-repo"));
+  assert.equal(sanitized.events.length,1);
+  assert.equal(sanitized.events[0].project,"ThreadForm");
+  assert.ok(!(await desktop.locator("#workHistoryList").textContent()).includes("Do not import this"));
   // Restore initial editorial focus for unrelated acceptance checks.
   await desktop.evaluate(()=>{
     localStorage.removeItem("abud-os-workboard-v1");
@@ -232,6 +249,7 @@ try {
   await desktop.locator('#workProjects [data-work-project="RootRay"]').waitFor();
   assert.equal(await desktop.locator("#dailyLead h3").textContent(),"Video_Factory");
   assert.equal(await desktop.locator("#workProjects .work-project").count(),3);
+  assert.equal(await desktop.locator("#workHistoryList .work-history-event").count(),0);
   console.log("PASS V1.4: 3-project WIP cap, tasks, progress, persistence, custom daily focus, sanitized JSON import");
 
 
@@ -258,6 +276,7 @@ try {
   const pruned=await desktop.evaluate(()=>JSON.parse(localStorage.getItem("abud-os-workboard-v1")));
   assert.ok(!pruned.focus.includes("RootRay"));
   assert.ok(!Object.keys(pruned.projects).includes("RootRay"));
+  assert.ok(!pruned.events.some(event=>event.project==="RootRay"));
 
   await desktop.goto(url+"#project/RootRay",{waitUntil:"domcontentloaded"});
   await desktop.waitForURL(/#daily$/);
@@ -329,6 +348,7 @@ try {
   assert.equal(await mobile.locator("#decisionKpis .decision-kpi").count(),4);
   assert.equal(await mobile.locator("#relationGrid .relation-card").count(),6);
     assert.equal(await mobile.locator("#workProjects .work-project").count(),3);
+  assert.equal(await mobile.locator("#workHistoryList .work-history-empty").count(),1);
     await mobile.locator("#dailyLead h3").waitFor();
   assert.equal(await mobile.locator("#dailyQueue .queue-card").count(),2);
   await mobile.locator("#dailyLead a").first().click();
