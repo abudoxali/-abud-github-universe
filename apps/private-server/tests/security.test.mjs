@@ -68,7 +68,7 @@ test("Public safety and workspace input schema",()=>{
 test("Unauthenticated callers never access private metadata or workspace",async()=>{
  const server=app();
  try{
-  for(const u of ["/api/me","/api/repos","/api/repos/sample-private/status","/api/workboard"]){
+  for(const u of ["/api/me","/api/repos","/api/repos/sample-private/status","/api/workboard","/api/report.md"]){
    const r=await server.inject({method:"GET",url:u});
    assert.equal(r.statusCode,401,u);assert.match(r.headers["cache-control"],/no-store/);
    assert.equal(r.body.includes("sample-private"),false);
@@ -107,6 +107,14 @@ test("Owner session, scoped installation membership, origin and CSRF gate",async
   assert.equal(conflict.statusCode,409);
   const workspace=await server.inject({url:"/api/workboard",headers:authenticated});
   assert.equal(workspace.json().data.focus[0],"sample-private");
+  const ownerReport=await server.inject({url:"/api/report.md?days=30",headers:authenticated});
+  assert.equal(ownerReport.statusCode,200);
+  assert.match(ownerReport.headers["content-disposition"],/attachment;/);
+  assert.match(ownerReport.headers["cache-control"],/no-store/);
+  assert.match(ownerReport.body,/sample-private/);
+  assert.match(ownerReport.body,/Confidential owner export/);
+  assert.doesNotMatch(ownerReport.body,/rogue-repo/);
+
  }finally{await server.close();}
 });
 test("OAuth callback rejects missing state without calling GitHub",async()=>{
