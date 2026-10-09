@@ -3,7 +3,7 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V2.0 PRIVATE WORKSPACE ALPHA — CODE IMPLEMENTED, NOT DEPLOYED OR AUTHENTICATED LIVE**
+State: **V2.0 PRIVATE WORKSPACE BETA — AUTOMATED TESTS PASS; PRODUCTION NOT DEPLOYED**
 Private target domain: `os.abud.fun` (selected, DNS and TLS NOT verified)
 Public GitHub Pages: unchanged at `https://abudoxali.github.io/-abud-github-universe/`
 Owner visual/content review: **NOT YET RECORDED**.
@@ -22,6 +22,22 @@ Owner visual/content review: **NOT YET RECORDED**.
 - UI: responsive bilingual Arabic RTL and English LTR owner portal, approved repos, private/public badges, up to three focus projects, tasks, status document claims and exports.
 - Deployment references: isolated Nginx TLS vhost, isolated systemd service example, explicit fresh-database checks and live security acceptance checklist.
 - CI pipeline `.github/workflows/private-ci.yml` is separate from public Pages pipeline. It runs Node security tests and isolated PostgreSQL 16 integration tests in GitHub Actions, with no real OAuth/installation credentials.
+
+### V2.0 Beta milestone — Private execution and migration (2026-10-09)
+
+**Delivered on isolated V2 branch; NOT deployed to os.abud.fun.**
+
+- Extended the owner-only UI with manual stage selection (Backlog / In Progress / Blocked / Review / Done), bounded task event journal, and written decision/blocker notes.
+- Added an explicit, user-selected **V1 Workboard JSON import** supporting currently GitHub-App-authorized public or private project names. Import filters unauthorized names and obvious secrets, never auto-reads public site localStorage, never auto-saves, requires confirmation and a separate authenticated Save action.
+- Unsaved-change navigation warning and corrected logout state clearing.
+- Added tests that simulate **positive GitHub OAuth callback**, strict owner identity, single-use OAuth state, owner session, logout/revocation, and denial to alternate GitHub accounts. These are mocked GitHub responses, **not live OAuth approvals**.
+- Added per-process OAuth abuse throttling (20 requests per minute per perceived client IP, bounded map). This is a fallback; a production reverse-proxy rate limit is still required.
+- Verified revoked GitHub App repository membership removes the repo, tasks, notes, and document contents from response payloads and private reports.
+- Added Chromium browser smoke tests for desktop owner UI, authorized repo listing, manual stage, task completion, decision journal, bilingual layout, saving, opt-in import, guest/mobile login boundary and no localStorage copy of private workspace data.
+- CI run: https://github.com/abudoxali/-abud-github-universe/actions/runs/37917892804 — **SUCCESS**.
+- Evidence: **10/10** Node/backend/PostgreSQL security tests passed, **0 failed, 0 skipped**. Real ephemeral PostgreSQL 16 was used; Chromium desktop/mobile checks passed; public Pages artifact isolation check passed.
+- Real production PostgreSQL, OAuth credentials, selected GitHub App installation, Cloudflare DNS, HTTPS, Nginx, server deployment, cross-device auth and owner acceptance are still **UNVERIFIED**.
+- V2 remains **BETA CODE**, **NOT PRODUCTION**; PR #1 stays Draft, main remains the public GitHub Pages site.
 
 ### Automated verification — PASS
 - Isolated private-backend CI: https://github.com/abudoxali/-abud-github-universe/actions/runs/37912814286 — **SUCCESS**.
