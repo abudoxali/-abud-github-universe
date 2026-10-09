@@ -84,7 +84,8 @@
     $("#dailyDate").textContent=words.date+dateLabel(new Date());
     $("#navDailyLabel").textContent=isArabic()?"مركز اليوم":"Today";
     $("#drawerOpenHub").textContent=isArabic()?"افتح ملف المشروع التفصيلي ↗":"Open project hub ↗";
-    const list=priorityNames.map(name=>getRepo(name)).filter(Boolean);
+    const selected=window.ABUD_WORKBOARD?.getFocusNames?.() || priorityNames;
+    const list=selected.map(name=>getRepo(name)).filter(Boolean);
     const lead=list[0];
     $("#dailyLead").innerHTML=lead?'<div class="mini-kicker"><i></i>'+escapeHTML(words.lead)+'</div>'+
       '<h3>'+escapeHTML(lead.name)+'</h3>'+
@@ -289,6 +290,7 @@
     renderDaily();
     route();
     window.addEventListener("hashchange",route);
+    window.addEventListener("abud:workboard",renderDaily);
     window.addEventListener("abud:refresh",()=>{
       renderDaily();
       if(document.body.classList.contains("project-mode")||location.hash.startsWith("#project/"))route();
