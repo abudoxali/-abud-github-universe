@@ -13,6 +13,8 @@
 .relation-insights button{border:1px solid #7c4c9b;background:#38214c;border-radius:9px;color:#e9d6f6;font-size:11px;padding:10px 13px;white-space:nowrap}
 .relation-card{transition:border-color .2s,transform .2s}
 .relation-card.is-focused{border-color:#a873cc;box-shadow:0 0 0 1px rgba(147,51,234,.25),0 7px 30px rgba(147,51,234,.13)}
+.relation-card .relation-names a{border:1px solid #30273b;background:#191421;border-radius:8px;color:#e6d6ed;padding:8px 11px;font:600 11px var(--latin);overflow-wrap:anywhere;min-width:0;display:inline-block}
+.relation-card .relation-names a:hover{border-color:#a46fc5}
 .relation-card .relation-explanation{font-size:11px;line-height:1.9;color:#b4a8c1;margin:15px 0 13px;min-height:42px}
 .relation-card .relation-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .relation-card .relation-actions button{border:1px solid #3b3048;border-radius:8px;background:#201728;color:#e0c8f1;padding:6px 10px;font:600 10px var(--latin)}
