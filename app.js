@@ -227,7 +227,8 @@
   }
 
   function renderRelations() {
-    $("#relationGrid").innerHTML=DATA.relationships.map(rel =>
+    const publicNames=new Set(state.repos.map(r=>r.name));
+    $("#relationGrid").innerHTML=DATA.relationships.filter(rel=>publicNames.has(rel.from)&&publicNames.has(rel.to)).map(rel =>
       `<article class="relation-card">
         <span class="relation-kind">${html(T(rel.ar,rel.en))}</span>
         <div class="relation-names"><button type="button" data-open="${html(rel.from)}">${html(rel.from)}</button>
@@ -550,7 +551,8 @@
       const cached=JSON.parse(localStorage.getItem(metadataStore)||"null");
       if(!cached||!cached.timestamp||Date.now()-cached.timestamp>30*60*1000)return;
       if(!cached.metadata||typeof cached.metadata!=="object")return;
-      state.metadata=cached.metadata;
+      const visibleNames=new Set(state.repos.map(r=>r.name));
+      state.metadata=Object.fromEntries(Object.entries(cached.metadata).filter(([name])=>visibleNames.has(name)));
       state.lastSync=cached.timestamp;
     }catch(_){}
   }
