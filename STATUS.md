@@ -3,8 +3,40 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V1.1 DAILY COMMAND CENTER — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
+State: **V1.2 PROJECT INTELLIGENCE — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
 Owner visual/content review: **NOT YET RECORDED**.
+
+## V1.2 — Public Project Intelligence & AI Workflow (2026-10-09)
+
+**Scope:** Extend the public GitHub Universe into a practical reference with source-aware project cards, public status evidence and safe AI agent handoff prompts. No authenticated private data, backend, credential storage, or self-executing agent functionality.
+
+### Implementation
+- Weekly overview uses public GitHub `pushed_at` dates to show repositories with pushes in the last seven days, and explicitly distinguishes this from commits, completion, or released products. Partial/missing metadata is labeled.
+- On-demand `STATUS.md` reader rechecks the selected repository's public visibility before requesting the public root file from its default branch. Recognized status fields are displayed as **document claims**, with the document URL and SHA. Missing or unavailable files are not treated as completed.
+- Public markdown is untrusted and rendered as text only. Agent prompts do not blindly copy remote status text, embedded instructions or secret-looking values.
+- Agent handoff has two modes: **Agent 1 — audit/handoff only** and **Agent 2 — local coding execution**. Both are directly copyable and emphasize code-first verification, scoped work, tests, one `STATUS.md`, honest results and no secrets.
+- Generated prompts use curated objective notes with an explicit freshness qualification, document presence/SHA when verified, and publicly observed commit/CI outcomes with an explicit warning that CI success is **not** production readiness.
+- HTML, CSS, JS, desktop and mobile integration are additive; the V1.1 daily board and V1 sitemap are retained.
+
+### Tested and deployed
+- Full GitHub Actions run: https://github.com/abudoxali/-abud-github-universe/actions/runs/37900951102 — **SUCCESS**.
+- Node syntax and static asset validation: **PASS**.
+- Playwright Chromium desktop: 28 public cards, 8 clusters, search/filter, Arabic RTL / English LTR, original details: **PASS**.
+- V1.1 daily board and direct project hub with mocked public commit and workflow state: **PASS**.
+- V1.2 simulated public `STATUS.md` field display, safe Agent 1 and Agent 2 prompts, qualified SHA/CI evidence: **PASS**.
+- Seven-day public metadata availability and count: **PASS**.
+- Missing `STATUS.md` handled accurately on mobile: **PASS**.
+- Removed/private deep-link and synchronized-list protections: **PASS**.
+- Zoom/fit and mobile navigation/no horizontal overflow/zero JS exceptions: **PASS**.
+- GitHub Pages deployment and actual HTTPS retrieval of `index.html`, `app.js`, `command-center.js`, and `intelligence.js`: **PASS**.
+
+### Limitations / acceptance
+- Owner's visual/content acceptance is **PENDING**.
+- All repository visibility and freshness claims are subject to public GitHub API availability and rate limits; browser data may be stale.
+- Status percentage and release-readiness claims belong to source documents and require independent live/runtime verification.
+- GitHub Pages remains a **public static site only**; 16 private repositories at the last audit are excluded from its source catalog and runtime UI.
+- Historical public commits predating this catalog may still expose previously published names; no Git history rewrite was undertaken.
+- V1.3+ functionality and authenticated private data access are **NOT IMPLEMENTED**.
 
 ## V1.1 — Daily Command Center (2026-10-09)
 
