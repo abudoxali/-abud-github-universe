@@ -14,6 +14,22 @@ permissions:
 jobs:
   security-tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: abud_os_test
+          POSTGRES_USER: abud_test
+          POSTGRES_PASSWORD: abud_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U abud_test -d abud_os_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      TEST_DATABASE_URL: postgresql://abud_test:abud_test@127.0.0.1:5432/abud_os_test
     defaults:
       run:
         working-directory: apps/private-server
