@@ -207,6 +207,7 @@
   $("#agentExecute").addEventListener("click",()=>{mode="execute";promptUI();});
   $("#agentCopy").addEventListener("click",copyPrompt);
   window.addEventListener("hashchange",route);
+  window.addEventListener("abud:project-activity",()=>{if(routeName)promptUI();});
   window.addEventListener("abud:refresh",()=>{
     weekly();
     if(routeName&&!find(routeName)){sequence++;routeName=null;documentData=null;}
