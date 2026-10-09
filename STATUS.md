@@ -3,8 +3,43 @@
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
 Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V1.7 RELIABILITY & PRIVACY — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
+State: **V2.0 PRIVATE WORKSPACE ALPHA — CODE IMPLEMENTED, NOT DEPLOYED OR AUTHENTICATED LIVE**
+Private target domain: `os.abud.fun` (selected, DNS and TLS NOT verified)
+Public GitHub Pages: unchanged at `https://abudoxali.github.io/-abud-github-universe/`
 Owner visual/content review: **NOT YET RECORDED**.
+
+## V2.0 — Secure Owner-Only Workspace Alpha (2026-10-09)
+
+**Scope:** New isolated backend under `apps/private-server/` on branch `feat/v2-secure-os`. Keep the V1.x public site unchanged. This is **not** a production V2.0 release.
+
+### Implemented in source
+- Backend: Fastify on Node.js >=22. Isolated private server, default local-only port 3164, expected public origin `https://os.abud.fun`. No browser GitHub tokens.
+- Authentication: GitHub OAuth identity-only sign-in, one-time database-backed OAuth state, strict owner numeric ID + login validation, discard OAuth access token after identity check.
+- Authorization: opaque SHA-256 hashed, server-side PostgreSQL sessions, expiring HttpOnly Secure SameSite cookies; server-side logout; CSRF token and exact Origin checks on writes.
+- GitHub App: installed read-only **selected repository** access, permission gate rejecting all write scopes or unexpected owner; contents `STATUS.md` read on behalf of the installation, verifying membership on each request.
+- Data persistence: owner-scoped PostgreSQL workspace with revision-based 409 conflict prevention, validated task/focus/event formats. Private JSON is never uploaded to public GitHub Pages.
+- Private owner report: authenticated, `no-store` Markdown 7/30-day export, explicitly no permanent public download URL.
+- UI: responsive bilingual Arabic RTL and English LTR owner portal, approved repos, private/public badges, up to three focus projects, tasks, status document claims and exports.
+- Deployment references: isolated Nginx TLS vhost, isolated systemd service example, explicit fresh-database checks and live security acceptance checklist.
+- CI pipeline `.github/workflows/private-ci.yml` is separate from public Pages pipeline. It runs Node security tests and isolated PostgreSQL 16 integration tests in GitHub Actions, with no real OAuth/installation credentials.
+
+### Verified boundaries
+- Source tree contains only code and examples, not live app secrets. `.env.example` contains placeholders.
+- Existing public GitHub Pages `_site` allowlist and deployed dashboard are unchanged by this feature branch.
+- OAuth callback and GitHub App installation are **NOT** verified live, because actual app registrations/client secrets/private signing key and a selected installation have not been connected for this application.
+- No SSH/session or DNS editing connector for the current VPS/Cloudflare zone was available. **No DNS records were changed** and **no VPS deployment occurred**.
+- The isolated production PostgreSQL target has not been created, migrated or backed up, and cross-device access has not been verified live.
+- The old public repo Git history may expose earlier names; no history rewrite or destructive Git changes have occurred.
+- Manual visual acceptance and production access-control acceptance: **PENDING**.
+
+### Release gate
+1. Confirm actual VPS identity/current SSH authorization, spare port, app/service directory, new PostgreSQL DB name/role and backup strategy without altering other projects.
+2. Connect DNS management for the selected `os.abud.fun` subdomain; create the correct DNS record and install valid TLS.
+3. Owner authorizes a dedicated GitHub OAuth App and installs an owner-selected, read-only GitHub App. Put all credentials **server-side only**.
+4. Deploy a timestamped isolated release; verify OAuth owner/stranger flows, revoked installation, unauthenticated private reads, valid sessions and logout, CSRF, PostgreSQL migrations, encrypted transport, reports and cross-device workspace.
+5. Manual Arabic/English desktop/mobile acceptance and rollback/restore before marking V2 READY.
+
+**Next permitted work:** prepare and review the staged GitHub PR, then production configuration through a validated infrastructure integration. No release-ready claims before actual E2E.
 
 ## V1.6–V1.7 — Evidence-Based Reports & Hardening (2026-10-09)
 
