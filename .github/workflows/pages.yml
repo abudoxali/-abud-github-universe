@@ -52,3 +52,19 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify public Pages deployment
+        run: |
+          URL="https://abudoxali.github.io/-abud-github-universe/"
+          for attempt in $(seq 1 12); do
+            if curl -fsSL --max-time 15 "$URL" -o /tmp/abud-universe-index.html &&
+               grep -q "ABUD GitHub Universe" /tmp/abud-universe-index.html &&
+               curl -fsSL --max-time 15 "${URL}app.js" -o /tmp/abud-universe-app.js &&
+               grep -q "ABUD GitHub Universe" /tmp/abud-universe-app.js; then
+              echo "PASS live HTTPS: $URL"
+              exit 0
+            fi
+            echo "Waiting for Pages propagation ($attempt/12)"
+            sleep 5
+          done
+          echo "FAIL: public Pages HTTP verification did not pass"
+          exit 1
