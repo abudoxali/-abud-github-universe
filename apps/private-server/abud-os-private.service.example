@@ -1,0 +1,29 @@
+# Install separately from other production services, after verifying paths.
+# Replace /usr/bin/node with the verified Node 22 binary on the VPS.
+[Unit]
+Description=ABUD OS owner-only backend
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=abudos
+Group=abudos
+WorkingDirectory=/var/www/abud-os/current/apps/private-server
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/abud-os/private.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+# GitHub App PEM should be readable only by abudos; keep it under /etc/abud-os.
+
+[Install]
+WantedBy=multi-user.target
