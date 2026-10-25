@@ -1,0 +1,17 @@
+node_modules/
+_site/
+.claude/
+local/worlds.json
+local/workspace.json
+local/routing-policy.json
+.env
+.env.*
+
+local/company.db
+local/company.db-*
+local/backups/
+local/logs/
+local/runtime/
+local/qa/
+local/qa*/
+local/vps.json
