@@ -1,159 +1,137 @@
 # ABUD GitHub Universe
 
-A bilingual (Arabic RTL / English LTR), privacy-conscious **interactive map of the public GitHub repositories** owned by [abudoxali](https://github.com/abudoxali).
+ABUD GitHub Universe is a bilingual visual map of the owner's GitHub projects, with a local-first layer for organizing real Git checkouts into explicit worlds.
 
-**Live:** https://abudoxali.github.io/-abud-github-universe/
+## ABUD FUN Company OS: daily Windows use
 
-## What this is
+Double-click `Start-ABUD-OS.cmd` in this checkout. It starts the native Node.js bridge on `http://127.0.0.1:4172`, waits for its health endpoint, and opens the browser. It requires Node.js 22.13+ and the existing `local/company.db`. It does not install dependencies or run tests at startup. The bridge uses the existing OmniRoute environment/configuration and never changes OmniRoute's settings.
 
-An ABUD-styled visual command center with a project graph, status filters, search, product relationships, GitHub deep links, and a project details panel. It uses the dark purple design language from `abud.fun` without requiring a backend.
+Other actions (first argument of `Start-ABUD-OS.cmd`, or `./ABUD-OS.ps1 -Action <name>`):
 
-- Public-only snapshot reviewed on **2026-10-09**: **28 public repositories**. The connected account also held **16 private repositories**, which are **not displayed or included in `data.js`**.
-- The project catalog can change. New public repositories appear as `UNREVIEWED`; repositories that become private or are deleted disappear from the displayed list after the next successful public-API sync.
-- Public GitHub metadata (language, stars, last pushed) is refreshed automatically on page load and via **Sync GitHub**.
-- GitHub Actions refreshes the checked-in public catalog on push, manual runs, and approximately **every six hours** (schedules can be delayed by GitHub).
-- Human-curated product assessments are *not* changed by commit activity and should be verified against `STATUS.md` in each project before editing.
+| Action | What it does |
+|---|---|
+| `status` | Health, PID, uptime, memory, OmniRoute state, and how the previous session ended |
+| `stop` / `restart` | Graceful stop (and start). Add `-Force` only if the app no longer answers: it then terminates that same verified bridge PID |
+| `shortcut` | Creates a desktop shortcut |
+| `autostart-on` / `autostart-off` / `autostart-status` | Start at Windows sign-in through a shortcut in your own Startup folder (no admin, no service). The shortcut runs `start -AtSignIn` |
 
-## V1.1 — Daily Command Center
+**Sign-in start (`-AtSignIn`)**: up to three start attempts (5/15/45 s apart), the browser opened at most once and only if System → نظرة عامة → «فتح المتصفح عند الدخول» is on (stored in ignored `local/launcher.json`), then one hidden supervisor. The supervisor restarts the bridge only after an unclean exit (crash or external kill), at most three times per hour, and never after an owner `stop`/`stop -Force`. Attempts, successes, failures and supervisor restarts are written to ignored `local/runtime/launcher-state.json` and `local/logs/launcher.log`, and shown in System Center.
 
-The public GitHub Universe is now usable as a daily project reference:
+**OmniRoute at sign-in** uses OmniRoute's own supported mechanism, `omniroute autostart enable` (a hidden `OmniRoute.vbs` in the same Startup folder running `omniroute serve --no-open --tray`; it refuses to start a second instance when port 20128 is taken). The bridge never blocks on the router: it serves the company immediately, shows OmniRoute as offline, and the agents become available when the router answers. System → نظرة عامة shows both autostart states, the router's last successful connection and last failure, and offers enable/disable, «إعادة محاولة الاتصال» and «تشغيل OmniRoute» (`omniroute serve --daemon --no-open --no-tray`, only while it is offline). Recovery by hand:
 
-- **Daily Command Center** appears at the top of the homepage, emphasizing a single main focus and two adjacent tracks (currently Video Factory, ReplyOps, RootRay), plus a privacy-safe public-only inventory summary.
-- **Project Hub** pages use deep links like `#project/RootRay` and include the project's curated objective, review note, README/STATUS links, last public commit, latest GitHub Actions workflow and public repository metadata.
-- **Real-time evidence is read only and on demand**: public GitHub API requests are made only when a project detail page is opened, rechecking its public visibility first. Results are cached in the visitor's browser for 15 minutes. A missing workflow or failed API request is never shown as passing.
-- **Repository/CI activity is not product readiness**. A successful workflow run does not justify promoting a project to production-ready.
-- **Bilingual and responsive:** Arabic RTL / English LTR, direct project links, copyable next-action handoff, desktop and mobile layouts.
-- **Safety:** stale or private/deleted repo deep links are rejected after the public list refresh; no private repositories are deliberately requested or embedded in the site.
+```powershell
+omniroute serve --daemon --no-open --no-tray   # start the router now
+omniroute autostart status                      # or: enable / disable
+.\Start-ABUD-OS.cmd status                      # bridge, router, database
+.\Start-ABUD-OS.cmd autostart-off               # stop starting Company OS at sign-in
+```
 
-V1.1 is still **public-only**. An authenticated private workspace is a separate product milestone and must not be implemented by shipping private records or OAuth credentials through GitHub Pages.
+The launcher controls only the bridge PID it started (verified by command line and by the PID the health endpoint reports). It never touches OmniRoute or other Node.js processes and refuses to stop an unrelated listener. A stale PID file left by a crash or Windows restart is discarded without touching whatever process now owns that PID. Logs are saved under ignored `local/logs/` (the newest 30 starts are kept). `-NoBrowser` suppresses browser opening. No administrator privileges are needed.
 
-## V1.2 — Project Intelligence & AI Agent Workflow
+The bridge keeps a heartbeat in ignored `local/runtime/bridge-state.json`. If a session ends without a clean stop, the next start classifies it as a Windows restart, a logged fatal error, or an unexplained termination. It records that in the activity log and, except for a Windows restart, raises a notification. System → نظرة عامة shows the result.
 
-V1.2 extends the V1.1 daily board without introducing a backend or requesting private repository data.
+The internal Company OS has six Arabic workspaces: الرئيسية، المشاريع، العمل، الوكلاء، الموارد الذكية، النظام. Its SQLite database and backups stay under ignored `local/`. Project details show local Git state separately from read-only GitHub CLI data. GitHub intelligence requires an authenticated `gh` CLI; unavailable data is shown as unavailable. Backups are integrity checked. System → البيانات والنسخ → **اختبار الاستعادة** copies a backup into a temporary folder, opens it, compares its records with the live store, and deletes the copy; the live database is never replaced. GitHub-confirmed account renames and repository transfers are folded into one project identity automatically (read-only `gh api` lookups).
 
-- **Weekly public activity** shows which public repositories have a GitHub `pushed_at` date within the last seven days. It counts *repositories with recent pushes*, not commits, engineering output, user adoption, or release completion. Missing or partial metadata is explicitly labeled.
-- **STATUS.md evidence** is fetched on demand from the root of the selected public repository. The browser first checks repository visibility, then requests only `STATUS.md` on the default branch. The UI extracts a few recognizable fields (Status, Updated, Completion, Phase, Blocker, etc.) and links back to the actual document.
-- **Evidence quality:** the UI calls values *document claims*, not runtime proof. Missing, oversized or unavailable status files are explicitly marked. Remote markdown is treated as untrusted data and is never rendered as executable HTML.
-- **Agent 1 / Agent 2 handoff:** select a copyable analysis-only handoff or an execution-focused local coding prompt. Both retain the repo identity, curated next action, optional verified STATUS blob SHA, and any publicly observed commit/CI evidence, with strong trust and security constraints. Neither blindly copies instructions or secret-looking values from remote status text.
-- **Bilingual:** Arabic RTL and English LTR, responsive cards and copy-ready English agent prompts.
-- **Security:** the public site remains public-only and uses no authentication tokens in frontend code. A private repository is never read by the status loader, and old project deep links cannot knowingly reveal hidden projects after public sync.
+### VPS Operations Center (النظام → السيرفرات)
 
-The `intelligence.js` and `intelligence.css` modules are deployed alongside `command-center.js` and `command-center.css`. Chromium tests cover public source parsing, Agent 1/2 prompts, qualified CI and commit evidence, weekly metadata, absent status files, private/deleted links and mobile usability.
+Hosts are registered in ignored `local/vps.json` (copy `local/vps.example.json`): address, SSH user, the pinned ED25519 host-key fingerprint (`ssh-keygen -F <address> -l`), the expected hostname, the linked project, the path of an SSH key that already works for that host, and a profile listing the PM2 services, systemd units, release folders and public URLs to watch. The key is used by path only; it is never read, copied, stored in SQLite, returned to the browser or sent to OmniRoute. The public repository contains only synthetic example host data, with no real server address or key path.
 
-**Limit:** this is an inspection and coordination reference, *not* an authenticated private project-management backend or autonomous coding service.
+- **Transport:** Windows OpenSSH with `-F none`, one identity, `BatchMode`, `StrictHostKeyChecking=yes` against your `known_hosts`, the pinned fingerprint checked on every connection, no agent/X11/port forwarding, no TTY, bounded time and output. The remote command is always `bash -s`; the script comes from a fixed library built only from validated profile values. A changed or substituted host key fails closed.
+- **Monitoring (no AI):** every 60 s one read-only probe (CPU sample, memory, swap, disks, uptime, systemd units, PM2 state filtered on the server so environment values never leave it); every 15 min the release/commit inventory, PostgreSQL availability and database sizes (no business data); HTTPS health every 2 min and TLS expiry every 6 h from this machine. No overlapping probes per host; failures back off up to 10 min. Raw samples are kept 3 days and rolled up hourly for 120 days; observations are kept 30 days.
+- **Incidents:** debounced (e.g. 3 failed SSH checks for "unreachable", 2 for a stopped production service, 5 sustained readings for CPU/memory), deduplicated (one notification and one owner task per unresolved condition), and closed automatically on recovery. A failed SSH check never marks a service stopped; the last verified state is shown with its age. A retired environment answering HTTP 410, or a protected one answering 401, is not an outage.
+- **Agents:** all six can read health, metrics, services, deployment and recent events (`vps.*` tools). ORI, NEX, REX and ZEN can run allowlisted read-only diagnostics; ORI, REX and ZEN can read bounded, redacted logs; ORI, NEX and REX can propose actions. No tool accepts a command. ORI's **تقييم البنية التحتية** workflow has NEX gather telemetry and REX review security indicators (both without AI), then ORI writes one assessment and LUNA files deduplicated follow-up tasks. Server-related chat requests receive fresh infrastructure evidence automatically.
+- **Actions:** only *restart one PM2 service* and *reload Nginx after `nginx -t`* exist. An agent or the owner proposes; the owner types the exact target to approve; the bridge issues a single-use token valid 5 minutes, takes a per-host lock, re-verifies the host, runs the one command, and marks success only after post-checks (PM2 online with a newer start time, or Nginx active, plus public health). Deployment, rollback, migrations, Nginx edits, firewall/SSH changes, release deletion and database restore are refused by this path.
 
-## V1.3 — Smarter Graph & Explainable Project Decisions
+`maxCostUsd` is checked after a paid response because the router reports its cost only then. If the cap is exceeded or cost is unknown, later paid requests in that domain pause until owner acknowledgement. It cannot guarantee a spending ceiling for the request already sent. Paid routes still require per-run approval.
 
-V1.3 makes the project reference **actionable without overstating what GitHub can prove**:
+To archive a task, open its details in Work Hub and choose **أرشفة المهمة**. Confirm the action. Archived tasks remain in SQLite and appear under **العمل → المنجزة → الأرشيف**, where they can be restored. Tasks with an active agent run cannot be archived.
 
-- **Six curated public-to-public relationships** are typed as potential scope overlap, succession, complementary workflows, or same-track portfolio links. Each has a bilingual rationale and a clear **EDITORIAL** provenance label. "Overlap" is not evidence of duplicate source code, nor is a visual relationship a confirmed dependency.
-- **Real repository-to-repository graph lines** are drawn on the existing pannable/zoomable universe. Filter relationship types, inspect both sides, and highlight a specific edge directly on the map. The drawing is recomputed after graph/search/visibility updates.
-- **Project Decisions** collects *review signals* instead of unverifiable automated completion scores: privacy-review categories, explicitly curated release gates, potential scope overlaps, unreviewed/new projects, and public repositories whose last known push was **90+ days ago**.
-- **Data coverage** is explicit: inactivity review only runs when an actual public GitHub `pushed_at` timestamp exists. No recent push is **not proof** of a broken, abandoned or unshipped product.
-- Signal filters and priority/name/oldest-push sorting are interactive on both desktop and mobile, with links to each public Project Hub.
-- Privacy is preserved end-to-end: when a repository becomes private or disappears from the public API, its public relationships, map lines, and associated review signals are removed at the next successful reconciliation.
-- The dashboard makes no destructive GitHub changes, and never merges or deletes repositories on a score or similarity guess.
+## What remains
 
-Implementation: `decisions.js` / `decisions.css`, typed editorial relationships in `data.js`, and a small sidebar navigation update in `app.js`. Existing V1.0–V1.2 workflows remain intact.
+- Interactive repository map, filters, relationships and Project Hub.
+- Public GitHub metadata refresh for `abudoxali`.
+- Device-local Workboard, journal and reports.
+- Local worlds loaded from `local/worlds.json`.
+- Read-only local Git status: branch, clean/dirty state, changed-file count, last commit and GitHub remote matching.
 
-## V1.4 — Local Personal Workboard
+There is no in-app login, OAuth flow, local PostgreSQL data store, GitHub App or GitHub write operation.
 
-The **Personal Execution Workboard** is a device-local feature for prioritizing work, not a replacement for GitHub issue tracking or a centralized database.
+## Local worlds
 
-- Select at most **three public repositories** as daily focus projects; the V1.1 Daily Command Center reflects that selection.
-- Add up to **20 brief actionable tasks per project**, mark completed/reopened, delete tasks, and choose a manual execution stage: Backlog, In progress, Blocked, Needs review, Done.
-- Save device-local workspace state using browser `localStorage`; it survives ordinary page reloads on the same browser, **not** browser clearing or automatic device syncing.
-- Export/import a structured JSON backup. Import limits payloads to 1MB and revalidates project membership, task lengths, data types and invalid/sensitive-looking entries. Records for private, deleted or otherwise non-public repos are skipped.
-- The workboard has **no authenticated backend**, cloud sync, secret management, or GitHub write permissions. Never enter passwords, keys, or other sensitive client data.
+The browser cannot read arbitrary folders on the computer by itself. The optional Local Bridge serves the Universe on loopback and reads only the explicitly configured Git folders.
 
-## V1.5 — Progress & Decision Journal
+```powershell
+Copy-Item local/worlds.example.json local/worlds.json
+# Edit local/worlds.json and replace each project path and GitHub owner/repository.
+cd apps/local-bridge
+npm test
+npm start
+```
 
-The workboard now includes a **local execution timeline**:
+Open http://127.0.0.1:4170. The local worlds panel appears only on localhost. `local/worlds.json` is ignored by Git; only the example configuration is committed.
 
-- Record brief manual decisions attached to currently focused public projects.
-- Automatically journal focus/unfocus, stage updates, task creation, task completion/reopening, and task deletion.
-- Filter activity by seven days, thirty days, or all available history.
-- Store **up to 150 events** in the same local workspace and include sanitized, public-only events in JSON exports/imports.
-- Clearly distinguish manually authored journal events from GitHub commits and real deployment evidence.
-- The timeline is not synchronized between devices; clearing browser storage loses the local journal unless exported.
+The bridge optionally reads the signed-in GitHub CLI account with `gh api user`. It never returns a token or local file contents. Install and authenticate GitHub CLI separately if you want the account badge; configured Git remotes work without it.
 
-## V1.6–V2.0 product direction — not yet implemented
+## ABUD FUN Company OS (internal, loopback only)
 
-- **V1.6 Reporting:** printable weekly review, public project evidence links, owner-confirmed decisions, and safe exports.
-- **V1.7 Quality & Privacy:** CI resilience, richer accessibility/browser support and a deliberate review of older public Git history. No history rewrite without owner approval.
-- **V2.0 Secure ABUD OS:** authenticated, private workspace with GitHub App/OAuth authorization and server-side API access, encrypted credentials, least-privilege permissions, audited private repository access and a backend/database hosted separately from public GitHub Pages. A static Pages site cannot guarantee private project confidentiality.
-- A complete private backend **must not be represented as shipped** without deployment, authorization, end-to-end tests and owner acceptance.
+When the Local Bridge is running, the Universe becomes **ABUD FUN Company OS**, an Arabic-first (RTL) internal platform with six areas: الرئيسية, المشاريع, العمل, الوكلاء, الموارد الذكية, and النظام. These views are served only by the bridge from `internal/` and are **not** part of the GitHub Pages artifact. The public site is unchanged.
 
-## V1.6 — Local Reports & Weekly Review
+Company data (projects, tasks, agents, runs, budgets, routing policies, quota history, activity, notifications, approvals and memory) is stored durably in `local/company.db` (SQLite via Node's built-in `node:sqlite`, ignored by Git). Backups go to `local/backups/`.
 
-The project dashboard can now generate a localized execution report from the **currently public** repo list, local Workboard and public GitHub metadata:
+```powershell
+# Node.js 22.13+ (node:sqlite). The router key stays in the bridge's environment; it never reaches the browser or the database.
+$env:OMNIROUTE_API_KEY = "<key from the OmniRoute dashboard>"
+# optional: $env:OMNIROUTE_BASE_URL = "http://127.0.0.1:20128"
+# optional, off by default: allow owner-APPROVED OmniRoute settings changes (PATCH /api/settings) to be applied
+# $env:ABUD_ROUTER_WRITES = "1"
 
-- Select the previous 7 or 30 days; review owner-defined focus, stages, completed/open tasks, blocked stages, and journal events.
-- Show the public GitHub metadata coverage ratio and recent `pushed_at` counts separately. A push or passing CI run is *not* interpreted as product completion, customers or validated production health.
-- Download a standalone UTF-8 Markdown review using browser-only Blob export, or invoke the browser's Print/PDF dialog with a white-background A4 print view.
-- The export is generated on demand from the current filtered public inventory and does not automatically send local data to GitHub or an external server.
-- Any post-snapshot repository privacy change still requires a successful public GitHub sync before the browser has a fresh visibility determination.
+Copy-Item local/workspace.example.json local/workspace.json   # authorize your repositories folder ("roots")
 
-Implementation: `reports.js` / `reports.css`. The feature builds on `workboard.js` and retains the single `STATUS.md`.
+cd apps/local-bridge
+npm test
+npm start            # http://127.0.0.1:4170 (daily use: Start-ABUD-OS.cmd on 4172)
+cd ../..
+node tests/ops.mjs      # browser checks on synthetic data
+node tests/stress.mjs   # load, aborted clients, router outage/recovery in a child bridge (STRESS_HEAP=1 adds post-GC heap)
+node tests/visual.mjs   # read-only screenshot sweep of a RUNNING bridge at five widths
+```
 
-## V1.7 — Reliability, Accessibility and Static Publication Audit
+Security model: the bridge binds to `127.0.0.1` and rejects foreign `Host`/`Origin` headers and cross-site requests. Company writes need a per-process session token, which only same-origin pages can read, plus a JSON body. Agent tool permissions are enforced on the server. There is no shell execution, arbitrary file access or open network tool. Paid inference and OmniRoute setting changes require explicit owner approval, and Google Antigravity consumer connections are never used by company agents. Nothing is written to GitHub or repositories.
 
-- Browser-delivered **Content Security Policy** (via HTML meta) restricts script loading to same-origin assets, public GitHub API as the only application network endpoint, trusted styles/fonts sources, and prevents object/embed content. GitHub Pages controls actual HTTP headers; a meta-delivered CSP is **not equivalent** to a custom server security-headers policy.
-- `referrer=no-referrer` avoids sharing page URLs in outgoing requests.
-- Visible `:focus-visible` keyboard outlines, `prefers-reduced-motion` support, and forced-colors focus adjustments.
-- Publish only an exact allowlist of the **15 static assets** needed by the site. `scripts/audit-static.mjs` checks deployment artifact membership, public-only catalog structure, stale relationship references, CSP/referrer metadata, and high-confidence credential signatures in catalog assets. The site is not served from the repo root.
-- Build verifies syntax, public API visibility reconciliation, real Chromium desktop/mobile behavior, safe weekly reports, Markdown export, Print/PDF trigger, private/deleted filtering and actual public HTTPS fetches.
-- No historical Git rewrite was performed. Old publicly available Git commits may still contain previously published private project names or other source artifacts; this release **does not remediate their historical exposure**.
+## Static preview
 
-## V2.0 security contract — design-only
-
-The private multi-device workspace is defined in [docs/V2_SECURE_WORKSPACE.md](docs/V2_SECURE_WORKSPACE.md).
-
-**Not shipped:** authentication, secure private GitHub API access, backend, database synchronization, private repository reports and live production permission testing. Those require an explicit backend host/domain, GitHub authorization installation, and external-service deployment acceptance. Never simulate private access using client-side GitHub tokens or static Pages assets.
-
-## Privacy boundaries
-
-The deployed site is public. It must contain **public repositories only**, even when the connected owner's GitHub integration can see private repositories. Never insert private names, sensitive records, environment values or credentials into site source files.
-
-**Important limitation:** Changing a repository from public to private does not erase its name from older, already-published Git commits or previously cached copies. The current site and scheduled inventory can stop displaying it, but a full public Git-history cleanup requires a separate, deliberate migration/history-rewrite decision. The app is not a private project manager or access-controlled dashboard.
-
-If GitHub's API is unavailable, the site uses its most recently reviewed public snapshot; it cannot guarantee that a repository made private after that snapshot disappears until the next successful sync.
-
-## Architecture
-
-- `index.html` — semantic bilingual dashboard markup
-- `styles.css` — site-aligned ABUD visual tokens and responsive layouts
-- `data.js` — public-only curated repository snapshot and relationships
-- `app.js` — graph, search, filtering, localization, details, public API reconciliation
-- `command-center.js` / `command-center.css` — V1.1 daily workspace, project pages, public commit/CI evidence
-- `intelligence.js` / `intelligence.css` — V1.2 weekly activity, STATUS.md source and Agent 1/2 prompts
-- `decisions.js` / `decisions.css` — V1.3 explainable signals, relationship types and graph edge overlays
-- `workboard.js` / `workboard.css` — V1.4–V1.5 device-local focus, tasks, stages, progress journal and safe JSON export/import
-- `reports.js` / `reports.css` — V1.6 printable/Markdown local reports
-- `scripts/audit-static.mjs` — V1.7 publish-time artifact/privacy allowlist
-- `scripts/sync-public.mjs` — safe public membership diff, preserves human assessments
-- `tests/smoke.mjs` — Chromium desktop/mobile and privacy-reconciliation checks
-- `.github/workflows/pages.yml` — sync, test, deploy, HTTPS smoke
-- `STATUS.md` — **single** canonical status report
-
-No build tools or private tokens are required in the browser. GitHub Actions uses its scoped token during scheduled inventory checks, never publishes that token, and only accepts `visibility: public` repositories.
-
-## Local preview
-
-```bash
+```powershell
 python -m http.server 8000
 ```
 
-Open http://localhost:8000.
+This serves the public Universe only. It does not expose local worlds because the Local Bridge API is not running there.
 
-The optional GitHub browser refresh needs network access and may be limited by the GitHub public API. The dashboard remains usable with the latest reviewed snapshot.
+## Architecture
 
-## CI / publication
+- `index.html`, `styles.css` — bilingual Universe shell and visual system
+- `data.js`, `app.js` — curated public catalog and public GitHub reconciliation
+- `command-center.js`, `intelligence.js`, `decisions.js` — public project evidence and relationships
+- `workboard.js`, `reports.js` — browser-local execution notes and reports
+- `local-worlds.js`, `local-worlds.css` — localhost-only local worlds UI
+- `apps/local-bridge/src/git.mjs` — config validation and read-only Git metadata
+- `apps/local-bridge/src/server.mjs` — loopback static server, host/origin guard and local API
+- `apps/local-bridge/src/omniroute.mjs` — allowlisted read-only OmniRoute adapter and quota/usage normalizers
+- `apps/local-bridge/src/agents.mjs` — Codex / Antigravity / Claude Code discovery adapters
+- `apps/local-bridge/src/workspace.mjs` — read-only repository discovery with per-repository cache
+- `apps/local-bridge/src/policy.mjs` — validated advisory quota/routing policy
+- `apps/local-bridge/src/db.mjs` — SQLite company store, migrations, backups
+- `apps/local-bridge/src/company.mjs` — company domain: projects, tasks, agents, budgets, policies, quota history, activity, notifications, approvals, memory
+- `apps/local-bridge/src/catalog.mjs` — the six AI employees, tool registry, policy domains, provider billing classes
+- `apps/local-bridge/src/runtime.mjs` — agent runtime: permission-checked tools, quota/budget/compliance-aware routing, run queue, multi-agent workflow, approval-gated router changes
+- `apps/local-bridge/src/nex.mjs` — NEX recommendations and the bounded quota-snapshot/notification loop
+- `internal/` — loopback-only Company OS views and agent artwork (not deployed to Pages)
+- `local/worlds.example.json` — safe configuration template
+- `.github/workflows/pages.yml` — public static validation and Pages deployment
 
-All pushes to `main`, scheduled inventory checks and manual GitHub Actions runs validate JS source, test the dashboard and V1.1 project hub in real Chromium (desktop and mobile), deploy via GitHub Pages and fetch the public HTTPS site.
+## Safety boundary
 
-[Latest Actions](https://github.com/abudoxali/-abud-github-universe/actions)
+The public catalog contains public repositories only. Local paths, private project names, credentials and file contents do not belong in `data.js`, the Pages artifact or committed configuration. The Local Bridge binds to `127.0.0.1` and exposes sanitized metadata only.
 
-## Ownership
+## License
 
-© ABUD FUN. Dashboard code is MIT licensed. Linked projects retain their own licenses and client rights.
+Dashboard code is MIT licensed. Linked projects retain their own licenses and client rights.

@@ -280,6 +280,15 @@ try {
   await mobile.click('.os-nav-link[data-view="resources"]');
   await mobile.waitForFunction(() => document.body.dataset.osView === "resources" && !document.body.classList.contains("os-side-open"));
   for (const view of VIEWS) for (const tab of TABS[view] || [null]) { await go(mobile, tab ? `#view/${view}/${tab}` : `#view/${view}`); await noOverflow(mobile, `mobile ${view}/${tab || ""}`); }
+  await go(mobile, "#view/system/servers", "#sysServers .vps-approval");
+  assert.match(await text(mobile, "#sysServers .vps-approval"), /pm2 restart lab-api/);
+  await mobile.fill("#sysServers .vps-approval input", "lab-api");
+  await mobile.click('#sysServers .vps-approval button:has-text("موافقة وتنفيذ")');
+  const dialog = await mobile.locator('.os-dialog[role="alertdialog"]');
+  await dialog.waitFor();
+  const bounds = await dialog.boundingBox();
+  assert.ok(bounds && bounds.x >= -1 && bounds.x + bounds.width <= 391, "mobile approval dialog stays inside the viewport");
+  await mobile.click('.os-dialog button:has-text("إلغاء")');
   console.log("PASS mobile: off-canvas navigation closes after use, no horizontal overflow on any workspace or tab");
 
   // ---------------------------------------------------------------- router offline

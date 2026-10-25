@@ -17,8 +17,8 @@ const ROUTES = {
   resources: "resources", "resources-quotas": "resources/quotas", "resources-providers": "resources/providers", "resources-routing": "resources/routing",
   system: "system", "system-activity": "system/activity", "system-settings": "system/settings",
   "system-integrations": "system/integrations", "system-data": "system/data", "system-security": "system/security",
-  "work-done": "work/done", "work-project": "work/project", "project-detail": "projects/p/gh:abudoxali/-abud-github-universe", "project-repo": "projects/p/gh:abudoxali/-abud-github-universe/repo",
-  "system-servers": "system/servers", "project-elhabak": "projects/p/gh:abudoxali/elhabak-construction-system-v1"
+  "work-done": "work/done", "work-project": "work/project", "project-detail": "projects/p/gh:abudoxali%2F-abud-github-universe", "project-repo": "projects/p/gh:abudoxali%2F-abud-github-universe/repo",
+  "system-servers": "system/servers", "project-elhabak": "projects/p/gh:abudoxali%2Felhabak-construction-system-v1"
 };
 const pick = routesArg === "all" ? Object.keys(ROUTES) : routesArg.split(",");
 
@@ -38,6 +38,14 @@ for (const width of WIDTHS) {
   for (const name of pick) {
     await page.evaluate((hash) => { location.hash = `#view/${hash}`; }, ROUTES[name]);
     await page.waitForTimeout(1300);
+    if (name === "project-elhabak") {
+      const detail = await page.locator("#prjDetail").innerText();
+      if (!detail.includes("الخادم:")) summary.errors.push(`${width} ELHABAK project server panel missing`);
+    }
+    if (["project-detail", "project-repo"].includes(name)) {
+      const detail = await page.locator("#prjDetail").innerText();
+      if (detail.includes("المشروع غير موجود")) summary.errors.push(`${width} ${name} project not found`);
+    }
     const overflow = await page.evaluate(() => {
       const doc = document.documentElement;
       const wide = [...document.querySelectorAll("body *")].filter((el) => { const r = el.getBoundingClientRect(); return r.width && (r.right > doc.clientWidth + 1 || r.left < -1) && !el.closest(".ops-tablewrap, .os-tabs, .os-parts, .co-board, [data-scroll-x]"); })
