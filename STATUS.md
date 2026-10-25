@@ -1,7 +1,7 @@
 # ABUD FUN Company OS — STATUS
 
 Updated: 2026-10-25 (Africa/Cairo)
-State: **V4.1 Release Candidate pending GitHub branch preservation.** Windows sign-in startup is enabled for OmniRoute and Company OS. The VPS is connected through read-only, host-key-pinned SSH and monitored live. All six agents have permission-controlled infrastructure tools. Server actions require owner approval for the exact target. A live ORI→NEX/REX→LUNA infrastructure review succeeded. The final regression and visual suites passed. `main` was not touched and nothing was deployed. Not verified: a real Windows sign-out/sign-in cycle or a live Tier-2 action.
+State: **V4.1 Stable Local Release.** Windows sign-in startup is enabled for OmniRoute and Company OS. The VPS is connected through read-only, host-key-pinned SSH and monitored live. All six agents have permission-controlled infrastructure tools. Server actions require owner approval for the exact target. A live ORI→NEX/REX→LUNA infrastructure review succeeded. The final regression and visual suites passed. The isolated release branch was pushed without force and its remote SHA verified. `main` was not touched and nothing was deployed. Not verified: a real Windows sign-out/sign-in cycle or a live Tier-2 action.
 
 ## V4.1 — current
 
@@ -25,7 +25,7 @@ State: **V4.1 Release Candidate pending GitHub branch preservation.** Windows si
 | Bounded start retries | Sign-in mode retries 3 times (5/15/45 s) and writes attempts, last success and last failure to `local/runtime/launcher-state.json` (shown in System Center). The browser opens at most once, after success, if the owner preference allows (default on, toggle in System → نظرة عامة). |
 | Data persistence | 40 projects, 7 tasks, 6 agents, 17 runs identical across 5 bridge restarts. Integrity `ok`, 0 FK violations. |
 - **Finding:** OmniRoute started from inside a coding-agent shell was ended together with that shell's process tree, while the same VBS launched detached kept running. This is a plausible explanation for the earlier unexplained V3 bridge exit. At real sign-in, Explorer launches both, so it does not apply.
-- **NOT VERIFIED — real Windows sign-out/sign-in:** it cannot be performed safely from this session. Everything a sign-in runs was exercised individually, using the exact registered command lines.
+- **Registered and tested through the startup commands; actual user sign-in acceptance remains unverified.** A real Windows sign-out/sign-in was not performed in this session.
 - System → نظرة عامة → «التشغيل عند تسجيل الدخول إلى Windows» shows both autostart states, supervisor state, last launcher success and failure, the router's last successful connection, last failure and reconnect count. It offers enable/disable, «إعادة محاولة الاتصال», and «تشغيل OmniRoute» (only while it is offline; OmniRoute itself refuses a second instance). Each control maps to one fixed argument vector; no request value reaches a command line.
 
 ### VPS Operations Center — LIVE VERIFIED (read-only)
@@ -75,7 +75,7 @@ State: **V4.1 Release Candidate pending GitHub branch preservation.** Windows si
 - Test isolation fixed: the stress test runs a *background* bridge and previously defaulted to the real `local/vps.json`, which would have started real SSH probes from a synthetic test. All test bridges now use isolated or absent VPS config and fake transports.
 
 ### Git release
-Release source: `cfaf3f6220ef313b2dc2a9cc52ab592632fffa04` on `release/v4.1-local`, following historical removal commit `f1c5227`. The V2 archive is verified at `origin/archive/v2-private-server-df7dc2c` (`df7dc2c`). Final documentation commit and non-force release-branch push are pending.
+Release source: `cfaf3f6220ef313b2dc2a9cc52ab592632fffa04` on `release/v4.1-local`, following historical removal commit `f1c5227`. QA and documentation commit `f9b23763922ce2fe6b47c04c612b73c19d69dadb` was pushed non-force and matched `origin/release/v4.1-local`; this acceptance update follows on the same branch. The V2 archive remains verified at `origin/archive/v2-private-server-df7dc2c` (`df7dc2c`). No merge, Pages deployment or VPS deployment occurred.
 
 ### Remaining limitations
 - Not exercised: a real Windows sign-out/sign-in or reboot (each component was verified individually), and a live Tier-2 action (needs the owner's own approval; staging is retired, so there is no non-production target).
@@ -85,7 +85,7 @@ Release source: `cfaf3f6220ef313b2dc2a9cc52ab592632fffa04` on `release/v4.1-loca
 - No physical-device QA; viewport checks are Chromium.
 
 ### Release classification
-**V4.1 Release Candidate pending remote source preservation.** Operational and visual acceptance passed on this Windows machine. The release is promoted to Stable Local Release after the final documentation commit is pushed and the remote SHA is verified.
+**V4.1 Stable Local Release.** Operational and visual acceptance passed on this Windows machine, and the isolated source branch is preserved on GitHub. Actual Windows sign-in and a live owner-approved Tier-2 action remain manual acceptance items.
 
 ---
 
