@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "thresholds": { "warnPercent": 20, "criticalPercent": 5 },
+  "retry": { "maxRetries": 2, "honorRetryAfter": true },
+  "priorityGroups": [
+    {
+      "id": "deep-reasoning",
+      "purpose": "Complex architecture and engineering problems only",
+      "models": ["provider-a/high-capability-model", "provider-b/high-capability-model"]
+    },
+    {
+      "id": "routine",
+      "purpose": "Classification, formatting and simple edits",
+      "models": ["provider-a/efficient-model"]
+    }
+  ],
+  "fallbackChains": [
+    {
+      "id": "coding-default",
+      "purpose": "Capability-compatible fallback for software engineering work",
+      "requires": "tools",
+      "steps": ["provider-a/high-capability-model", "provider-b/high-capability-model"]
+    }
+  ]
+}

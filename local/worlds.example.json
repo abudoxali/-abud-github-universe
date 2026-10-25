@@ -1,0 +1,21 @@
+{
+  "githubOwner": "abudoxali",
+  "worlds": [
+    {
+      "id": "main-world",
+      "name": "My Main World",
+      "ar": "العالم الرئيسي",
+      "en": "Main world",
+      "description": "Projects that are actively connected to the local workspace.",
+      "color": "#c084fc",
+      "projects": [
+        {
+          "id": "example-project",
+          "name": "Example Project",
+          "path": "C:\\Users\\YOU\\Documents\\GitHub\\YourProject",
+          "github": "abudoxali/YourProject"
+        }
+      ]
+    }
+  ]
+}

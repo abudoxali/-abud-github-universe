@@ -252,9 +252,6 @@
       let name;
       try { name = decodeURIComponent(hash.slice("#project/".length)); }
       catch (_) { window.location.hash = "#daily"; return; }
-      const secure = window.ABUD_PRIVATE_WORKSPACE;
-      if (secure && !secure.ready()) return;
-      if (secure?.getRepo(name)) { secure.showHub(name); return; }
       if (!getRepo(name)) {
         document.body.classList.remove("project-mode");
         $("#projectHub").hidden = true;

@@ -10,7 +10,7 @@ const files=(await readdir(root)).sort();
 const approved=[
  "app.js","command-center.css","command-center.js","data.js",
  "decisions.css","decisions.js","favicon.svg","index.html",
- "intelligence.css","intelligence.js","reports.css","reports.js",
+ "intelligence.css","intelligence.js","local-worlds.css","local-worlds.js","project-board.css","project-board.js","project-map.css","project-map.js","reports.css","reports.js","universe-experience.css","universe-experience.js",
  "styles.css","workboard.css","workboard.js"
 ].sort();
 assert.deepEqual(files,approved,"Unexpected files in publicly deployed artifact");
@@ -20,13 +20,18 @@ const [html,data,report,workspace]=await Promise.all([
 ]);
 assert.match(html,/<meta http-equiv="Content-Security-Policy"/);
 assert.match(html,/<meta name="referrer" content="no-referrer"/);
-for(const file of ["data.js","app.js","command-center.js","intelligence.js",
-    "decisions.js","workboard.js","reports.js"]){
+ for(const file of ["data.js","app.js","command-center.js","intelligence.js",
+    "decisions.js","workboard.js","reports.js","local-worlds.js","universe-experience.js","project-map.js","project-board.js"]){
  const code=await read(file);
  if(/-----BEGIN (?:OPENSSH|RSA|EC|DSA|PRIVATE) PRIVATE KEY-----/.test(code))
   throw Error("Private key signature found in public asset: "+file);
  if(/(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9_]{20,})/.test(code)&&file==="data.js")
   throw Error("Credential pattern found in catalog");
+}
+for(const file of files){
+ const code=await read(file);
+ if(/OMNIROUTE_API_KEY|[A-Za-z]:\\Users\\|\/local-api\/(?:omniroute|agents|workspace|policy|settings)/.test(code))
+  throw Error("Internal integration reference found in public asset: "+file);
 }
 const sandbox={window:{}};
 runInNewContext(data,sandbox,{timeout:5000});

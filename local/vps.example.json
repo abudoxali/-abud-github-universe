@@ -1,0 +1,26 @@
+{
+  "hosts": [
+    {
+      "id": "example",
+      "name": "Example VPS",
+      "provider": "Provider name",
+      "address": "203.0.113.10",
+      "port": 22,
+      "sshUser": "root",
+      "hostKeyFingerprint": "SHA256:<ED25519 fingerprint from: ssh-keygen -F <address> -l>",
+      "expectedHostname": "server-hostname",
+      "project": "owner/repository",
+      "identityFile": "C:/Users/YOU/.ssh/id_ed25519",
+      "knownHostsFile": "C:/Users/YOU/.ssh/known_hosts",
+      "profile": {
+        "environments": {
+          "production": { "base": "/var/www/app", "url": "https://example.com", "healthPath": "/api/health", "expected": "active" }
+        },
+        "pm2": [{ "user": "app", "services": [{ "name": "app-api", "environment": "production" }] }],
+        "systemd": ["nginx", "postgresql"],
+        "databases": ["app"]
+      }
+    }
+  ],
+  "monitoring": { "enabled": true }
+}

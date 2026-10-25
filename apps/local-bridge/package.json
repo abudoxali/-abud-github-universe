@@ -1,0 +1,14 @@
+{
+  "name": "abud-fun-company-os-bridge",
+  "version": "4.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test tests/*.mjs",
+    "check": "node --check src/git.mjs && node --check src/github.mjs && node --check src/server.mjs && node --check src/util.mjs && node --check src/omniroute.mjs && node --check src/agents.mjs && node --check src/workspace.mjs && node --check src/policy.mjs && node --check src/db.mjs && node --check src/catalog.mjs && node --check src/company.mjs && node --check src/runtime.mjs && node --check src/nex.mjs && node --check src/lifecycle.mjs && node --check src/vps.mjs && node --check src/vps-ssh.mjs && node --check src/vps-probes.mjs && node --check src/startup.mjs"
+  }
+}

@@ -30,6 +30,8 @@
   const copy = {
     ar: {
       workspace: "WORKSPACE / مساحة العمل", navOverview: "نظرة عامة", navMap: "خريطة المشاريع",
+      navWorldStage: "مسرح العوالم", navAgents: "نظام الوكلاء",
+      navWorlds: "عوالم الجهاز",
       navLibrary: "كل المستودعات", navRelations: "العلاقات والنسخ", navStrategy: "التركيز والقرارات",
       categoriesLabel: "CATEGORIES / التصنيفات", dataSource: "SOURCE OF TRUTH",
       dataSourceDetail: "يظهر على الموقع العام Repositories العامة فقط، ويُراجع GitHub تلقائيًا.",
@@ -63,10 +65,14 @@
       syncLimit: "معدل طلبات GitHub قد يكون محدودًا. جرّب لاحقًا.",
       repoCount: "مستودع ظاهر", unreviewed: "مستودع جديد لم يُراجع", newRepo: "UNREVIEWED",
       current: "تركيز أساسي", queued: "التالي", traction: "نمو وتوزيع",
-      footerAction: "الحالة ثابتة حتى مراجعتها يدويًا"
+      footerAction: "الحالة ثابتة حتى مراجعتها يدويًا",
+      worldConsoleTitle: "مسرح العوالم", worldConsoleSubtitle: "اختار المجال اللي عايز تشوفه، وبعدها انزل للتفاصيل والمشاريع المرتبطة به.", worldStageHint: "اختار عالمًا أو حرّك المؤشر لاستكشاف المدار", worldReadoutLabel: "العالم المختار", worldOpenMap: "استكشف مشاريع العالم ↗", worldReadoutNote: "البيانات التفصيلية تظهر محليًا عند تشغيل Local Bridge.",
+      agentSystemTitle: "نظام الوكلاء", agentSystemSubtitle: "مساحة جاهزة للفكرة القادمة، بدون تشغيل أو أتمتة قبل ما نحدد القواعد بوضوح.", agentSystemStatus: "قيد التصميم", agentSystemIntroTitle: "هنا هتعيش الوكلاء لاحقًا", agentSystemIntroText: "هنستخدم الصفحة لمتابعة الوكلاء، التشغيلات، السياسات، والسجل بعد ما تتحدد فكرتك. دلوقتي لا يوجد اتصال أو تنفيذ أو صلاحيات.", agentSystemBadge: "NOT CONFIGURED", agentSlotAgents: "الوكلاء", agentSlotAgentsText: "لا يوجد وكلاء معرفون بعد.", agentSlotRuns: "التشغيلات", agentSlotRunsText: "سجل التشغيل سيظهر هنا لاحقًا.", agentSlotPolicies: "السياسات", agentSlotPoliciesText: "الصلاحيات والقواعد لم يتم تحديدها.", agentSlotLogs: "السجل", agentSlotLogsText: "لا توجد أحداث تنفيذ لعرضها.", agentSystemNext: "الخطوة التالية: تحديد دور الوكيل، مصادره، وما الذي يسمح له بفعله داخل كل عالم."
     },
     en: {
       workspace: "WORKSPACE", navOverview: "Overview", navMap: "Project map", navLibrary: "Repositories",
+      navWorldStage: "World stage", navAgents: "Agent System",
+      navWorlds: "Local worlds",
       navRelations: "Relationships", navStrategy: "Focus & decisions",
       categoriesLabel: "CATEGORIES", dataSource: "SOURCE OF TRUTH",
       dataSourceDetail: "Only public repositories are shown. GitHub visibility is rechecked on page load.",
@@ -100,7 +106,9 @@
       syncLimit: "GitHub API rate limit may have been reached. Retry later.",
       repoCount: "repos shown", unreviewed: "new repo needing review", newRepo: "UNREVIEWED",
       current: "Main focus", queued: "Next", traction: "Growth",
-      footerAction: "Status remains curated until manually reviewed"
+      footerAction: "Status remains curated until manually reviewed",
+      worldConsoleTitle: "World stage", worldConsoleSubtitle: "Choose a domain, then move into its projects and local evidence.", worldStageHint: "Select a world or move across the orbit to explore", worldReadoutLabel: "Selected world", worldOpenMap: "Explore this world ↗", worldReadoutNote: "Detailed local evidence appears when the Local Bridge is running.",
+      agentSystemTitle: "Agent System", agentSystemSubtitle: "A reserved space for the next idea, with no execution or automation before the rules are clear.", agentSystemStatus: "IN DESIGN", agentSystemIntroTitle: "This is where agents will live later", agentSystemIntroText: "This page will hold agents, runs, policies and logs after the concept is defined. No connection, execution or permissions exist yet.", agentSystemBadge: "NOT CONFIGURED", agentSlotAgents: "Agents", agentSlotAgentsText: "No agents are defined yet.", agentSlotRuns: "Runs", agentSlotRunsText: "Execution history will appear here later.", agentSlotPolicies: "Policies", agentSlotPoliciesText: "Permissions and rules are not defined.", agentSlotLogs: "Logs", agentSlotLogsText: "There are no execution events to show.", agentSystemNext: "Next design input: define the agent role, its sources, and what it may do inside each world."
     }
   };
 
@@ -147,6 +155,7 @@
     $("#syncLabel").lastElementChild.textContent = state.lastSync
       ? C().synced + " · " + new Date(state.lastSync).toLocaleTimeString(state.lang === "ar" ? "ar-EG" : "en-US", { hour: "2-digit", minute: "2-digit" })
       : C().snapshot;
+    window.dispatchEvent(new Event("abud:language"));
   }
 
   function renderSidebar() {
@@ -265,6 +274,7 @@
       const [x, y] = graphLayout[cat.id];
       const cluster = document.createElement("section");
       cluster.className = "graph-cluster";
+      cluster.dataset.mapCategory = cat.id;
       cluster.style.cssText = `left:${x}px;top:${y}px;--accent:${cat.color}`;
       cluster.innerHTML = `
         <div class="cluster-heading"><div><div class="cluster-name"><b></b>${html(cat.en)}</div>
@@ -284,6 +294,8 @@
       path.setAttribute("stroke-width", "3");
       path.setAttribute("fill", "none");
       path.setAttribute("stroke-dasharray", "9 10");
+      path.dataset.mapCategory = cat.id;
+      path.classList.add("map-edge");
       svg.appendChild(path);
 
       const marker = document.createElementNS(SVG_NS, "circle");
@@ -291,6 +303,8 @@
       marker.setAttribute("cy", ty);
       marker.setAttribute("r", "5");
       marker.setAttribute("fill", cat.color);
+      marker.dataset.mapCategory = cat.id;
+      marker.classList.add("map-edge");
       svg.appendChild(marker);
     }
     $("#graphTotal").textContent = filtered().length + " REPOS";
@@ -476,7 +490,7 @@
       if (!top) return;
       $$(".nav-link").forEach(a => a.classList.toggle("current", a.getAttribute("href") === "#" + top.target.id));
     }, { rootMargin: "-15% 0px -60% 0px", threshold: [0, .2, .55] });
-    ["overview", "strategy", "map", "library", "relations", "decisions", "workboard"].forEach(id => {
+    ["overview", "worldConsole", "strategy", "map", "worlds", "library", "relations", "decisions", "workboard", "agentSystem"].forEach(id => {
       const target = document.getElementById(id); if (target) observer.observe(target);
     });
     $("#syncButton").addEventListener("click", syncGitHub);

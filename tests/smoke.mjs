@@ -73,7 +73,7 @@ async function mockPublicGitHub(page){
 const server = http.createServer(async (req,res) => {
   try {
     const name = decodeURI((req.url || "/").split("?")[0]).replace(/^\/+/, "") || "index.html";
-    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","decisions.js","decisions.css","workboard.js","workboard.css","reports.js","reports.css","favicon.svg"].includes(name)) {
+    if (!["index.html","styles.css","data.js","app.js","command-center.js","command-center.css","intelligence.js","intelligence.css","decisions.js","decisions.css","workboard.js","workboard.css","reports.js","reports.css","universe-experience.js","universe-experience.css","project-map.js","project-map.css","project-board.js","project-board.css","favicon.svg"].includes(name)) {
       res.writeHead(404).end("Not found");return;
     }
     const buf = await readFile(resolve(root,name));
@@ -91,6 +91,8 @@ try {
   desktop.on("pageerror",(error)=>errors.push(error.message));
   await mockPublicGitHub(desktop);
   await desktop.goto(url,{waitUntil:"domcontentloaded"});
+  await desktop.evaluate(()=>localStorage.removeItem("abud-universe-project-board-v1"));
+  await desktop.reload({waitUntil:"domcontentloaded"});
   await desktop.locator("#repoGrid .repo-card").first().waitFor();
   assert.equal(await desktop.locator("#repoGrid .repo-card").count(),expected,"The public repository catalog should render");
   assert.equal(await desktop.locator("#graphClusters .graph-cluster").count(),8,"All 8 clusters should render");
@@ -99,6 +101,61 @@ try {
   assert.match(await desktop.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content"),/script-src 'self'/);
   assert.equal(await desktop.locator('meta[name="referrer"]').getAttribute("content"),"no-referrer");
   await desktop.emulateMedia({reducedMotion:"reduce"});
+  assert.equal(await desktop.locator("#worldConsole").count(),1,"3D world console should render");
+  assert.equal(await desktop.locator("#agentSystem").count(),1,"Agent System placeholder should render");
+  await desktop.locator("button[data-world-focus='games']").click();
+  assert.equal(await desktop.locator("#worldStage").getAttribute("data-active-world"),"games","World selector should update active world");
+  assert.match(await desktop.locator("#worldSelectedName").textContent(),/Games|العوالم/);
+  assert.equal(await desktop.locator("#worldOpenLink").getAttribute("href"),"#worlds","Loopback world selector should route to local world evidence");
+  assert.match(await desktop.locator("#agentSystem").textContent(),/NOT CONFIGURED/);
+  console.log("PASS world console: 3D selector, keyboard-ready Agent System placeholder, public-safe routing");
+  assert.equal(await desktop.locator("#mapKpis .map-kpi").count(),4,"Map dashboard KPIs should render");
+  await desktop.locator("#mapSearch").fill("RootRay");
+  await desktop.locator("#mapListViewToggle").click();
+  assert.equal(await desktop.locator("#mapListView .map-list-row").count(),1,"Map list view should respect search");
+  await desktop.locator("#mapGraphView").click();
+  await desktop.locator("#mapSearch").fill("");
+  await desktop.locator("[data-map-filter='live']").click();
+  assert.equal(await desktop.locator("#mapKpis .map-kpi").first().textContent().then((text)=>text.includes("02") || text.includes("2")),true,"Map filters should update dashboard totals");
+  await desktop.locator("#mapFullscreen").click();
+  assert.equal(await desktop.locator("#map").evaluate((element)=>element.classList.contains("map-fullscreen")),true,"Map focus mode should expand to the application window");
+  await desktop.keyboard.press("Escape");
+  assert.equal(await desktop.locator("#map").evaluate((element)=>element.classList.contains("map-fullscreen")),false,"Escape should close map focus mode");
+  console.log("PASS map workspace: KPIs, search, list view, filters, inspector-ready focus mode");
+
+  // Board workspace: local project cards plus portable notes and editing tools.
+  await desktop.locator("#mapBoardViewToggle").click();
+  assert.equal(await desktop.locator("#mapBoardView").isVisible(),true,"Board view should open from the map view switcher");
+  assert.equal(await desktop.locator("#boardLanes .board-lane").count(),4,"Board should render four working lanes");
+  assert.ok((await desktop.locator("#boardSummary").textContent()).includes("مشروع") || (await desktop.locator("#boardSummary").textContent()).includes("projects"));
+  await desktop.locator("button[data-board-action='add']").click();
+  await desktop.locator("#boardComposer").waitFor({state:"visible"});
+  await desktop.locator("#boardComposer input[name='title']").fill("Board smoke note");
+  await desktop.locator("#boardComposer textarea[name='body']").fill("Local board editing works");
+  await desktop.locator("#boardComposer select[name='lane']").selectOption("ideas");
+  await desktop.locator("#boardComposer button[type='submit']").click();
+  assert.equal(await desktop.locator("#boardLanes article[data-board-id^='note:']").count(),1,"Board should add a local note card");
+  assert.match(await desktop.locator("#boardLanes").textContent(),/Board smoke note/);
+  await desktop.locator("#boardLanes [data-board-id^='note:'] [data-board-action='delete']").click();
+  assert.equal(await desktop.locator("#boardLanes article[data-board-id^='note:']").count(),0,"Board should delete a local note card");
+  await desktop.locator("[data-board-action='zoom-in']").click();
+  assert.equal(await desktop.locator("#boardZoom").textContent(),"110%","Board zoom should respond");
+  await desktop.locator("[data-board-action='fit']").click();
+  assert.equal(await desktop.locator("#boardZoom").textContent(),"100%","Board fit should reset zoom");
+  await desktop.locator("[data-board-action='focus']").click();
+  assert.equal(await desktop.locator("[data-board-action='focus']").evaluate((button)=>button.classList.contains("is-active")),true,"Board focus mode should activate");
+  assert.ok(await desktop.locator("#boardLanes article.board-card").count() > 0,"Board focus mode should keep focus cards visible");
+  await desktop.locator("[data-board-action='focus']").click();
+  await desktop.locator("[data-board-action='toggle-lane'][data-board-lane='ideas']").click();
+  assert.equal(await desktop.locator("section[data-board-lane='ideas']").evaluate((lane)=>lane.classList.contains("is-collapsed")),true,"Board lanes should collapse on demand");
+  await desktop.locator("[data-board-action='toggle-lane'][data-board-lane='ideas']").click();
+  await desktop.locator("#boardLanes article.board-project-card [data-board-select]").first().click();
+  assert.equal(await desktop.locator(".map-workspace").evaluate((workspace)=>workspace.classList.contains("map-has-selection")),true,"Board selection should open the in-map inspector");
+  assert.equal(await desktop.locator("#projectDrawer").getAttribute("aria-hidden"),"true","Board summary selection should not open the global project drawer");
+  await desktop.locator("#mapInspectorClear").click({force:true});
+  await desktop.locator("#mapGraphView").click();
+  await desktop.evaluate(()=>localStorage.removeItem("abud-universe-project-board-v1"));
+  console.log("PASS board workspace: lanes, local notes, delete, zoom and fit controls");
   const reduced=await desktop.locator("#workPin").evaluate(el=>getComputedStyle(el).transitionDuration);
   assert.match(reduced,/^(?:0s|0\.00001s|1e-05s)/);
   await desktop.emulateMedia({reducedMotion:"no-preference"});

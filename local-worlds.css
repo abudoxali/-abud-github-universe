@@ -1,0 +1,18 @@
+.local-worlds-section{margin:25px 0 65px;scroll-margin-top:90px}
+.local-account{display:flex;align-items:center;gap:8px;margin:-12px 0 20px;color:#c4b5fd;font-size:.9rem}
+.local-account strong{color:#f5f3ff}
+.local-worlds-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 17px}.local-worlds-summary>div{display:flex;align-items:baseline;gap:8px;padding:13px 15px;border-inline-start:2px solid #8f63b7;background:#100d18;color:#847a91}.local-worlds-summary strong{color:#efe7f7;font:700 21px var(--latin)}.local-worlds-summary span{font-size:.72rem}
+.local-worlds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.local-world-card{border:1px solid color-mix(in srgb,var(--world-accent) 45%,#27213b);border-radius:18px;padding:20px;background:linear-gradient(145deg,#151122,#0b0912);box-shadow:0 10px 32px #0005}
+.local-world-kicker{color:var(--world-accent);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase}
+.local-world-card h3{margin:8px 0 4px;color:#fff}
+.local-world-card>p{margin:0 0 16px;color:#aaa1bd;min-height:1.4em}
+.local-project-list{display:grid;gap:10px}
+.local-project-card{padding:14px;border-radius:12px;background:#0a0810;border:1px solid #29213a;display:grid;gap:7px}
+.local-project-head{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.local-project-status{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em}
+.local-project-status.clean,.local-project-meta.match{color:#34d399}.local-project-status.dirty,.local-project-meta.warning{color:#fbbf24}.local-project-status.error{color:#fb7185}
+.local-project-meta{font-size:.78rem;color:#948aa7}.local-project-commit{margin:0;color:#ddd6ee;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.local-project-card a{color:#c084fc;font-size:.82rem;text-decoration:none}.local-project-card a:hover{text-decoration:underline}
+.local-worlds-empty{grid-column:1/-1;padding:28px;border:1px dashed #514269;border-radius:16px;color:#aaa1bd}
+@media(max-width:700px){.local-project-head{align-items:flex-start;flex-direction:column}.local-worlds-summary{grid-template-columns:1fr}.local-worlds-summary>div{justify-content:space-between}}
