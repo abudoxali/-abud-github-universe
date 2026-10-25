@@ -1,6 +1,6 @@
 /* Company domain service over the local store. Every mutation validates its input, runs in a transaction and writes an
  * activity event. Errors are HttpError instances with a stable code and an Arabic message for the UI. */
-import { AGENTS, AGENT_IDS, DEFAULT_POLICIES, DOMAINS, MODES, TOOLS, CLASS_INFO, VPS_AGENT_TOOLS, agentById, modelClass } from "./catalog.mjs";
+import { AGENTS, AGENT_IDS, DEFAULT_POLICIES, DOMAINS, MODES, TOOLS, CLASS_INFO, VPS_AGENT_TOOLS, V5_AGENT_TOOLS, agentById, modelClass } from "./catalog.mjs";
 import { newId, nowIso, parseJson } from "./db.mjs";
 import { redact, text } from "./util.mjs";
 
@@ -127,7 +127,12 @@ export function createCompany({ db, now = () => new Date() }) {
 
   // ---------------- settings
   const SETTINGS_DEFAULTS = { locale: "ar-EG", timezone: DEFAULT_TZ, quotaSnapshotMinutes: 15, quotaRetentionDays: 30, schedulerConcurrency: 1, subscriptionOptIn: false,
-    inferenceTimeouts: { connectMs: 5000, headersMs: 30000, firstTokenMs: 25000, idleMs: 30000, totalMs: 90000 } };
+    inferenceTimeouts: { connectMs: 5000, headersMs: 30000, firstTokenMs: 25000, idleMs: 30000, totalMs: 90000 },
+    // Hosts ZEN may fetch (exact names, HTTPS or HTTP on default ports, public addresses only). Editable by the owner.
+    webAllowedHosts: ["developer.mozilla.org", "nodejs.org", "docs.github.com", "github.com", "raw.githubusercontent.com", "www.sqlite.org", "sqlite.org", "learn.microsoft.com", "en.wikipedia.org", "ar.wikipedia.org"],
+    telemetryRetentionDays: 14,
+    // Conversation context budget (estimated tokens) and retention for files of deleted conversations (0 = keep).
+    conversationContextTokens: 3000, attachmentRetentionDays: 0 };
   function settings() {
     const stored = Object.fromEntries(db.all("SELECT key, value FROM settings").map((row) => [row.key, parseJson(row.value, null)]));
     return { ...SETTINGS_DEFAULTS, ...stored };
@@ -143,6 +148,15 @@ export function createCompany({ db, now = () => new Date() }) {
     if ("quotaSnapshotMinutes" in patch) next.quotaSnapshotMinutes = numberIn(patch.quotaSnapshotMinutes, "quotaSnapshotMinutes", 5, 240, { integer: true, nullable: false });
     if ("quotaRetentionDays" in patch) next.quotaRetentionDays = numberIn(patch.quotaRetentionDays, "quotaRetentionDays", 7, 365, { integer: true, nullable: false });
     if ("subscriptionOptIn" in patch) next.subscriptionOptIn = patch.subscriptionOptIn === true;
+    if ("webAllowedHosts" in patch) {
+      const hosts = patch.webAllowedHosts;
+      const valid = (host) => typeof host === "string" && host.length <= 253 && /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?:\.(?!-)[a-z0-9-]{1,63})+$/.test(host) && !/^\d+(\.\d+){3}$/.test(host) && !/(^|\.)(localhost|local|internal|lan|home|corp)$/.test(host);
+      if (!Array.isArray(hosts) || hosts.length > 50 || !hosts.every(valid)) throw bad("validation", "قائمة المواقع المعتمدة غير صالحة: أسماء نطاقات عامة فقط (بدون عناوين IP أو أسماء محلية)، حتى 50 نطاقًا");
+      next.webAllowedHosts = [...new Set(hosts)];
+    }
+    if ("conversationContextTokens" in patch) next.conversationContextTokens = numberIn(patch.conversationContextTokens, "conversationContextTokens", 1000, 12000, { integer: true, nullable: false });
+    if ("attachmentRetentionDays" in patch) next.attachmentRetentionDays = numberIn(patch.attachmentRetentionDays, "attachmentRetentionDays", 0, 3650, { integer: true, nullable: false });
+    if ("telemetryRetentionDays" in patch) next.telemetryRetentionDays = numberIn(patch.telemetryRetentionDays, "telemetryRetentionDays", 1, 90, { integer: true, nullable: false });
     if ("inferenceTimeouts" in patch) {
       const bounds = { connectMs: [1000, 20000], headersMs: [5000, 120000], firstTokenMs: [5000, 120000], idleMs: [5000, 120000], totalMs: [20000, 300000] };
       const input = patch.inferenceTimeouts;
@@ -179,6 +193,13 @@ export function createCompany({ db, now = () => new Date() }) {
           const merged = [...new Set([...parseJson(row.tools, []), ...VPS_AGENT_TOOLS[agent.id]])];
           db.run("UPDATE agents SET tools = ?, updated_at = ? WHERE id = ?", JSON.stringify(merged), at(), agent.id);
           db.run("INSERT INTO import_ledger (ref, kind, imported_at) VALUES (?,?,?)", ref, "tools-grant", at());
+        }
+        // V5 grants the reviewed specialist capabilities the same way: once, and never re-adding what the owner removed.
+        const v5 = `tools-grant:v5-capabilities:${agent.id}`;
+        if (!db.get("SELECT ref FROM import_ledger WHERE ref = ?", v5)) {
+          const row = db.get("SELECT tools FROM agents WHERE id = ?", agent.id);
+          db.run("UPDATE agents SET tools = ?, updated_at = ? WHERE id = ?", JSON.stringify([...new Set([...parseJson(row.tools, []), ...V5_AGENT_TOOLS[agent.id]])]), at(), agent.id);
+          db.run("INSERT INTO import_ledger (ref, kind, imported_at) VALUES (?,?,?)", v5, "tools-grant", at());
         }
       }
       for (const [domain, policy] of Object.entries(DEFAULT_POLICIES)) {
@@ -554,7 +575,7 @@ export function createCompany({ db, now = () => new Date() }) {
 
   // ---------------- runs + usage
   const runRow = (row) => row && ({
-    id: row.id, agentId: row.agent_id, taskId: row.task_id, projectId: row.project_id, workflowId: row.workflow_id, parentRunId: row.parent_run_id,
+    id: row.id, agentId: row.agent_id, taskId: row.task_id, projectId: row.project_id, conversationId: row.conversation_id, workflowId: row.workflow_id, parentRunId: row.parent_run_id,
     capability: row.capability, domain: row.domain, mode: row.mode, priority: row.priority, request: row.request, status: row.status,
     requestedModel: row.requested_model, effectiveModel: row.effective_model, provider: row.provider, connectionId: row.connection_id ? row.connection_id.slice(0, 8) : null,
     routing: parseJson(row.routing, null), promptTokens: row.prompt_tokens, completionTokens: row.completion_tokens, reasoningTokens: row.reasoning_tokens,
@@ -758,26 +779,104 @@ export function createCompany({ db, now = () => new Date() }) {
   }
 
   // ---------------- memory
-  function listMemory({ scope = null, scopeRef = null } = {}) {
+  const memoryRow = (m) => ({ id: m.id, scope: m.scope, scopeRef: m.scope_ref, title: m.title, body: m.body, source: m.source, sourceRef: m.source_ref,
+    sourceAt: m.source_at, ownerAgent: m.owner_agent, approved: m.approved === 1, confidence: m.confidence, sensitivity: m.sensitivity, version: m.version,
+    retentionUntil: m.retention_until, state: m.state, reviewedAt: m.reviewed_at, createdAt: m.created_at, updatedAt: m.updated_at,
+    conflictsWith: m.conflicts_with ?? null, conflictState: m.conflict_state ?? null, supersededBy: m.superseded_by ?? null });
+  /** Same scope and the same normalized title but different content: a conflict to be decided by the owner. */
+  const normalizeTitle = (value) => String(value).toLowerCase().replace(/[\p{P}\p{S}]+/gu, " ").replace(/\s+/g, " ").trim();
+  function findConflict({ id = null, scope, scopeRef, title, body }) {
+    const key = normalizeTitle(title);
+    return db.all("SELECT * FROM memory_notes WHERE scope = ? AND scope_ref = ? AND state = 'active' AND id != ? LIMIT 400", scope, scopeRef ?? "", id ?? "")
+      .find((n) => normalizeTitle(n.title) === key && n.body.trim() !== body.trim()) ?? null;
+  }
+  /** Owner-only resolution. Nothing is deleted: the losing note is archived with `superseded_by`, both keep their
+   * provenance, and the decision is logged. "kept-both" clears the flag on both notes. */
+  /** Open conflicts with both sides, for the owner review view. */
+  function memoryConflicts() {
+    return db.all("SELECT * FROM memory_notes WHERE conflict_state = 'open' ORDER BY updated_at DESC LIMIT 50").map((n) => ({ note: memoryRow(n), other: n.conflicts_with ? (db.get("SELECT * FROM memory_notes WHERE id = ?", n.conflicts_with) ? memoryRow(db.get("SELECT * FROM memory_notes WHERE id = ?", n.conflicts_with)) : null) : null }));
+  }
+  function resolveMemoryConflict(id, decision, actor = { type: "owner", id: "owner" }) {
+    if (actor.type !== "owner") throw new HttpError(403, "owner-only", "حسم تعارض الذاكرة للمالك فقط");
+    const note = db.get("SELECT * FROM memory_notes WHERE id = ?", String(id));
+    if (!note) throw notFound("الملاحظة");
+    if (note.conflict_state !== "open" || !note.conflicts_with) throw new HttpError(409, "no-conflict", "لا يوجد تعارض مفتوح لهذه الملاحظة");
+    const other = db.get("SELECT * FROM memory_notes WHERE id = ?", note.conflicts_with);
+    if (!["kept-new", "kept-existing", "kept-both"].includes(decision)) throw new HttpError(422, "validation", "قرار غير صالح");
+    db.tx(() => {
+      if (decision === "kept-new") {
+        db.run("UPDATE memory_notes SET conflict_state = ?, approved = 1, reviewed_at = ?, updated_at = ? WHERE id = ?", decision, at(), at(), note.id);
+        if (other) db.run("UPDATE memory_notes SET state = 'archived', superseded_by = ?, updated_at = ? WHERE id = ?", note.id, at(), other.id);
+      } else if (decision === "kept-existing") {
+        db.run("UPDATE memory_notes SET conflict_state = ?, state = 'archived', superseded_by = ?, updated_at = ? WHERE id = ?", decision, other?.id ?? null, at(), note.id);
+      } else db.run("UPDATE memory_notes SET conflict_state = ?, approved = 1, reviewed_at = ?, updated_at = ? WHERE id = ?", decision, at(), at(), note.id);
+      log({ actorType: actor.type, actorId: actor.id, action: "memory.conflict.resolved", targetType: "memory", targetId: note.id, outcome: "info",
+        summary: `حسم تعارض الذاكرة «${note.title}»: ${{ "kept-new": "اعتماد الجديد وأرشفة القديم", "kept-existing": "الإبقاء على القديم وأرشفة الجديد", "kept-both": "الإبقاء على الاثنين" }[decision]}`, metadata: { other: other?.id ?? null, decision } });
+    });
+    return { note: memoryRow(db.get("SELECT * FROM memory_notes WHERE id = ?", note.id)), other: other ? memoryRow(db.get("SELECT * FROM memory_notes WHERE id = ?", other.id)) : null };
+  }
+  function listMemory({ scope = null, scopeRef = null, state = "active", approved = null, limit = 200 } = {}) {
     const where = [], params = [];
+    if (state) { where.push("state = ?"); params.push(state); }
     if (scope) { where.push("scope = ?"); params.push(scope); }
     if (scopeRef != null) { where.push("scope_ref = ?"); params.push(scopeRef); }
-    return db.all(`SELECT * FROM memory_notes ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC LIMIT 200`, ...params)
-      .map((m) => ({ id: m.id, scope: m.scope, scopeRef: m.scope_ref, title: m.title, body: m.body, source: m.source, approved: m.approved === 1, createdAt: m.created_at, updatedAt: m.updated_at }));
+    if (approved != null) { where.push("approved = ?"); params.push(approved ? 1 : 0); }
+    return db.all(`SELECT * FROM memory_notes ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC LIMIT ?`, ...params, Math.min(Math.max(Number(limit) || 200, 1), 200)).map(memoryRow);
   }
   function upsertMemory(input, actor = { type: "owner", id: "owner" }) {
     const scope = oneOf(input.scope, ["company", "project", "agent"], "scope");
     const scopeRef = scope === "company" ? "" : scope === "agent" ? oneOf(input.scopeRef, AGENT_IDS, "scopeRef") : ensureProject(input.scopeRef);
     const title = str(input.title, { field: "العنوان", max: 120, required: true });
     const body = str(input.body, { field: "المحتوى", max: 2000, required: true, multiline: true });
-    const existing = input.id ? db.get("SELECT id FROM memory_notes WHERE id = ?", String(input.id)) : null;
+    const existing = input.id ? db.get("SELECT * FROM memory_notes WHERE id = ?", String(input.id)) : null;
+    if (input.id && !existing) throw notFound("الملاحظة");
+    if (existing && actor.type !== "owner") throw new HttpError(403, "memory-owner-review", "تعديل ذاكرة موجودة يحتاج المالك");
+    const confidence = oneOf(input.confidence, ["verified", "supported", "unverified"], "confidence", existing?.confidence ?? "unverified");
+    const sensitivity = oneOf(input.sensitivity, ["internal", "restricted"], "sensitivity", existing?.sensitivity ?? "internal");
+    const state = oneOf(input.state, ["active", "archived"], "state", existing?.state ?? "active");
+    const sourceRef = input.sourceRef === undefined ? existing?.source_ref ?? null : str(input.sourceRef, { field: "مرجع المصدر", max: 400 });
+    const sourceAt = input.sourceAt === undefined ? existing?.source_at ?? null : input.sourceAt == null ? null : str(input.sourceAt, { field: "وقت المصدر", max: 40 });
+    const retentionUntil = input.retentionUntil === undefined ? existing?.retention_until ?? null : input.retentionUntil == null ? null : str(input.retentionUntil, { field: "تاريخ الاحتفاظ", max: 40 });
+    const approved = actor.type === "owner" ? (input.approved === undefined ? existing?.approved ?? 1 : input.approved ? 1 : 0) : 0;
+    const reviewedAt = actor.type === "owner" && approved ? at() : existing?.reviewed_at ?? null;
     const id = existing?.id ?? newId("mem");
+    const conflict = state === "active" ? findConflict({ id, scope, scopeRef, title, body }) : null;
     db.tx(() => {
-      if (existing) db.run("UPDATE memory_notes SET title=?, body=?, approved=?, updated_at=? WHERE id=?", title, body, input.approved === false ? 0 : 1, at(), id);
-      else db.run("INSERT INTO memory_notes (id, scope, scope_ref, title, body, source, approved, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)", id, scope, scopeRef ?? "", title, body, `${actor.type}:${actor.id}`, actor.type === "owner" ? 1 : 0, at(), at());
+      if (existing) db.run("UPDATE memory_notes SET scope=?,scope_ref=?,title=?,body=?,approved=?,owner_agent=?,source_ref=?,source_at=?,reviewed_at=?,confidence=?,sensitivity=?,version=version+1,retention_until=?,state=?,updated_at=? WHERE id=?",
+        scope, scopeRef ?? "", title, body, approved, scope === "agent" ? scopeRef : existing.owner_agent, sourceRef, sourceAt, reviewedAt, confidence, sensitivity, retentionUntil, state, at(), id);
+      else db.run("INSERT INTO memory_notes (id,scope,scope_ref,title,body,source,approved,created_at,updated_at,owner_agent,source_ref,source_at,reviewed_at,confidence,sensitivity,retention_until,state) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        id, scope, scopeRef ?? "", title, body, `${actor.type}:${actor.id}`, approved, at(), at(), scope === "agent" ? scopeRef : actor.type === "agent" ? actor.id : null, sourceRef, sourceAt, reviewedAt, confidence, sensitivity, retentionUntil, state);
+      if (conflict && !(existing?.conflict_state && existing.conflict_state !== "open")) {
+        db.run("UPDATE memory_notes SET conflicts_with = ?, conflict_state = 'open' WHERE id = ?", conflict.id, id);
+        // An agent's conflicting note never replaces owner-confirmed knowledge: it stays pending until the owner decides.
+        if (actor.type !== "owner") db.run("UPDATE memory_notes SET approved = 0 WHERE id = ?", id);
+        log({ actorType: actor.type, actorId: actor.id, action: "memory.conflict.detected", targetType: "memory", targetId: id, outcome: "info", summary: `تعارض محتمل مع «${conflict.title}» — بانتظار قرار المالك`, metadata: { other: conflict.id } });
+      }
       log({ actorType: actor.type, actorId: actor.id, action: existing ? "memory.updated" : "memory.created", targetType: scope === "project" ? "project" : "memory", targetId: scope === "project" ? scopeRef : id, summary: `ذاكرة ${({ company: "الشركة", agent: "الوكيل", project: "المشروع" })[scope] ?? scope}: ${title}` });
     });
-    return listMemory({ scope, scopeRef: scopeRef ?? "" });
+    return listMemory({ scope, scopeRef: scopeRef ?? "", state: null });
+  }
+  function searchMemory({ q, agentId = null, projectId = null, scope = null, scopeRef = null, includePending = false, limit = 20 } = {}) {
+    const terms = String(q ?? "").match(/[\p{L}\p{N}_]{2,}/gu)?.slice(0, 8) ?? [];
+    if (!terms.length) return [];
+    const match = terms.map((term) => `"${term.replaceAll('"', '""')}"*`).join(" AND ");
+    const where = ["memory_fts MATCH ?", "m.state = 'active'", "(m.retention_until IS NULL OR m.retention_until > ?)"];
+    const params = [match, at()];
+    if (agentId) {
+      if (!AGENT_IDS.includes(agentId)) throw bad("validation", "وكيل غير معروف");
+      where.push("m.approved = 1", "m.sensitivity = 'internal'", "((m.scope = 'company' AND m.scope_ref = '') OR (m.scope = 'agent' AND m.scope_ref = ?) OR (m.scope = 'project' AND m.scope_ref = ?))");
+      params.push(agentId, projectId ?? "");
+    } else {
+      if (!includePending) where.push("m.approved = 1");
+      if (scope) { where.push("m.scope = ?"); params.push(scope); }
+      if (scopeRef != null) { where.push("m.scope_ref = ?"); params.push(scopeRef); }
+    }
+    return db.all(`SELECT m.* FROM memory_fts JOIN memory_notes m ON m.rowid = memory_fts.rowid WHERE ${where.join(" AND ")} ORDER BY bm25(memory_fts), m.updated_at DESC LIMIT ?`, ...params, Math.min(Math.max(Number(limit) || 20, 1), 50)).map(memoryRow);
+  }
+  function reindexMemory() {
+    db.run("INSERT INTO memory_fts(memory_fts) VALUES ('rebuild')");
+    log({ action: "memory.reindexed", targetType: "memory", outcome: "success", summary: "إعادة بناء فهرس الذاكرة المحلي" });
+    return { indexed: db.get("SELECT COUNT(*) AS n FROM memory_notes").n, at: at() };
   }
   function deleteMemory(id) {
     const row = db.get("SELECT * FROM memory_notes WHERE id = ?", String(id));
@@ -876,7 +975,7 @@ export function createCompany({ db, now = () => new Date() }) {
     listPolicies, getPolicy, updatePolicy,
     recordQuota, quotaHistory, pruneQuota, lastQuotaObservation,
     createApproval, listApprovals, getApproval, setApprovalStatus,
-    listMemory, upsertMemory, deleteMemory, importBrowser, exportAll, at
+    listMemory, searchMemory, reindexMemory, upsertMemory, resolveMemoryConflict, memoryConflicts, deleteMemory, importBrowser, exportAll, at
   };
 }
 

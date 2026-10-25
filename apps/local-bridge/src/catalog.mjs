@@ -103,12 +103,13 @@ export const CAPABILITIES = {
   chat: { ar: "طلب عام", gather: ["project.read"], output: "free" },
   project_assessment: { ar: "تقييم حالة مشروع (سير عمل متعدد الوكلاء)", gather: [], output: "workflow" },
   creative_brief: { ar: "ملخص إبداعي", gather: ["project.read", "project.docs"], output: "free" },
-  resource_report: { ar: "تقرير موارد الذكاء الاصطناعي", gather: ["quota.read", "usage.read"], output: "free" },
+  resource_report: { ar: "تقرير موارد الذكاء الاصطناعي", gather: ["quota.read", "usage.read", "telemetry.agentStats", "telemetry.providerCompare"], output: "free" },
   task_breakdown: { ar: "قائمة متابعة ومهام", gather: ["project.read", "tasks.query"], output: "tasks" },
-  research_brief: { ar: "موجز بحثي", gather: ["project.read", "project.docs"], output: "free" },
-  security_review: { ar: "مراجعة أمنية", gather: ["git.status", "security.scan"], output: "free" },
+  research_brief: { ar: "موجز بحثي", gather: ["project.read", "project.docs", "knowledge.search"], output: "free" },
+  security_review: { ar: "مراجعة أمنية", gather: ["git.status", "security.scan", "security.gitleaks"], output: "free" },
   infra_review: { ar: "مراجعة حالة السيرفرات", gather: ["vps.getHealth", "vps.getMetrics", "vps.getDeploymentInfo", "vps.getRecentEvents"], output: "tasks", infra: true },
-  infra_assessment: { ar: "تقييم البنية التحتية (سير عمل متعدد الوكلاء)", gather: [], output: "workflow", infra: true }
+  infra_assessment: { ar: "تقييم البنية التحتية (سير عمل متعدد الوكلاء)", gather: [], output: "workflow", infra: true },
+  orchestration: { ar: "تنسيق متعدد الوكلاء (غرفة العمليات)", gather: [], output: "workflow" }
 };
 
 /** Tool registry. Handlers are bound in runtime.mjs; this is the reviewed contract shown in the UI. */
@@ -157,8 +158,121 @@ export const TOOLS = [
     input: { hostId: { type: "string", max: 40, required: false }, operation: { type: "enum", values: ["pm2.restart", "nginx.reload", "deploy.release", "deploy.rollback", "db.migrate", "db.restore", "nginx.edit", "firewall.change", "ssh.access", "release.delete"], required: true },
       service: { type: "string", max: 64, required: false }, reason: { type: "string", max: 500, required: true } } },
   { id: "vps.getActionResult", ar: "نتيجة إجراء خادم", description: "Status, verification result and pre/post state of a proposed or executed action.", readOnly: true, approval: "none", timeoutMs: 3000, ratePerMin: 20, tier: 0,
-    input: { actionId: { type: "string", max: 60, required: true } } }
+    input: { actionId: { type: "string", max: 60, required: true } } },
+
+  // ---- V5 specialist capabilities. Every one runs server-side in-process (no shell, no model-chosen arguments); external
+  // binaries run with a fixed argument vector against an authorized checkout only.
+  // ORI — company orchestration
+  { id: "company.overview", ar: "لقطة تشغيل الشركة", description: "Deterministic company snapshot: projects by status, open/overdue/blocked tasks, pending approvals, active runs.", readOnly: true, approval: "none", timeoutMs: 4000, ratePerMin: 30,
+    category: "orchestration", version: "5.0", output: "counts, blocked and overdue lists, pending approvals", input: { projectId: { type: "string", max: 120, required: false } } },
+  { id: "approvals.list", ar: "طلبات الموافقة المعلّقة", description: "Pending owner approvals (inference, router, capability and server actions) with their age.", readOnly: true, approval: "none", timeoutMs: 3000, ratePerMin: 30,
+    category: "orchestration", version: "5.0", output: "approvals with kind, age and requester", input: { status: { type: "enum", values: ["pending", "all"], required: false } } },
+  // MIA — creative production (sharp/libvips; Arabic text shaped by Pango)
+  { id: "design.statusCard", ar: "بطاقة حالة مشروع مصممة", description: "Renders a branded 1200×630 project status card from verified project data and stores it as an artifact.", readOnly: false, approval: "none", timeoutMs: 20000, ratePerMin: 10, maxConcurrent: 2,
+    category: "creative", version: "5.0", sideEffect: "artifact", adapter: "sharp", output: "PNG/WebP artifact",
+    input: { projectId: { type: "string", max: 120, required: true }, format: { type: "enum", values: ["png", "webp"], required: false }, theme: { type: "enum", values: ["violet", "light"], required: false } } },
+  { id: "design.brandGraphic", ar: "تصميم بصري بهوية الشركة", description: "Renders a branded announcement, milestone or agent-spotlight graphic from a reviewed template and stores it as an artifact.", readOnly: false, approval: "none", timeoutMs: 20000, ratePerMin: 10, maxConcurrent: 2,
+    category: "creative", version: "5.0", sideEffect: "artifact", adapter: "sharp", output: "PNG/WebP artifact",
+    input: { template: { type: "enum", values: ["announcement", "milestone", "agent-spotlight"], required: true }, title: { type: "string", max: 80, required: true }, subtitle: { type: "string", max: 140, required: false },
+      agentId: { type: "enum", values: ["ori", "mia", "nex", "luna", "zen", "rex"], required: false }, projectId: { type: "string", max: 120, required: false }, format: { type: "enum", values: ["png", "webp"], required: false } } },
+  { id: "image.optimize", ar: "معالجة صورة وتحسينها", description: "Re-encodes an owner image (artifact or conversation attachment): resize, convert, strip metadata. The original is kept.", readOnly: false, approval: "none", timeoutMs: 30000, ratePerMin: 10, maxConcurrent: 2,
+    category: "creative", version: "5.0", sideEffect: "artifact", adapter: "sharp", output: "optimized image artifact with before/after sizes",
+    input: { source: { type: "enum", values: ["artifact", "attachment"], required: true }, sourceId: { type: "string", max: 60, required: true }, conversationId: { type: "string", max: 60, required: false },
+      format: { type: "enum", values: ["webp", "png", "jpeg", "avif"], required: false }, maxWidth: { type: "integer", min: 64, max: 4096, required: false }, quality: { type: "integer", min: 40, max: 95, required: false } } },
+  { id: "design.saveCanvas", ar: "حفظ تصميم من لوحة القوالب", description: "Stores a PNG exported from the Fabric.js template editor as an artifact after server-side validation and re-encoding.", readOnly: false, approval: "none", timeoutMs: 20000, ratePerMin: 10, maxConcurrent: 2,
+    category: "creative", version: "5.0", sideEffect: "artifact", adapter: "fabric.js (browser) + sharp", output: "image artifact",
+    input: { title: { type: "string", max: 120, required: true }, imageBase64: { type: "base64", max: 6_000_000, required: true }, templateId: { type: "string", max: 60, required: false }, projectId: { type: "string", max: 120, required: false } } },
+  // NEX — resource intelligence (local OpenTelemetry spans + the persisted ledgers)
+  { id: "telemetry.agentStats", ar: "قياسات أداء الوكلاء", description: "Per-agent runs, success/failure, latency percentiles, tokens and known/estimated/unknown cost from persisted records.", readOnly: true, approval: "none", timeoutMs: 5000, ratePerMin: 30,
+    category: "telemetry", version: "5.0", adapter: "sqlite ledger", output: "per-agent statistics with measurement basis",
+    input: { range: { type: "enum", values: ["24h", "7d", "30d"], required: false }, agentId: { type: "enum", values: ["ori", "mia", "nex", "luna", "zen", "rex"], required: false } } },
+  { id: "telemetry.providerCompare", ar: "مقارنة المزوّدين والنماذج", description: "Per provider/model attempts, success rate, fallbacks and latency observed by ABUD runs.", readOnly: true, approval: "none", timeoutMs: 5000, ratePerMin: 30,
+    category: "telemetry", version: "5.0", adapter: "sqlite ledger", output: "provider/model comparison", input: { range: { type: "enum", values: ["24h", "7d", "30d"], required: false } } },
+  { id: "telemetry.toolLatency", ar: "زمن الأدوات وموثوقيتها", description: "Per-tool executions, failures, denials and p50/p95 latency from the tool audit.", readOnly: true, approval: "none", timeoutMs: 5000, ratePerMin: 30,
+    category: "telemetry", version: "5.0", adapter: "sqlite ledger", output: "per-tool reliability", input: { range: { type: "enum", values: ["24h", "7d", "30d"], required: false } } },
+  { id: "telemetry.traces", ar: "تتبع التنفيذ المحلي", description: "Recent local OpenTelemetry spans (runs and tool calls). Spans never leave this machine.", readOnly: true, approval: "none", timeoutMs: 4000, ratePerMin: 30,
+    category: "telemetry", version: "5.0", adapter: "@opentelemetry/sdk-trace → SQLite", output: "span list", input: { runId: { type: "string", max: 60, required: false }, limit: { type: "integer", min: 1, max: 200, required: false } } },
+  // LUNA — administration (ics, pdf-lib with shaped Arabic)
+  { id: "calendar.exportTasks", ar: "تصدير مواعيد المهام للتقويم", description: "Builds an .ics calendar of open task deadlines (optionally one project or assignee) and stores it as an artifact.", readOnly: false, approval: "none", timeoutMs: 8000, ratePerMin: 10,
+    category: "administration", version: "5.0", sideEffect: "artifact", adapter: "ics", output: "text/calendar artifact",
+    input: { projectId: { type: "string", max: 120, required: false }, assignee: { type: "string", max: 10, required: false } } },
+  { id: "report.executionPdf", ar: "تقرير تنفيذ PDF بالعربية", description: "Arabic PDF of company execution: task progress, deadlines, approvals awaiting follow-up, agent runs and deliverables.", readOnly: false, approval: "none", timeoutMs: 30000, ratePerMin: 6, maxConcurrent: 1,
+    category: "administration", version: "5.0", sideEffect: "artifact", adapter: "pdf-lib + @pdf-lib/fontkit", output: "application/pdf artifact",
+    input: { projectId: { type: "string", max: 120, required: false }, rangeDays: { type: "integer", min: 1, max: 90, required: false } } },
+  { id: "approvals.followupTasks", ar: "متابعة الموافقات المعلّقة", description: "Creates one deduplicated internal owner task per approval pending longer than the given age.", readOnly: false, approval: "none", timeoutMs: 5000, ratePerMin: 6,
+    category: "administration", version: "5.0", sideEffect: "internal-write", output: "created/skipped tasks", input: { olderThanHours: { type: "integer", min: 0, max: 720, required: false } } },
+  // ZEN — knowledge and research
+  { id: "web.extract", ar: "استخلاص صفحة ويب معتمدة", description: "Fetches one page from an owner-approved host (SSRF-guarded, size/time bounded, no script execution) and extracts readable text; optional knowledge ingestion.", readOnly: false, approval: "none", timeoutMs: 25000, ratePerMin: 6, maxConcurrent: 2,
+    category: "research", version: "5.0", sideEffect: "external-read", network: "public-web (approved hosts)", adapter: "@mozilla/readability + linkedom", output: "title, text excerpt, citation, untrusted-content warnings",
+    input: { url: { type: "url", max: 2000, required: true }, ingest: { type: "boolean", required: false }, projectId: { type: "string", max: 120, required: false } } },
+  { id: "knowledge.search", ar: "بحث في المعرفة المعتمدة", description: "Scoped local full-text retrieval (company + the given project) with citations and source freshness.", readOnly: true, approval: "none", timeoutMs: 3000, ratePerMin: 60,
+    category: "research", version: "5.0", adapter: "SQLite FTS5", output: "cited excerpts", input: { q: { type: "string", max: 300, required: true }, projectId: { type: "string", max: 120, required: false }, limit: { type: "integer", min: 1, max: 12, required: false } } },
+  { id: "knowledge.freshness", ar: "فحص حداثة مصادر المعرفة", description: "Reports stale sources: project documents changed since indexing and web pages older than the threshold (optional re-check of approved web pages).", readOnly: true, approval: "none", timeoutMs: 30000, ratePerMin: 6,
+    category: "research", version: "5.0", network: "public-web only when recheckWeb is true", output: "per-source freshness", input: { projectId: { type: "string", max: 120, required: false }, maxAgeDays: { type: "integer", min: 1, max: 365, required: false }, recheckWeb: { type: "boolean", required: false } } },
+  // REX — security and governance (bounded external scanners, authorized checkouts only)
+  { id: "security.gitleaks", ar: "فحص الأسرار (Gitleaks)", description: "Runs gitleaks on an authorized project checkout (recent history or uncommitted changes). Secret values are redacted and never stored.", readOnly: true, approval: "none", timeoutMs: 120000, ratePerMin: 4, maxConcurrent: 1,
+    category: "security", version: "5.0", adapter: "gitleaks binary (fixed arguments)", output: "findings: rule, file, line, commit — no secret values",
+    input: { projectId: { type: "string", max: 120, required: true }, mode: { type: "enum", values: ["history", "uncommitted"], required: false } } },
+  { id: "security.osv", ar: "فحص ثغرات الاعتماديات (OSV)", description: "Runs osv-scanner over the lockfiles of an authorized checkout. Sends package names and versions (not source code) to api.osv.dev, so every run needs owner approval.", readOnly: true, approval: "always", timeoutMs: 180000, ratePerMin: 2, maxConcurrent: 1,
+    category: "security", version: "5.0", network: "api.osv.dev (package metadata)", adapter: "osv-scanner binary (fixed arguments)", output: "vulnerable packages with advisory ids, severity and fixed versions",
+    input: { projectId: { type: "string", max: 120, required: true } } }
 ];
+
+/** Owner-facing Arabic descriptions (the English `description` stays as the technical contract). */
+const DESCRIPTION_AR = {
+  "project.read": "يقرأ سجل المشروع ونسخه المحلية ومهامه المفتوحة ومراحله.",
+  "project.docs": "مقتطف محدود ومنقّح من STATUS.md أو README لنسخة مصرّح بها.",
+  "git.status": "حالة Git المنقّحة: الفرع والتغييرات غير المحفوظة والتقدم والتأخر عن المستودع البعيد.",
+  "tasks.query": "يستعلم المهام المفتوحة حسب المشروع أو المسؤول.",
+  "tasks.create": "ينشئ مهمة داخلية في الشركة فقط، ولا يرسل أي شيء للخارج.",
+  "tasks.update": "يغيّر حالة مهمة داخلية.",
+  "usage.read": "ملخص الاستهلاك كما يرصده OmniRoute، مع وسم التقديرات.",
+  "quota.read": "نوافذ الحصص كما يبلغها المزوّدون عبر OmniRoute، والإقفالات المؤقتة.",
+  "activity.read": "آخر أحداث سجل نشاط الشركة.",
+  "security.scan": "فحوص حتمية: نصوص تشبه الأسرار في المستندات المعتمدة، وغياب المستودع البعيد، والعمل غير المحفوظ أو غير المرفوع.",
+  "router.settings.propose": "ينشئ طلب موافقة لتعديل إعداد في OmniRoute، ولا يطبّقه مباشرة.",
+  "vps.listHosts": "الخوادم المسجلة وحالة الاتصال وعمر البيانات.",
+  "vps.getHealth": "صحة الخادم الحالية (بعمر دقيقتين كحد أقصى): الموارد والخدمات والفحوص العامة والحوادث.",
+  "vps.getMetrics": "إحصاءات المعالج والذاكرة والقرص وزمن SSH المقيسة، مع سلسلة مختصرة.",
+  "vps.listServices": "آخر حالة متحقق منها لخدمات Nginx وPostgreSQL وPM2.",
+  "vps.getServiceStatus": "حالة خدمة واحدة وإعادات تشغيلها وذاكرتها وحوادثها الأخيرة.",
+  "vps.getDeploymentInfo": "الإصدار المنشور ومساره وبديل التراجع وتطابقه مع فحص الصحة العام.",
+  "vps.getRecentEvents": "حوادث آخر 7 أيام ونشاط البنية وفشل SSH والإجراءات المعلّقة.",
+  "vps.getRedactedLogs": "ذيل محدود من سجل معتمد بعد تنقيح الأسرار والعناوين والبريد.",
+  "vps.runSafeDiagnostic": "فحص تشخيصي واحد للقراءة فقط من قائمة معتمدة، ولا يقبل أوامر.",
+  "vps.createActionProposal": "يقترح إجراءً معتمدًا على الخادم، ولا ينفَّذ إلا بعد موافقة المالك على الإجراء نفسه.",
+  "vps.getActionResult": "حالة إجراء مقترح أو منفّذ ونتيجة التحقق منه.",
+  "company.overview": "لقطة حتمية لحالة الشركة: المشاريع حسب الحالة، والمهام المفتوحة والمتأخرة والمتعطّلة، والموافقات المعلّقة، والتشغيلات الجارية.",
+  "approvals.list": "طلبات الموافقة المعلّقة (استدلال، راوتر، قدرات، إجراءات خوادم) مع عمر كل طلب.",
+  "design.statusCard": "يصمم بطاقة حالة مشروع بهوية الشركة (1200×630) من بيانات المشروع الفعلية، ويحفظها ملفًا.",
+  "design.brandGraphic": "يصمم إعلانًا أو بطاقة إنجاز أو تعريفًا بوكيل من قالب معتمد، باستخدام صور الوكلاء كما هي.",
+  "image.optimize": "يعيد ترميز صورة للمالك: يغيّر الحجم والصيغة ويحذف البيانات الوصفية، مع الإبقاء على الأصل.",
+  "design.saveCanvas": "يحفظ تصميمًا مصدّرًا من استوديو القوالب بعد التحقق منه وإعادة ترميزه في الخادم.",
+  "telemetry.agentStats": "لكل وكيل: التشغيلات والنجاح والفشل وزمن التنفيذ والرموز، والتكلفة المعروفة والتقديرية وغير المعروفة.",
+  "telemetry.providerCompare": "مقارنة المزوّدين والنماذج كما رصدتها تشغيلات الشركة: المحاولات ونسبة النجاح والانتقال والزمن.",
+  "telemetry.toolLatency": "لكل أداة: عدد التنفيذات والفشل والرفض وزمن التنفيذ (p50/p95) من سجل التدقيق.",
+  "telemetry.traces": "أحدث مسارات التتبع المحلية (OpenTelemetry) للتشغيلات والأدوات، ولا تغادر هذا الجهاز.",
+  "calendar.exportTasks": "يصدّر مواعيد المهام المفتوحة إلى ملف تقويم ICS لمشروع أو مسؤول.",
+  "report.executionPdf": "تقرير PDF عربي لتنفيذ الشركة: تقدم المهام والمواعيد والموافقات المعلّقة وتشغيلات الوكلاء والملفات الناتجة.",
+  "approvals.followupTasks": "ينشئ مهمة متابعة واحدة للمالك لكل طلب موافقة معلّق أطول من المدة المحددة، دون تكرار.",
+  "web.extract": "يجلب صفحة من موقع اعتمده المالك بحماية من الوصول للعناوين الداخلية وبحدود للحجم والوقت، ويستخلص نصها، ويضيفها للمعرفة إن طُلب.",
+  "knowledge.search": "بحث محلي في المعرفة المعتمدة (الشركة والمشروع) مع المراجع وحداثة المصدر.",
+  "knowledge.freshness": "يكشف المصادر القديمة: مستندات مشاريع تغيّرت منذ فهرستها وصفحات ويب تجاوزت عمرها.",
+  "security.gitleaks": "يفحص نسخة مشروع مصرّح بها بحثًا عن أسرار (آخر 300 Commit أو التغييرات غير المحفوظة) دون حفظ أي قيمة سرية.",
+  "security.osv": "يفحص ثغرات الاعتماديات من ملفات القفل. يرسل أسماء الحزم وإصداراتها فقط إلى api.osv.dev، لذلك يحتاج موافقتك في كل مرة."
+};
+
+/** Category, version, adapter and side-effect metadata for the V4.1 tools, derived so their reviewed entries stay intact. */
+for (const tool of TOOLS) {
+  tool.descriptionAr ??= DESCRIPTION_AR[tool.id] ?? null;
+  tool.category ??= tool.id.startsWith("vps.") ? "infrastructure" : tool.id.startsWith("router.") ? "routing" : tool.id === "security.scan" ? "security" : ["usage.read", "quota.read"].includes(tool.id) ? "telemetry" : "company";
+  tool.version ??= "4.1";
+  tool.adapter ??= tool.id.startsWith("vps.") ? "vps service (pinned SSH, allowlisted probes)" : "in-process";
+  tool.sideEffect ??= tool.readOnly ? "none" : tool.id === "vps.createActionProposal" || tool.id === "router.settings.propose" ? "proposal" : "internal-write";
+  tool.network ??= tool.id.startsWith("vps.") ? "ssh (registered host)" : ["usage.read", "quota.read"].includes(tool.id) ? "loopback (OmniRoute)" : "none";
+  tool.output ??= "JSON";
+  tool.maxConcurrent ??= 4;
+}
 
 /** Infrastructure tools per agent: every agent can observe; diagnostics, logs and proposals follow each role. */
 export const VPS_READ_TOOLS = ["vps.listHosts", "vps.getHealth", "vps.getMetrics", "vps.listServices", "vps.getServiceStatus", "vps.getDeploymentInfo", "vps.getRecentEvents", "vps.getActionResult"];
@@ -173,8 +287,18 @@ export const VPS_AGENT_TOOLS = {
 for (const agent of AGENTS) {
   agent.tools.push(...VPS_AGENT_TOOLS[agent.id]);
   agent.capabilities.push("infra_review");
-  if (agent.id === "ori") agent.capabilities.push("infra_assessment");
+  if (agent.id === "ori") agent.capabilities.push("infra_assessment", "orchestration");
 }
+/** V5 specialist grants. Seeded once per agent (import ledger), so a later owner narrowing is never undone. */
+export const V5_AGENT_TOOLS = {
+  ori: ["company.overview", "approvals.list", "knowledge.search", "telemetry.agentStats"],
+  mia: ["design.statusCard", "design.brandGraphic", "image.optimize", "design.saveCanvas", "knowledge.search"],
+  nex: ["telemetry.agentStats", "telemetry.providerCompare", "telemetry.toolLatency", "telemetry.traces", "company.overview"],
+  luna: ["calendar.exportTasks", "report.executionPdf", "approvals.list", "approvals.followupTasks", "company.overview"],
+  zen: ["web.extract", "knowledge.search", "knowledge.freshness"],
+  rex: ["security.gitleaks", "security.osv", "approvals.list"]
+};
+for (const agent of AGENTS) agent.tools.push(...V5_AGENT_TOOLS[agent.id]);
 export const toolById = (id) => TOOLS.find((tool) => tool.id === id) || null;
 
 /** Validates tool input against its declared schema. Returns {ok, value|errors}. */
@@ -192,7 +316,21 @@ export function validateToolInput(tool, input) {
     } else if (rule.type === "enum") {
       if (!rule.values.includes(raw)) errors.push(`${key} must be one of ${rule.values.join(", ")}`);
       else value[key] = raw;
-    }
+    } else if (rule.type === "integer") {
+      if (!Number.isInteger(raw) || raw < rule.min || raw > rule.max) errors.push(`${key} must be an integer from ${rule.min} to ${rule.max}`);
+      else value[key] = raw;
+    } else if (rule.type === "boolean") {
+      if (typeof raw !== "boolean") errors.push(`${key} must be true or false`);
+      else value[key] = raw;
+    } else if (rule.type === "url") {
+      let parsed = null;
+      try { parsed = typeof raw === "string" && raw.length <= rule.max ? new URL(raw) : null; } catch (_) { parsed = null; }
+      if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) errors.push(`${key} must be an http(s) URL without credentials`);
+      else value[key] = parsed.href;
+    } else if (rule.type === "base64") {
+      if (typeof raw !== "string" || raw.length > rule.max || !/^[A-Za-z0-9+/]+={0,2}$/.test(raw)) errors.push(`${key} must be base64 up to ${rule.max} chars`);
+      else value[key] = raw;
+    } else errors.push(`${key} has an unsupported schema type`);
   }
   return errors.length ? { ok: false, errors } : { ok: true, value };
 }

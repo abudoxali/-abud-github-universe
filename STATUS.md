@@ -1,9 +1,284 @@
 # ABUD FUN Company OS — STATUS
 
-Updated: 2026-10-25 (Africa/Cairo)
-State: **V4.1 Stable Local Release.** Windows sign-in startup is enabled for OmniRoute and Company OS. The VPS is connected through read-only, host-key-pinned SSH and monitored live. All six agents have permission-controlled infrastructure tools. Server actions require owner approval for the exact target. A live ORI→NEX/REX→LUNA infrastructure review succeeded. The final regression and visual suites passed. The isolated release branch was pushed without force and its remote SHA verified. `main` was not touched and nothing was deployed. Not verified: a real Windows sign-out/sign-in cycle or a live Tier-2 action.
+## V5 — final release acceptance — 2026-10-26 (Africa/Cairo)
 
-## V4.1 — current
+**State: ABUD FUN Company OS V5 — operationally ready, awaiting the owner's manual Windows sign-in acceptance.** Everything else needed for the "Stable Local Release" classification was executed and verified on the owner's daily install. That covers backup and restore rehearsal, an isolated 5→11 migration and rollback rehearsal, the controlled cutover, OmniRoute repair, per-agent acceptance, a real multi-agent workflow, daily UI QA, the launcher and supervisor, read-only VPS checks, full regression and security. The one item that cannot be run from a session is a real Windows sign-out/sign-in; it is listed under owner steps. Branch `codex/v5-agent-intelligence`. The release is one local commit on top of V4.1 `ac7c6e8` (`release: finalize ABUD FUN Company OS V5 local stable`). **Nothing was pushed, merged into `main`, or deployed.**
+
+### Daily runtime (verified)
+- The daily Bridge runs V5 from this checkout on `http://127.0.0.1:4172`: apiVersion 5, schema 11, Node 24.11.0, one listener, one bridge process. The sign-in supervisor (alive since the V4.1 acceptance) adopted each restart.
+- **Launcher fix (release blocker):** `ABUD-OS.ps1 Get-Health` accepted only apiVersion 3, so starting V5 timed out after 20 s. It now accepts `apiVersion ≥ 3`, which keeps the launcher valid for a V4.1 rollback.
+- The launcher's `restart` (clean stop, WAL merged, then start) was run three times. An explicit `stop` → `status` ("stopped", no listener) → `start` was also run, and it came back healthy in about 3 s. A `start` against a healthy Bridge reuses it (`Using the healthy … PID`), with no duplicate process or listener. A conversation, two workflows and all knowledge survived each restart.
+- `launcher-state.json`: `lastSuccessAt` is newer than `lastFailure`. The recorded failure is the pre-fix 20 s health timeout at cutover. `ownerStoppedAt` is older than the running session's start, so the supervisor would still recover a crash. Its crash recovery was proven in the V4.1 acceptance (`supervisor restarted the bridge after an unclean exit`) and was not re-triggered on the daily store.
+
+### Database (verified)
+- **Pre-cutover preservation:**
+  - `refs/backup/v5-rc-pre-cutover` = `b24b5aa` snapshots the uncommitted V5 tree (140 files; only public `*.example.json` from `local/`).
+  - Live `VACUUM INTO` backup `local/backups/company-2026-10-25T23-19-55-127Z-561f0e0fae6e.db`: integrity ok, 0 FK violations, schema 5.
+  - A restore rehearsal from that copy reproduced every count.
+- **Isolated rehearsal on a copy:** 5→11 with integrity ok, 0 FK violations, no row lost, project ids stable, 9/9 task links, policies unchanged, idempotent second start. V4.1 code then served both the schema-5 and the schema-11 copy (40 projects, 9 open tasks, 17 runs). That is the rollback proof.
+- **Cutover:** the Bridge's automatic pre-migration copy `company-2026-10-25T23-24-28-967Z-940ccae1bfca.db` matches the pre-cutover counts. Every post-cutover difference was explained (migrations, ledger imports, quota/VPS observations, one activity entry and notification).
+- **After acceptance (read-only count):** integrity ok, 0 FK violations, schema 11, 40 tables. projects 40, tasks 19 (9 before + 10 follow-ups LUNA filed from the acceptance workflows), runs 40, workflows 3, tool executions 52, artifacts 6, knowledge documents 1, conversations 1, approvals 3, VPS incidents 4 (all recovered).
+
+### OmniRoute (verified live; policies changed through the owner API)
+- OmniRoute 3.8.52 on `:20128` is connected. Each candidate was probed with one bounded request:
+  - **Working:** `gemini/gemini-3.1-flash-lite` (3.0 s) and `gemini/gemini-3-flash-preview` (1.4 s).
+  - **Retired (410):** `nvidia/openai/gpt-oss-120b` and `nvidia/deepseek-ai/deepseek-v4-pro-0813`.
+  - **Unavailable at probe time:** the gemma free routes (429 cooldown), `gemini-3.8-flash` (timeout), `gemini-3.1-pro-preview` (429), `nemotron-3-super` (404), `nemotron-3.5-lightning` (empty output).
+- **Routing repair.** The policies were backed up first. Retired models were removed and working models placed first. `maxOutputTokens` is now 1,600–4,000 by domain, and the allowed classes (free, api-free-tier), paid approval, `maxRetries` 1 and the budgets are unchanged. OmniRoute's global account configuration was not touched.
+
+  | Domain | Candidates (in order) | maxOutputTokens |
+  |---|---|---|
+  | general | flash-lite, 3-flash-preview, gemma-31b:free | 3,200 |
+  | admin | flash-lite, flash-preview, gemma-26b:free | 1,600 |
+  | creative | flash-preview, flash-lite, 3.8-flash, gemma-31b | 2,400 |
+  | research | flash-preview, 3.8-flash, flash-lite, nemotron-super | 3,200 |
+  | analysis | flash-preview, flash-lite, 3.8-flash | 3,200 |
+  | security | flash-preview, flash-lite, 3.8-flash | 3,200 |
+  | coding | flash-preview, 3.8-flash, flash-lite | 4,000 |
+  | architecture | 3.1-pro-preview, flash-preview, 3.8-flash | 4,000 |
+
+- **Live daily chat** (LUNA): succeeded. **Live ORI syntheses:**
+  - Project Review: `gemini-3.1-flash-lite`, 1,539 in / 1,404 out tokens, 13.1 s.
+  - Two Security Reviews: `flash-lite` hit `first-output-timeout` on the larger prompt, and the next candidate `gemini-3-flash-preview` answered in 7.1 s. Fallback worked as designed.
+  - Cost is **unknown** (the router sent none), counted as unknown and never $0.
+
+### AI agents — per-agent acceptance on the daily install (verified)
+| Agent | Result |
+|---|---|
+| ORI | company overview, project read and approvals list: 4/4 ok |
+| MIA | status card; optimize 95,655 → 16,238 bytes (83% saved, metadata stripped); agent spotlight; template saved; artifact preview `image/png` with a sandbox CSP |
+| NEX | agent stats, provider comparison, tool latency, traces all ok; accounting reconciled |
+| LUNA | Arabic execution PDFs (project and company) ok. Calendar export refused honestly with `no-deadlines`, since no task has a due date. Follow-ups: 0 due |
+| ZEN | Project README import (12,181 bytes) now ok. Search returns cited results (`knowledge:doc_…#chunk-1`), freshness 1/1 fresh, approved-host `web.extract` ok, and the SSRF target `169.254.169.254` was refused |
+| REX | deterministic scan returned 1 finding. gitleaks history found 3 known synthetic fixtures, now labelled "in test files". Refusals for a path parameter, an ungranted agent (MIA) and OSV without confirmation |
+
+**Defects found and fixed during acceptance (each has a regression test):**
+1. **ZEN import refused this repository.** The checkout name "ABUD FUN Company OS" contains spaces and the source check rejected them. Inner spaces are now allowed, while leading/trailing spaces, absolute paths, `..`, backslashes and over-length names are still refused (`knowledge.test.mjs`).
+2. **Security Review always failed one secret scan as `tool-busy`.** Its two gitleaks steps started in parallel, but gitleaks allows one run at a time. The scheduler now holds a step while its tool is at its concurrency limit. The new test reproduces the daily failure without the fix and passes with it (`orchestration.test.mjs`).
+3. **ORI called synthetic test fixtures a "secret leak".** gitleaks findings in test files are now labelled (`inTestFile`, `findingsInTestFiles`) and the step summary says so. Nothing is suppressed, and a repository's own ignore file is still not honoured.
+4. **A second store opened in the same process repeated the pre-migration backup notice.** The marker is now reset on each open.
+
+### Multi-agent workflow (verified live, daily store)
+- **Project Review** `wf_1639cadd38f14551` on the public Company OS project **succeeded** in 19.9 s.
+  - All 7 steps succeeded: NEX overview + git, ZEN freshness, REX scan, MIA status card, ORI synthesis, LUNA follow-ups.
+  - Each step has its own child run under parent `run_6987fe9a13104571`, and each tool call is audited.
+  - The 5 evidence items (one artifact) were **all cited** (E1–E5), and LUNA filed 4 deduplicated follow-up tasks.
+- **Privileged-action rejection** used a safe fixture: the OSV dependency scan, which needs per-run approval because it sends package names to api.osv.dev.
+  - **Security Review** `wf_065986e252be4918` paused at `waiting-approval`. The owner rejected it, the approval was recorded as `rejected` by `owner`, the step was `skipped: rejected-by-owner`, and the workflow resumed and finished. OSV executions were 1 before and 1 after, so **no dependency data left the machine**. No VPS action was used.
+  - After fix 2, **re-run** `wf_f7d0ea3f06924931`: both secret scans succeeded in sequence. Only the optional OSV step was skipped, so the status is `partial` with `optional-incomplete`, which is correct.
+- **Persistence:** after a launcher restart, both workflows returned with all steps, evidence, reports and event logs (23 and 26 events).
+- **Owner review needed:** the first Security Review (before fix 3) made LUNA file the task "Revoke leaked API keys and JWT". It is based on the synthetic test fixtures, and the owner may archive it.
+
+### Accounting (verified)
+- 24 h on the daily store: 26 requests, 10 inferences, 38 tool calls. Per-agent sums equal the direct counts (runs 26/26, input tokens 12,709/12,709, tool calls 38/38), and the reconciliation check reports `ok`.
+- Cost: known $0 (0 events), estimated 2 events, unknown 8 events. Unknown is never shown as $0.
+- 60,000-row synthetic ledger: 30-day report p50 133 ms, reconciled; the time query uses `agent_runs_created`.
+
+### UI/UX (daily install, read-only)
+- `node tests/visual.mjs http://127.0.0.1:4172 local/qa-v5-daily 1440,1024,768,390,360 all`: **260 screenshots, 52 routes × 5 widths**, covering home, projects, work, the AI Workforce (team, Operations Room, conversations, tools, memory, knowledge, conflicts, runs, every agent workspace, MIA studio, ORI usage, LUNA files, ZEN chat, REX tools), resources (accounting, quotas, usage, providers, routing, NEX), system (servers, activity, settings, integrations, data, security) and project details.
+- **0 page overflow, 0 browser errors, 0 write requests.** The script records any non-GET request as an error.
+- Team view: 59.5 FPS, p95 frame 16.8 ms, robot script 0.39 ms/frame, 16.3 MB heap.
+- Inspected by eye: the 1440 Operations Room (security review with the owner's rejection, cited report, test-file label) and the 360 accounting view (reconciled badge, RTL charts).
+- Cosmetic, not fixed: in the narrow «الموارد» column of a workflow at 1440, the cost value wraps one word per line.
+- The six robots and their 12 forms are unchanged (`robot-qa`).
+
+### Windows startup
+- Autostart: `ABUD FUN Company OS.lnk` in the Startup folder runs `powershell.exe -WindowStyle Hidden -File …\ABUD-OS.ps1 -Action start -AtSignIn` (bounded retries 5/15/45 s at sign-in). OmniRoute starts from `OmniRoute.vbs` in the same folder. `autostart-status`: enabled.
+- **Not verified: a real Windows sign-out/sign-in with V5.** It was deliberately not triggered from the session (owner step 1).
+
+### VPS (read-only verification; no remote change)
+- Host `elhabak` is connected; the last observation was 26 s old and the probe took 3.8 s. The SSH host key is pinned (SHA256 fingerprint stored).
+- Services: nginx, postgresql, elhabak-api and elhabak-web running; the two staging services are retired. The production site is ok and staging is retired.
+- The 4 historical critical incidents (SSH unreachable or public health check failing on 2026-10-25) are all **recovered**.
+- 0 server actions exist or were created. Agents hold read tools only, plus `createActionProposal` for ORI, NEX and REX; executing a proposal stays owner-approved for the exact target.
+- V5 was **not** deployed to the VPS, and no remote service was restarted or modified.
+
+### Security (verified)
+- Write requests need the loopback session token, tool authorization is server-side, and approvals are owner-only in the runtime.
+- gitleaks 8.30.1 over every release candidate path (bridge src/tests/package.json, `internal/`, `tests/`, `scripts/`, `ABUD-OS.ps1`, STATUS.md): **0 findings in V5 changes**. The only hits are the 3 synthetic redaction-test inputs committed with V4.1 (`workspace.test.mjs:41`, `vps.test.mjs:142` with the public jwt.io sample, `runtime.test.mjs:371`).
+- `_site` was rebuilt exactly as `pages.yml` does and `audit-static` passed: 28 public entries, 23 allowlisted assets, CSP, no internal UI or private data.
+- `npm audit`: 0 vulnerabilities (all and production-only). No dependency data was sent to OSV.
+- Nothing staged or committed from `local/`, `_site/`, `.claude/`, `node_modules/`, env files, databases, backups, logs or SSH data.
+
+### Tests (final code)
+| Check | Result |
+|---|---|
+| `cd apps/local-bridge; npm test` | **154/154 pass** (151 + the knowledge checkout-name test + 2 orchestration tests) |
+| `npm run check` (28 modules), `node --check internal/*.js`, `git diff --check` | pass (line-ending notices only) |
+| `node tests/ops.mjs` (synthetic isolated bridges) | **25/25 PASS**, zero uncaught browser errors |
+| `node tests/robot-qa.mjs` | 6 identities, 12 forms, 9 states, unique SVG ids, 0 errors |
+| `node tests/smoke.mjs` | pass (desktop and mobile, no overflow, 0 errors) |
+| `node tests/stress.mjs 30` (isolated child bridge, temporary store) | pass: 3,017 requests, 0 server errors, 120 client aborts, router outage + recovery, same PID, integrity ok, 0 FK violations, 0 stuck runs. RSS rose 103 → 182 MB over the run, flattening to ~1 MB/round at the end. This is not a confirmed leak; watch the daily Bridge's memory in `status` |
+| `tests/v5-a11y.mjs` (isolated dev bridge) | 0 problems on 13 V5 screens; 25/25 focus rings; reduced motion = 0 animated frames |
+| `tests/v5-perf.mjs` (isolated dev bridge) | API p50 0.5–4.6 ms; 60k-row accounting p50 133 ms, reconciled |
+
+### Recovery and rollback
+1. **Stop:** `powershell -File .\ABUD-OS.ps1 -Action stop`. This is a clean stop; the supervisor does not restart after an owner stop.
+2. **Code rollback:** `git switch release/v4.1-local`. V4.1 code reads schema 11 (rehearsed), so no database rollback is needed for V4.1 to run.
+3. **Data rollback, only if needed:** with the Bridge stopped, restore `local/backups/company-2026-10-25T23-24-28-967Z-940ccae1bfca.db` (the automatic pre-migration copy, schema 5). Use **System → البيانات → استعادة** or copy it over `local/company.db` while nothing has the store open. Data created after the cutover would be lost.
+4. **Routing rollback:** the pre-repair policies were exported to `local/backups/routing-policies-pre-v5-2026-10-25T23-26-09Z.json` before any change. Re-enter those candidates and limits in Resources → التوجيه والميزانيات if needed.
+5. The V5 source snapshot before the cutover is `refs/backup/v5-rc-pre-cutover`, and the V5 Codex handoff is `refs/backup/v5-codex-handoff-40`.
+
+### Remaining work and limitations
+- **Owner acceptance:** a real Windows sign-out/sign-in (owner step 1).
+- Free routes are volatile. `flash-lite` timed out on larger security prompts, and fallback covered it. Re-probe if runs start failing.
+- Token counts are estimates until the router reports usage, and cost is mostly unknown on free routes.
+- PDF text extraction returns Arabic glyphs in visual order (rendering is correct). No physical-device QA was done (Chromium viewports only).
+- Synthetic temp folders `%TEMP%\abud-dev-bridge-*` left by stopped isolated dev bridges can be deleted by the owner; they contain only synthetic stores.
+
+### Owner steps to complete the Stable Local Release
+1. Sign out of Windows and sign back in. Within about a minute, run `powershell -File .\ABUD-OS.ps1 -Action status` and confirm "Healthy … apiVersion 5", "OmniRoute: connected", schema 11. Also check that `local/runtime/launcher-state.json` shows `"mode":"sign-in"` with a fresh `lastSuccessAt`. Then open the app once and confirm the robots and the Operations Room load.
+2. Optionally archive the follow-up task "Revoke leaked API keys and JWT" (based on synthetic fixtures).
+3. Decide later whether to push `codex/v5-agent-intelligence`. Nothing was pushed.
+
+---
+
+## V5 development record — 2026-10-25 (superseded where the final acceptance above differs)
+
+**State then: 95% — V5 Release Candidate (isolated-verified). All five checkpoints are implemented and pass isolated tests. A live OmniRoute workflow and a live chat succeeded on an isolated store. Not yet a verified release:** the daily store is not migrated, the work is not committed, and a real Windows sign-in with V5 has not been run (owner steps, listed at the end). Updated 2026-10-26. Branch `codex/v5-agent-intelligence`. HEAD is still the V4.1 commit `ac7c6e8`, and **all V5 work is uncommitted** in the working tree. Nothing was pushed or deployed. The daily Bridge (PID observed 26488, schema 5) was **not** restarted or migrated. Live V5 behavior in the owner's daily app is **NOT VERIFIED**. V4.1 remains on `release/v4.1-local`.
+
+### Session and routing (this session)
+- Claude Code 2.1.263 ran on the **native Anthropic API** (`ANTHROPIC_BASE_URL=https://api.anthropic.com`), not through OmniRoute. The owner first chose to relaunch through `omniroute launch`, then instructed this session to continue ("كمل"). OmniRoute 3.8.52 was healthy on `:20128` (1,633 models; `agy`/`antigravity`, `codex`, `gemini` routes listed). Provider quota limit and usage were reported as `null` (unknown); no quota is claimed. The Company OS agents' own OmniRoute runtime and budgets are unchanged and independent of Claude Code.
+- No application inference was spent in Checkpoint 3: every specialist capability is deterministic (no model call). Checkpoint 4 used live free-tier inference only on an isolated temporary store (below).
+
+### Checkpoint 1 — conversations — COMPLETE (isolated tests; Codex)
+Persistent threads, owner/assistant/tool/event messages, project/task links, SQLite BLOB attachments, streaming, search, pagination, rename/archive/restore/soft delete, stop/retry, concurrent-send protection, idempotent sends, bounded context. Migration 6. Unchanged this session.
+
+### Checkpoint 2 — memory and knowledge — COMPLETE (isolated tests; Codex)
+Memory provenance, scopes, owner review, FTS5 search, edit/archive/delete with index updates, knowledge documents, chunking, owner text and approved README/STATUS imports, citations and bounded retrieval. Migrations 7–8. Extended this session for web pages and freshness (below).
+
+### Checkpoint 3 — capability engine and specialist tools — COMPLETE (isolated tests + real safe executions) → 60%
+- **One registry, not a second engine.** The 22 reviewed V4.1 tools stay intact (VPS tools, grants, approvals, audits unchanged). They are extended to 40 capabilities in `catalog.mjs`. Each carries a stable id, Arabic name and description, category, version, adapter, input schema, output, approval tier, side effect, network requirement, timeout, rate limit and `maxConcurrent`. V5 grants are seeded once per agent through the import ledger, so the owner's later narrowing is never undone. Agents still cannot receive tools outside their reviewed set.
+- **Server-side enforcement (`runtime.invokeTool`).** Checks run in order: unknown tool → agent disabled → grant → owner kill switch → approval tier → strict schema (unknown fields refused; types string/enum/integer/boolean/url/base64) → rate → live dependency health → per-tool concurrency. Execution is cancellable and timeout-aborted, and every attempt (including refusals) is a persistent `tool_executions` row with a redacted input, summary, artifacts and duration. Each run and tool call is also a local OpenTelemetry span. The model never chooses tools or arguments.
+- **Migration 9** (`v5-capability-engine`): adds `tool_executions`, `artifacts` (BLOB, ≤8 MB), `capability_state`, `visual_templates` and `telemetry_spans`. It also rebuilds `knowledge_documents` to add `web-page` sources and freshness columns, with foreign keys suspended only for that migration and `foreign_key_check` before COMMIT. Tested from a real schema-8 file: chunks, FTS rows and cascade survive.
+- **Pre-migration safety net (new):** opening an existing file store that needs a schema upgrade first writes a `VACUUM INTO` copy to `local/backups/company-<ts>-<hex>.db`, verifies its integrity and schema, then migrates. On start, the Bridge logs and notifies which backup was taken. A failed copy stops the upgrade.
+- **Owner surfaces:** AI Workforce → «الأدوات والمهارات» offers a library grouped by category, with search that filters in place (focus kept), an agent filter, availability with reasons, grants and execution counts. It also has a tool console (form generated from the schema; approval-gated tools need an explicit confirmation that is recorded on the execution), result views (artifacts, charts, findings), «الملفات الناتجة» (preview, download, owner-only approval, archive, delete) and «سجل التنفيذ» (paginated audit). Each agent workspace gains specialist tools with an audit panel and «الملفات». MIA also gains «استوديو التصميم». V5 tabs appear only when the running bridge advertises `toolEngine`/`conversations`/`knowledge` in `/local-api/health` (apiVersion 5), so the V4.1 daily bridge serving these files stays usable.
+
+| Agent | Integrated tools (selected libraries) | Real functions | Tested result |
+|---|---|---|---|
+| ORI | MCP TypeScript SDK 1.32.2; in-process company tools | `company.overview`, `approvals.list`; **stdio MCP server** (`npm run mcp`) exposing 7 read-only ORI capabilities to local MCP clients through the loopback Bridge, audited as actor `mcp` | In-memory MCP protocol + a real stdio MCP process against an isolated Bridge; write tools never exposed |
+| MIA | sharp 0.35.5 (libvips; Pango shapes Arabic), Fabric.js 7.4.0 (browser) | branded project status card, announcement/milestone/agent-spotlight graphics (approved robot art composited unchanged), image optimize (resize/convert, metadata stripped, original kept), Fabric template studio → server-validated PNG artifact; reusable templates (image sources limited to embedded/bundled art) | PNG/WebP dimensions and formats verified; EXIF removed; canvas export and template save exercised in Chromium |
+| NEX | @opentelemetry/api 1.10.0 + sdk-trace 3.0.0 (local SQLite exporter only), ECharts 6.1.0 (browser) | per-agent stats (runs, success, p50/p95, tokens, **known / estimated / unknown** cost kept separate), provider/model comparison from run attempts, tool latency/reliability from the audit, local traces | Reconciles with persisted runs; unknown cost never $0; RTL charts render |
+| LUNA | ics 3.12.1, pdf-lib 1.17.1 + @pdf-lib/fontkit 1.1.1 | task-deadline `.ics` export, **Arabic execution PDF** (summary, overdue, upcoming, completed, approvals awaiting follow-up, agent runs, deliverables), idempotent approval follow-up tasks | ICS DATE events; PDF rendered with pdf.js and inspected visually: correct Arabic shaping, RTL tables, Latin/number order |
+| ZEN | @mozilla/readability 0.6.0 + linkedom 0.18.14; existing SQLite FTS5 | SSRF-guarded approved-host page extraction with optional knowledge ingestion and citation, scoped search, freshness (changed project docs, stale/changed web pages) | Private/reserved addresses, DNS-rebinding answers, IP literals, credentials, ports, downgrades, unapproved redirects, oversize and non-text refused; embedded "ignore instructions" text reported, never obeyed |
+| REX | gitleaks 8.30.1, osv-scanner 2.7.0 (installed via winget with owner approval) | secret scan of an authorized checkout (recent history or uncommitted changes; values never stored), dependency vulnerability scan (approval per run: package names/versions go to api.osv.dev; call analysis disabled) | Synthetic committed token found with rule/file/line and no value; a gitleaks failure is reported as "not scanned", never "clean" |
+
+- **Arabic PDF:** pdf-lib does not reorder bidirectional text, and the bundled fonts are complementary subsets. `pdf-arabic.mjs` adds reduced-UBA bidi runs with per-character font fallback (Alexandria for Arabic, Manrope for Latin, digits and punctuation). It also works around two @pdf-lib/fontkit defects without patching `node_modules`: WOFF2 glyf corruption during subsetting, and a dropped final flag-repeat count that corrupted "X"/"w".
+- **Dependency review.** Every selected package was checked for license, current version, Node ≥22/Windows and its dependency weight. `npm audit` reported 0 vulnerabilities, and exact versions are pinned in `apps/local-bridge/package.json` + `package-lock.json`. `pdfjs-dist` 6.4.299 is a dev dependency used only for PDF render QA, and `node_modules` stays ignored. Rejected or deferred:
+  - `@opentelemetry/sdk-trace-base` — deprecated upstream; `sdk-trace` 3.0.0 used instead.
+  - Server-side Fabric — needs node-canvas plus jsdom native builds; the browser build is used and the server re-encodes.
+  - `sqlite-vec` — not installed. It needs extension loading in the store and paid or quota-consuming embedding calls, and FTS5 meets the current need.
+  - `openai-agents-js` — not adopted. It would replace a tested runtime without adding a capability this design needs.
+  - Fabric pulls jsdom as an optional dependency (installed, unused at runtime).
+- **Real safe executions (live, in-memory store):**
+  - gitleaks over this public repository's last 300 commits: 3 findings, all known synthetic test fixtures (`generic-api-key`, `jwt` in `apps/local-bridge/tests/*.test.mjs`); no real secret.
+  - osv-scanner on a synthetic lockfile: lodash 4.17.15 → 6 GHSA advisories, fixed versions reported; the owner confirmation is recorded on the execution.
+  - ZEN extracted `https://nodejs.org/en/about` (4,044 chars) and indexed it, and it is searchable with a citation.
+
+### Checkpoint 4 — multi-agent orchestration and accounting — COMPLETE (isolated tests + one live workflow) → 80%
+- **Generic bounded delegation (`orchestrator.mjs`, migration 10 `v5-orchestration`).** A workflow is a reviewed template materialized into a persisted plan: `workflows`, `workflow_steps` and `workflow_events`. Each step has one specialist, one approved tool and only the inputs it needs (never the company database), plus dependencies, a delegation depth and an optional flag.
+  - **Plan checks:** before persisting, the plan is rejected for unknown agents/tools, tools outside the agent's reviewed set, dependency cycles, depth over 2, or more than one model call.
+  - **Execution:** ORI runs ready steps in parallel (≤3; owner may lower), under a per-execution deadline (1–30 min) and an inference cap (1). Each step is its own child `agent_runs` row (`delegated_tool` / `synthesis` / `followups`) attributed to the specialist, and each tool call is audited with the `workflow_id`.
+  - **Synthesis:** ORI's synthesis is the only model call. It goes through the existing `infer()` path with all eligibility, paid-approval and hard-budget checks, and is asked to cite evidence ids, which are parsed (`[E1]`, `[E2, E4]`). A failed synthesis leaves a deterministic evidence report and status `partial`, never a fabricated summary.
+  - **Approvals and failures:** an approval-gated tool (OSV) pauses the workflow (`waiting-approval`, parent run `blocked`) until the owner decides. **Approval decisions are now owner-only everywhere.** Agent actors get a refusal, including on their own requests. A rejection skips the step, and the workflow resumes and completes. A revoked grant fails the step (`tool-forbidden`) without substituting another agent. Specialists cannot add steps, and follow-up tasks are bounded (≤6) and deduplicated.
+  - **Owner controls and recovery:** the owner can cancel (aborts running specialists; remaining steps cancelled) and retry a failed step (dependents re-open). After a restart, interrupted read-only steps re-run, anything else is marked interrupted, and the parent run is re-queued so the same plan resumes.
+- **Six functional templates:** project review, repository security review, company weekly report (with LUNA's PDF and calendar), AI resource audit, technical research brief (≤3 approved URLs + scoped search) and release readiness.
+- **غرفة العمليات (AI Workforce).** Template launcher (inputs, parallelism, deadline) and the recent-workflow list. The detail view shows ORI with the participating specialists as the approved robots; a robot animates "working" only while one of its own steps is persisted as running, and reactions fire on observed transitions. It also shows a progress bar, phase timeline (agent, tool, duration, summary, files, errors, retry), inline owner approve/reject, persisted events, measured resources, the final report and the deliverables. Polling uses ordered responses, so a stale read never overwrites newer state.
+- **Accounting (`accounting.mjs`; Resources → «محاسبة الوكلاء», agent workspace → «الاستخدام»).**
+  - **Per agent:** requests (top-level vs delegated), succeeded/failed/blocked/cancelled, tool calls (succeeded/denied), inferences, input/output tokens, and cost on three separate bases: **known** (a recorded actual), **estimated** (router per-response estimate) and **unknown** (never $0). Also average execution time, open and completed tasks, projects and recent activity.
+  - **Company-wide:** comparisons, a per-project breakdown, a daily chart, and range/project filters.
+  - **Reconciliation:** a built-in check compares the per-agent sums with direct counts over the same rows and is shown as «مطابق للسجلات». Token volume is labelled as use, not productivity.
+- **Reliability fixes found by the live run:** a stream that completes with no visible text (a reasoning model spending its whole output budget) is now `empty-output`, which is retryable on the next eligible model. It was `bad-response`, which stopped the fallback. Tokens consumed by such failed attempts are now recorded in the usage ledger.
+- **Live verification (real OmniRoute 3.8.52, isolated temporary store; the daily store was not opened):**
+  - **First attempt (owner's default candidates):** the five specialists' real tools succeeded. The synthesis failed honestly (`first-output-timeout`, then `bad-response`), and the workflow ended `partial` with the evidence report. Direct one-request probes then showed that **every default free candidate was unavailable at that moment**:
+    - `gemini/gemini-3.1-flash-lite` 503 high demand after 41 s
+    - `gemini/gemini-3.8-flash` and `gemini/gemini-3.7-flash` no answer in 60 s
+    - `nvidia/openai/gpt-oss-120b` **410 model_shutdown** (retired)
+    - `openrouter/google/gemma-4-31b-it:free` 429 cooldown
+    - `gemini/gemini-2.5-flash-lite` 404 retired for new users
+  - **Final run** (candidates overridden *in the temporary store only* to `gemini/gemini-3-flash-preview`, `openrouter/nvidia/nemotron-3.5-lightning:free`; `maxOutputTokens` 4000 because the model spends ~1,600 tokens on reasoning): `wf_4a0c0769114f4a9a` **succeeded** in 9.9 s.
+    - All 7 steps: NEX overview + git, ZEN freshness, REX scan, MIA status card, ORI synthesis, LUNA follow-ups.
+    - Synthesis on `gemini/gemini-3-flash-preview`: 1,477 in / 1,628 out tokens, 9.2 s, cost **unknown** (router sent none; counted as unknown).
+    - Cited evidence: E1, E2, E3. LUNA created 4 follow-up tasks (temporary store). Accounting reconciled.
+  - **Live V5 chat** (LUNA, same isolated bridge): succeeded on `gemini/gemini-3-flash-preview`, 423 in / 615 out tokens, 19.1 s, reply «جاهزة.».
+  - **Owner decision needed (NEX finding, not changed automatically):** the daily routing policies list a retired model (`nvidia/openai/gpt-oss-120b`), and reasoning-heavy free models need a higher `maxOutputTokens` for synthesis.
+
+### Checkpoint 5 — integration, polish and QA — COMPLETE in isolated tests → 95% (live owner acceptance pending)
+- **Inherited Checkpoint 1/2 limitations, resolved (migration 11 `v5-integration`):**
+  - **Search no longer interrupts typing.** Chat, memory and knowledge searches refresh only their result lists.
+  - **No background redraw while editing.** Background redraws (agent polling, late page loads, a reply arriving) wait until focus leaves the form, and form drafts survive any rebuild. This fixed a real race where a late load wiped a half-typed knowledge form, found by the browser suite failing about 1 run in 2; after the fix it passed 7 consecutive runs.
+  - **Rename** uses an accessible dialog instead of `window.prompt`.
+  - **Token-budgeted context.** Conversation context is budgeted by estimated tokens (owner setting, default 3,000). Older turns become an **extractive, SHA-256-verified summary** stored in `conversation_summaries`, rebuilt whenever its source messages change, and the original messages are never removed. The chat shows what the next reply will see.
+  - **Export and retention.** Transcripts export as Markdown or JSON. Attachment retention (owner setting, default 0 = keep) purges only files of conversations deleted longer than the period; messages remain and the purge is logged.
+  - **Memory conflicts.** Same scope and normalized title with different content opens a conflict. An agent's conflicting note stays pending and never overrides owner-confirmed memory. Only the owner resolves it (keep new / keep existing / keep both); the loser is archived with `superseded_by`, and both keep their provenance.
+  - **Indexes.** Time-range indexes were added for runs, tool executions and attachments.
+- **AI Workforce tabs:** الفريق · غرفة العمليات · المحادثات · الأدوات والمهارات · الذاكرة والمعرفة (memory, knowledge library, conflicts; the old `agents/knowledge` route still resolves) · سجل التشغيل. Agent workspaces: overview, **conversations**, tasks, run history, tools, files, usage, (MIA) design studio, routing, memory, settings, character.
+- **Visual identity:** the Arabic RTL violet/white system, Alexandria/Manrope, and the six approved robots with their 12 forms are unchanged (`robot-qa`: 6 identities, 12 forms, 9 states, unique SVG ids, 0 errors). New surfaces reuse the existing panels, badges, KPIs and drawers. RTL fixes: chart direction, number pairs, Arabic plurals in PDFs.
+- **Performance (measured):**
+  - Team view 60.5 FPS, p95 frame 16.8 ms, robot script 0.33 ms/frame, 13.6 MB JS heap.
+  - Robot instances are reused per agent in the Operations Room.
+  - API p50 0.4–2.7 ms on the dev store.
+  - Accounting on a 60,000-row synthetic ledger: 400 ms → **117 ms** after single-pass aggregation, still reconciled; the time-range query uses `agent_runs_created`.
+  - Polling is bounded (1.5 s only while a workflow is live), charts dispose with their DOM, and no knowledge or FTS rebuild happens at startup.
+- **Accessibility (`tests/v5-a11y.mjs`, 13 V5 screens):** 0 unnamed controls, 0 unlabelled fields, 0 images without alt. 25/25 keyboard tab stops show a focus ring. Reduced motion means 0 animated robot frames; ECharts animation is also off under reduced motion.
+
+### Verification (this session, fresh)
+| Check | Result |
+|---|---|
+| `cd apps/local-bridge; npm test` (final) | **151/151 pass** (115 inherited + 16 capability engine + 3 capability API/MCP + 12 orchestration/accounting + 1 empty-output stream + 4 integration) |
+| `npm run check` (28 modules), `node --check internal/*.js`, `git diff --check` | pass (line-ending notices only) |
+| `node tests/ops.mjs` (synthetic isolated bridges, final) | **25/25 PASS**, zero uncaught browser errors. Covers the capability library, Operations Room (weekly report with a PDF deliverable; OSV step waits for the owner, rejection resumes; accounting reconciled) and integration (chat search keeps focus, rename dialog, Markdown export, context budget, conflict resolved with provenance) |
+| `node tests/visual.mjs http://127.0.0.1:4191 … 1440,1024,768,390,360` (isolated dev bridge, 51 routes incl. every V5 screen) | **255 screenshots, 0 page overflow, 0 browser errors**, 0 write requests; perf as above |
+| `node tests/robot-qa.mjs` · `node tests/smoke.mjs` · `node tests/stress.mjs 30` | pass (6/12/9, 0 errors) · 18 PASS · pass: 3,017 requests through load, aborts, router outage and recovery; integrity ok, 0 FK violations, 0 stuck runs |
+| `_site` built as `pages.yml` → `node scripts/audit-static.mjs` | pass: 28 public entries, 23 assets; no internal UI, vendor bundles or private data in the public artifact |
+| `tests/v5-a11y.mjs`, `tests/v5-perf.mjs` | as above |
+| gitleaks over new/changed source and STATUS | 0 findings; the 3 known synthetic fixtures in V4.1 test files remain |
+| Operations Room UI (`tests/v5-operations-shots.mjs`, isolated dev bridge) | project review launched from the UI → 7/7 steps, report cites evidence, "working" robot state observed only during a running step; no overflow at 1024/768/390/360; accounting and REX usage views; 0 errors |
+| Live OmniRoute (`tests/v5-live-workflow.mjs`, isolated store) | workflow succeeded (with temporary-store candidate override, see above); live chat succeeded |
+| Headless V5 screens (`tests/v5-shots.mjs`, isolated dev bridge `tests/dev-bridge.mjs` on :4191) | tools library, MIA tools, MIA studio at 1440/390: no page overflow, 0 errors; PDF/card/chart runs, search focus kept, files gallery |
+| PDF readability (`tests/pdf-render.mjs`, pdf.js in Chromium) | real LUNA report inspected: readable Arabic |
+| Live safe adapter run (`tests/v5-live-capabilities.mjs`) | gitleaks / osv / web.extract all succeeded (above) |
+
+### Security notes
+- Writes still need the loopback session token. Tool authorization is server-side only, and the UI showing a tool grants nothing. Agents cannot approve artifacts, toggle capabilities or approve their own actions.
+- External processes run with fixed argument vectors on authorized checkouts only. gitleaks runs with an empty temp cwd and ignore path; a repository's own `.gitleaks.toml` is reported because gitleaks honours it.
+- Artifacts are served with a sandbox CSP and `nosniff`. Vendor bundles come from a fixed two-file map.
+- Approval decisions are owner-only in the runtime itself, not just the UI. Workflow steps cannot approve, add steps, escalate tools or substitute agents. Web content and scanner output are untrusted data, and embedded instructions were tested to create nothing.
+- Incident (read-only, no impact): one command mistakenly ran `tests/visual.mjs` with its defaults against the **live daily bridge** (:4172). It took 260 screenshots, with **0 write requests**, 0 errors and 0 overflow, saved to the ignored `local/qa`. This also shows that the V4.1 daily bridge serving the V5 UI files degrades cleanly.
+- Concern: the **daily Bridge serves this checkout's files**. Its UI therefore already loads in-progress V5 files; they degrade to V4.1 behavior via the health flags. If its supervisor or a Windows sign-in restarts it, it will run V5 code and migrate the daily store, but only after the new verified pre-migration backup. **Owner decision needed:** run the daily Bridge from a separate V4.1 worktree, or accept the backup-guarded upgrade.
+
+### Recovery
+- `refs/backup/v5-codex-handoff-40` (`6b847eb`) holds the Codex tree.
+- V4.1 is on `release/v4.1-local`, and daily backups are in `local/backups/`.
+- V5 schema is 11. Migrations 6–11 are additive, except the `knowledge_documents` rebuild, which V4.1 does not use. A V5 store therefore stays openable by V4.1 code.
+- Any upgrade of an existing file store first writes a verified `VACUUM INTO` copy.
+- V5 runtime dependencies are pinned in `apps/local-bridge/package-lock.json`; run `npm ci` in `apps/local-bridge` on a fresh checkout. gitleaks and osv-scanner come from winget, and a missing one shows as "unavailable".
+
+### Remaining defects and limitations
+- The owner's daily routing policies are stale (`nvidia/openai/gpt-oss-120b` was retired, and free Gemini routes were overloaded at test time). Reasoning-heavy free models need a larger `maxOutputTokens` for ORI's synthesis. This was not changed automatically.
+- PDF text extraction returns Arabic glyphs in visual order, so copy and paste may reverse words; the visual rendering is correct.
+- Token counts are estimates (by script) until the router reports usage.
+- The OSV scan needs network access and the owner's approval each time.
+- ECharts (~1 MB) and Fabric (~0.3 MB) load only on first use.
+- No physical-device QA was done; viewport checks used Chromium.
+
+### Owner steps to reach 100% (verified release)
+1. Choose how the daily app runs V5: from this checkout after a verified backup (the Bridge does this automatically), or keep V4.1 daily from a separate worktree.
+2. Stop the daily Bridge, take a verified backup (System → البيانات), start V5, and confirm schema 11, integrity ok, and the record counts.
+3. Update the routing candidates and `maxOutputTokens` in Resources → التوجيه والميزانيات (for example add `gemini/gemini-3-flash-preview`, and remove the retired model).
+4. Run one live project review and one chat from the daily UI.
+5. Sign out and back in to Windows and confirm both autostarts.
+6. Approve a local commit of this work. Nothing has been committed or pushed.
+
+### Next unfinished task
+Owner acceptance steps 1–6 above. No implementation task is open.
+
+---
+
+Updated: 2026-10-25 (Africa/Cairo)
+State then: **V4.1 Stable Local Release** (previous release; rollback target `release/v4.1-local`). Windows sign-in startup is enabled for OmniRoute and Company OS. The VPS is connected through read-only, host-key-pinned SSH and monitored live. All six agents have permission-controlled infrastructure tools. Server actions require owner approval for the exact target. A live ORI→NEX/REX→LUNA infrastructure review succeeded. The final regression and visual suites passed. The isolated release branch was pushed without force and its remote SHA verified. `main` was not touched and nothing was deployed. Not verified: a real Windows sign-out/sign-in cycle or a live Tier-2 action.
+
+## V4.1 — previous stable release
 
 ### Source and preservation
 - Same checkout (branch `feat/restore-original-universe`, HEAD `df7dc2c` at start; remote `abudoxali/-abud-github-universe`, **public**).

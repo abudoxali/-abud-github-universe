@@ -14,6 +14,7 @@
   const sRouting = O.section("rsRouting", "resources", "routing");
   const sNex = O.section("rsNex", "resources", "nex");
   const sHistory = O.section("rsHistory", "resources", "quotas");
+  const sAccounting = O.section("rsAccounting", "resources", "accounting");
 
   const load = (force) => O.api.co("resources", "/resources", { force, ttl: 20_000 });
   const loadApprovals = (force) => O.api.co("approvals", "/approvals", { force, ttl: 15_000 });
@@ -276,9 +277,9 @@
 
   O.registerView({
     id: "resources", order: 50, icon: "resources", ar: "الموارد الذكية", subtitle: "OmniRoute والنماذج والحصص والاستهلاك والميزانيات — يديرها NEX.",
-    tabs: [["overview", "نظرة عامة"], ["quotas", "الحصص"], ["usage", "الاستهلاك"], ["providers", "المزودون والنماذج"], ["routing", "التوجيه والميزانيات"], ["nex", "توصيات NEX"]],
+    tabs: [["overview", "نظرة عامة"], ["quotas", "الحصص"], ["usage", "الاستهلاك"], ...(window.AbudInternalHealth?.capabilities?.workflows ? [["accounting", "محاسبة الوكلاء"]] : []), ["providers", "المزودون والنماذج"], ["routing", "التوجيه والميزانيات"], ["nex", "توصيات NEX"]],
     defaultTab: "overview",
-    onShow() { refreshAll(false); C.co.catalog(); C.co.projects(); C.co.agents(); O.api.overview(); },
+    onShow(tab) { refreshAll(false); C.co.catalog(); C.co.projects(); C.co.agents(); O.api.overview(); if (tab === "accounting") window.AbudOperations?.renderAccounting(sAccounting); },
     badge() {
       const pending = (O.peek("co:approvals")?.data?.approvals || []).filter((a) => a.status === "pending").length;
       const critical = recs().filter((r) => categoryOf(r) === "critical").length;

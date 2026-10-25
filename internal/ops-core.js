@@ -391,6 +391,30 @@
       ok.focus();
     });
   }
+  /** Text input dialog (replaces window.prompt): Enter saves, Escape cancels, focus returns to the trigger. Resolves the
+   * trimmed value, or null when cancelled or unchanged-and-empty. `validate` may return an Arabic error to keep it open. */
+  function promptDialog({ title, label: fieldLabel, value = "", confirm = "حفظ", maxlength = 160, placeholder = "", validate = null }) {
+    return new Promise((resolve) => {
+      const previous = document.activeElement;
+      const done = (result) => { backdrop.remove(); document.removeEventListener("keydown", onKey); previous?.focus?.(); resolve(result); };
+      const onKey = (event) => { if (event.key === "Escape") done(null); };
+      const input = h("input", { class: "ops-input", value, maxlength, placeholder, "aria-label": fieldLabel, required: true });
+      const error = h("p", { class: "ops-bad-text", role: "alert", hidden: true });
+      const form = h("form", { class: "os-dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": "osPromptTitle", onsubmit: (event) => {
+        event.preventDefault();
+        const next = input.value.trim();
+        const problem = !next ? "هذا الحقل مطلوب" : validate?.(next);
+        if (problem) { error.textContent = problem; error.hidden = false; input.focus(); return; }
+        done(next);
+      } },
+        h("h2", { id: "osPromptTitle" }, title), h("label", { class: "co-field" }, h("span", null, fieldLabel), input), error,
+        h("div", { class: "os-dialog-actions" }, h("button", { type: "submit", class: "btn btn-primary" }, confirm), h("button", { type: "button", class: "btn btn-secondary", onclick: () => done(null) }, "إلغاء")));
+      const backdrop = h("div", { class: "os-dialog-backdrop", onclick: (e) => { if (e.target === backdrop) done(null); } }, form);
+      document.addEventListener("keydown", onKey);
+      document.body.append(backdrop);
+      input.focus(); input.select();
+    });
+  }
   /** Returns true (and schedules `render` for when the user leaves) if a form control inside `host` is being edited, so
    * background refreshes never wipe what the owner is typing. */
   function editing(host, render) {
@@ -824,7 +848,7 @@
   window.AbudOps = {
     tr, lang, h, fill, fmt, badge, source, meter, stateLabel, stateTone, notice, resourceStatus, sectionShell, skeleton,
     api, on, peek, store, registerView, activate, boot, views, state, mutate, invalidate, session, L, tones, label, bdi, rich, dateOnly, todayIso, toast, drawer, act, companyZone,
-    confirmDialog, editing, icon, panel, panelX, empty, button, linkButton, field, select, formValues, dateInput, kpi, segmented, section, href, go, setActions, setHead,
+    confirmDialog, promptDialog, editing, icon, panel, panelX, empty, button, linkButton, field, select, formValues, dateInput, kpi, segmented, section, href, go, setActions, setHead,
     stateRank: { exhausted: 5, critical: 4, low: 3, ok: 2, unlimited: 1, unknown: 0 },
     refreshNav: () => nav(), refreshHead: () => renderPageHead()
   };

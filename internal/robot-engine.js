@@ -69,7 +69,9 @@
         s("stop", { offset: 1, "stop-color": "#000", "stop-opacity": 0.29 })));
       defs.push(s("radialGradient", { id: `${idp}-shadow` }, s("stop", { offset: 0, "stop-color": "#1b1030", "stop-opacity": 0.32 }), s("stop", { offset: 1, "stop-color": "#1b1030", "stop-opacity": 0 })));
       defs.push(s("filter", { id: `${idp}-glow`, x: "-60%", y: "-60%", width: "220%", height: "220%", "color-interpolation-filters": "sRGB" },
-        s("feGaussianBlur", { stdDeviation: 2.1, result: "b" }), s("feMerge", null, s("feMergeNode", { in: "b" }), s("feMergeNode", { in: "SourceGraphic" }))));
+        s("feGaussianBlur", { stdDeviation: 1.6, result: "b1" }),
+        s("feGaussianBlur", { stdDeviation: 3.8, result: "b2" }),
+        s("feMerge", null, s("feMergeNode", { in: "b2" }), s("feMergeNode", { in: "b1" }), s("feMergeNode", { in: "SourceGraphic" }))));
       fill.visor = `url(#${idp}-visor)`;
       fill.specular = `url(#${idp}-specular)`;
     }
@@ -646,15 +648,34 @@
         if (state === "speaking") { arms.R.sh += Math.sin(t * 3.4) * 9; arms.R.el += Math.sin(t * 3.4 + 1) * 8; nod += Math.sin(t * 5.2) * 1.4; }
         if (state === "thinking") { tilt += Math.sin(t * 0.9) * 3; earL += Math.sin(t * 2.2) * 5; }
         if (state === "listening") { tilt += Math.sin(t * 0.7) * 1.4; }
-        if (state === "greeting") arms.R.el += Math.sin(t * 11) * 20;
-        if (st.hover && props.interactive) { earL -= 6; earR -= 6; tilt += st.pointer.x * 5; turn = lerp(turn, st.pointer.x * 0.45, 0.7); }
+        const hoverLift = st.hover && props.interactive ? 5.5 + Math.sin(t * 3.2 * speed) * 2.2 : Math.sin(t * 1.8 * speed) * 1.4;
+        lift += hoverLift;
+        lean += Math.sin(t * 0.9 * speed) * 0.7;
+        if (st.hover && props.interactive) {
+          const px = st.pointer.x || 0, py = st.pointer.y || 0;
+          earL -= 7 + px * 3; earR -= 7 - px * 3;
+          tilt += px * 6.2; nod += py * 4.2;
+          lean += px * 2.4;
+          turn = lerp(turn, px * 0.48, 0.75);
+        }
         // reactions
         const rx = st.reaction;
         if (rx) {
           const u = clamp((t - rx.t0) / rx.dur, 0, 1);
           const env = ease(Math.min(u * 5, 1)) * ease(Math.min((1 - u) * 4, 1));
+          if (rx.kind === "greeting" || state === "greeting") {
+            const w = Math.sin(t * 13) * 24 * env;
+            arms.R.sh = lerp(arms.R.sh, 105, env);
+            arms.R.el = lerp(arms.R.el, 38 + w, env);
+            arms.R.hand = "wave";
+            lift += Math.sin(u * TAU * 2) * 4 * env;
+            tilt += Math.sin(t * 6) * 3 * env;
+            earR -= 8 * env; earL -= 4 * env;
+          }
           if (rx.kind === "success") { lift += Math.max(0, Math.sin(u * TAU * 2)) * 15 * env; arms.R.el += Math.sin(t * 12) * 8 * env; arms.L.el += Math.sin(t * 12 + 1.4) * 8 * env; }
           if (rx.kind === "error") { turn += Math.sin(t * 17) * 0.4 * env; tilt += Math.sin(t * 17) * 4 * env; }
+        } else if (state === "greeting") {
+          arms.R.el += Math.sin(t * 11) * 20;
         }
         // twitch
         if (st.twitch.t >= 0) { const u = (t - st.twitch.t) / 0.32; if (u > 1) st.twitch.t = -1; else { const k = Math.sin(u * Math.PI) * 10; if (st.twitch.side === "r") earR -= k; else earL -= k; } }
@@ -697,9 +718,9 @@
         node.setAttribute("transform", `translate(19 ${info.y}) scale(${info.k} ${sy.toFixed(3)})`);
       }
       // core, ring, mouth, fx
-      const corePulse = state === "working" ? 0.55 + 0.45 * Math.sin(t * 7) : 0.72 + 0.22 * Math.sin(t * 2.2);
-      r.core.setAttribute("fill-opacity", (0.18 + corePulse * 0.35 * (e || 0.6)).toFixed(3));
-      r.ring.setAttribute("opacity", (state === "working" ? 0.3 + 0.25 * Math.sin(t * 5) * e : state === "unavailable" ? 0.08 : 0.28).toFixed(3));
+      const corePulse = state === "working" ? 0.55 + 0.45 * Math.sin(t * 7) : st.hover ? 0.88 + 0.12 * Math.sin(t * 4.5) : 0.72 + 0.22 * Math.sin(t * 2.2);
+      r.core.setAttribute("fill-opacity", (0.22 + corePulse * 0.42 * (e || 0.6)).toFixed(3));
+      r.ring.setAttribute("opacity", (state === "working" ? 0.35 + 0.25 * Math.sin(t * 5) * e : state === "unavailable" ? 0.08 : st.hover ? 0.52 + 0.18 * Math.sin(t * 4) : 0.28).toFixed(3));
       r.mouth.setAttribute("opacity", state === "speaking" ? 1 : 0);
       if (state === "speaking") r.mouthBars.forEach((b, i) => { const hgt = 2 + Math.abs(Math.sin(t * 11 + i * 1.3)) * 7 * e; b.setAttribute("height", hgt.toFixed(2)); b.setAttribute("y", (-hgt / 2).toFixed(2)); });
       const fx = r.fxNodes;
@@ -777,12 +798,21 @@
       svg.__robot = null;
     };
     if (props.interactive) {
-      svg.addEventListener("pointerenter", () => { st.hover = true; });
-      svg.addEventListener("pointerleave", () => { st.hover = false; });
+      svg.addEventListener("pointerenter", () => {
+        st.hover = true;
+        st.twitch = { side: Math.random() < 0.5 ? "l" : "r", t: performance.now() / 1000 - clock.start };
+      });
+      svg.addEventListener("pointerleave", () => {
+        st.hover = false;
+        st.pointer = { x: 0, y: 0 };
+      });
       svg.addEventListener("pointermove", (ev) => {
         const b = svg.getBoundingClientRect();
         if (!b.width) return;
         st.pointer = { x: clamp(((ev.clientX - b.left) / b.width - 0.5) * 2, -1, 1), y: clamp(((ev.clientY - b.top) / b.height - 0.35) * 2, -1, 1) };
+      });
+      svg.addEventListener("click", () => {
+        inst.react("greeting");
       });
       svg.classList.add("rb-interactive");
     }

@@ -25,15 +25,77 @@
   const projectName = (id) => projectsList().find((p) => p.id === id)?.name || null;
   const refreshAfterTaskChange = () => invalidate("tasks", "archivedTasks", "summary", "activity", "projects", "agents", "agent:", "notifications", "project:");
 
+  function pipType(state) {
+    if (!state) return null;
+    if (state === "working") return "working";
+    if (["thinking", "queued", "listening", "speaking"].includes(state)) return "thinking";
+    if (["available", "idle", "ready"].includes(state)) return "available";
+    if (["error", "failed"].includes(state)) return "error";
+    if (["router-offline", "offline"].includes(state)) return "offline";
+    if (["unavailable", "disabled", "no-eligible-model"].includes(state)) return "unavailable";
+    return "available";
+  }
+  function pipLabel(state) {
+    const map = {
+      working: "يعمل الآن",
+      thinking: "يفكر في الطلب",
+      queued: "في طابور التنفيذ",
+      listening: "يستمع للطلب",
+      speaking: "يستقبل الرد",
+      available: "جاهز للعمل",
+      idle: "في وضع الاستعداد",
+      ready: "جاهز للعمل",
+      error: "واجه خطأ",
+      failed: "تعذّر التنفيذ",
+      offline: "OmniRoute غير متصل",
+      "router-offline": "OmniRoute غير متصل",
+      "no-eligible-model": "لا يوجد نموذج مؤهل",
+      disabled: "الوكيل معطّل",
+      unavailable: "غير متاح حاليًا"
+    };
+    return map[state] || state;
+  }
+
   /** Character portrait for an agent: the code-built head from the robot engine (flat vector, no animation — small UI
-   * never runs a live renderer). The supplied artwork is the fallback if the engine did not load. */
-  function avatar(id, size = "sm") {
-    if (id === "owner") return h("span", { class: `co-avatar co-avatar-${size} co-avatar-owner`, title: L.owner, "aria-label": L.owner }, icon("user", size === "sm" ? 14 : 18));
-    if (id === "none" || id == null) return h("span", { class: `co-avatar co-avatar-${size} co-avatar-none`, title: L.none, "aria-label": L.none }, "—");
+   * never runs a live renderer). Supports reusable size variants (xs, sm, md, lg, xl, 2xl) and live state pips. */
+  function avatar(id, size = "sm", opts = {}) {
+    if (typeof opts === "string") opts = { state: opts };
+    const extraClass = opts.className ? ` ${opts.className}` : "";
+    if (id === "owner") {
+      const icSize = size === "xs" ? 11 : size === "sm" ? 14 : size === "lg" ? 22 : size === "xl" ? 28 : 18;
+      return h("span", { class: `co-avatar co-avatar-${size} co-avatar-owner${extraClass}`, title: L.owner, "aria-label": L.owner }, icon("user", icSize));
+    }
+    if (id === "none" || id == null) return h("span", { class: `co-avatar co-avatar-${size} co-avatar-none${extraClass}`, title: L.none, "aria-label": L.none }, "—");
     const def = agentDef(id);
-    if (!def) return h("span", { class: `co-avatar co-avatar-${size}` }, "—");
-    return h("span", { class: `co-avatar co-avatar-${size} co-avatar-agent`, title: `${def.name} · ${def.titleAr}`, style: `--agent:${def.color}`, "data-agent": def.id },
-      window.AbudRobots?.portrait(def.id) || h("img", { src: def.art.face || def.art.card, alt: "", loading: "lazy", decoding: "async" }));
+    if (!def) return h("span", { class: `co-avatar co-avatar-${size}${extraClass}` }, "—");
+
+    const state = opts.state || null;
+    const pip = (opts.showPip !== false && state) ? pipType(state) : null;
+    const isWorking = pip === "working";
+    const statusText = state ? ` (${pipLabel(state)})` : "";
+    const titleText = `${def.name} · ${def.titleAr}${statusText}`;
+    const interactiveClass = opts.interactive ? " is-interactive" : "";
+    const workingClass = isWorking ? " is-working" : "";
+    const hasPipClass = pip ? " has-pip" : "";
+
+    const el = h("span", {
+      class: `co-avatar co-avatar-${size} co-avatar-agent${interactiveClass}${workingClass}${hasPipClass}${extraClass}`,
+      title: titleText,
+      "aria-label": titleText,
+      style: `--agent:${def.color}`,
+      "data-agent": def.id,
+      "data-agent-state": state || "idle"
+    },
+      window.AbudRobots?.portrait(def.id, { expression: opts.expression || (isWorking ? "focus" : null) }) || h("img", { src: def.art.face || def.art.card, alt: "", loading: "lazy", decoding: "async" }));
+
+    if (pip) {
+      el.append(h("span", {
+        class: `co-avatar-pip co-avatar-pip-${pip}`,
+        "aria-label": pipLabel(state),
+        title: pipLabel(state)
+      }));
+    }
+    return el;
   }
   const assigneeName = (id) => (id === "owner" ? L.owner : id === "none" ? L.none : agentDef(id)?.name || id);
   const assigneeOptions = () => [["owner", L.owner], ["none", L.none], ...agentsDef().map((a) => [a.id, `${a.name} — ${a.titleAr}`])];

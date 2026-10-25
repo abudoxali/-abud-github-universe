@@ -326,3 +326,26 @@ test("browser migration carries legacy focus projects and the execution journal 
   assert.equal(again.focus + again.journal + again.tasks, 0, "a second run imports nothing");
   assert.equal(company.activity({ limit: 200 }).length, before, "an empty re-run does not even add an audit event");
 });
+
+test("FTS5 memory retrieval enforces project and agent scope, owner review, and deletion", () => {
+  const company = fresh();
+  const one = company.createProject({ name: "Alpha", github: "owner/alpha" });
+  const two = company.createProject({ name: "Beta", github: "owner/beta" });
+  const approved = company.upsertMemory({ scope: "project", scopeRef: one.id, title: "قرار الإطلاق", body: "تأجيل إصدار ألفا حتى اختبار الأجهزة", sourceRef: "owner-decision-1", confidence: "verified" })[0];
+  company.upsertMemory({ scope: "project", scopeRef: two.id, title: "قرار الإطلاق", body: "تأجيل إصدار بيتا لمراجعة الأداء" });
+  company.upsertMemory({ scope: "agent", scopeRef: "ori", title: "تفضيل تخطيط", body: "قرار ترتيب الأولويات لوكيل ORI" });
+  const scoped = company.searchMemory({ q: "تأجيل إصدار", agentId: "ori", projectId: one.id });
+  assert.deepEqual(scoped.map((m) => m.id), [approved.id]);
+  assert.equal(scoped[0].sourceRef, "owner-decision-1");
+  assert.equal(company.searchMemory({ q: "ترتيب الأولويات", agentId: "rex", projectId: one.id }).length, 0, "agent memory stays private to its scope");
+  const proposed = company.upsertMemory({ scope: "project", scopeRef: one.id, title: "حقيقة مقترحة", body: "معلومة غير مؤكدة عن المشروع" }, { type: "agent", id: "zen" })[0];
+  assert.equal(proposed.approved, false);
+  assert.equal(company.searchMemory({ q: "معلومة غير مؤكدة", agentId: "ori", projectId: one.id }).length, 0);
+  company.upsertMemory({ id: proposed.id, scope: "project", scopeRef: one.id, title: proposed.title, body: proposed.body, approved: true, confidence: "supported" });
+  assert.equal(company.searchMemory({ q: "معلومة غير مؤكدة", agentId: "ori", projectId: one.id }).length, 1);
+  company.deleteMemory(approved.id);
+  assert.equal(company.searchMemory({ q: "تأجيل إصدار ألفا", agentId: "ori", projectId: one.id }).length, 0, "deleted terms disappear from FTS");
+  company.reindexMemory();
+  assert.equal(company.searchMemory({ q: "تأجيل إصدار ألفا", agentId: "ori", projectId: one.id }).length, 0, "rebuild cannot restore deleted memory");
+  assert.equal(company.db.raw.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
+});

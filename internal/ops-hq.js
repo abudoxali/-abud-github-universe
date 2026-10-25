@@ -43,8 +43,8 @@
           linkButton("إسناد لوكيل", href("agents", "request"), { icon: "agents" }),
           s?.approvalsPending ? linkButton(`مراجعة الموافقات (${s.approvalsPending})`, href("resources", "routing"), { icon: "shield" }) : linkButton("عرض المشاريع", href("projects"), { icon: "projects" }))),
       s ? h("nav", { class: "hq-crew", "aria-label": "الوكلاء الستة وحالتهم" }, [...s.agents].reverse().map((a) =>
-        h("a", { href: href("agents", a.id), class: `os-crew-${a.availability}`, style: `--agent:${a.color}`, title: `${a.name} · ${L.availability[a.availability] || a.availability}`, "aria-label": `${a.name}: ${L.availability[a.availability] || a.availability}` },
-          h("img", { src: a.art.card, alt: "", decoding: "async" }), h("span", { class: "os-crew-state" })))) : null);
+        h("a", { href: href("agents", a.id), class: `hq-crew-item os-crew-${a.availability}`, style: `--agent:${a.color}`, title: `${a.name} · ${L.availability[a.availability] || a.availability}`, "aria-label": `${a.name}: ${L.availability[a.availability] || a.availability}` },
+          C.avatar(a.id, "lg", { state: a.availability, interactive: true })))) : null);
   }
 
   function kpis(s) {
@@ -108,7 +108,7 @@
   function teamPanel(s) {
     return panelX({ title: "فريق الوكلاء", hint: "«جاهز» يعني وجود نموذج مؤهل الآن؛ «يعمل الآن» يعني تشغيلًا محفوظًا جاريًا.", actions: linkButton("الفريق", href("agents"), { icon: "chevronLeft" }) },
       h("ul", { class: "hq-team" }, s.agents.map((a) => h("li", null, h("a", { href: href("agents", a.id) },
-        C.avatar(a.id, "md"),
+        C.avatar(a.id, "md", { state: a.availability }),
         h("span", null, h("strong", null, bdi(a.name)), h("small", null, a.titleAr, a.openTasks ? ` · ${a.openTasks} مهمة` : "")),
         label("availability", a.availability))))));
   }

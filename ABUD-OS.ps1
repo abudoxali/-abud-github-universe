@@ -90,7 +90,8 @@ function Get-BridgeProcess {
 function Get-Health {
   try {
     $health = Invoke-RestMethod -Uri "$origin/local-api/health" -TimeoutSec 2
-    if ($health.status -eq 'ok' -and $health.service -eq 'abud-local-universe' -and $health.apiVersion -eq 3) { return $health }
+    # apiVersion 3 is V4.x and 5 is V5; accepting both keeps this launcher valid for a V4.1 rollback.
+    if ($health.status -eq 'ok' -and $health.service -eq 'abud-local-universe' -and [int]$health.apiVersion -ge 3) { return $health }
   } catch { }
   return $null
 }

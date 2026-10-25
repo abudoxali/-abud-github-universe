@@ -101,7 +101,7 @@ const noOverflow = async (page, label) => assert.equal(await page.evaluate(() =>
 const go = async (page, hash, selector) => { await page.evaluate((h) => { location.hash = h; }, hash); if (selector) await page.waitForSelector(selector); else await page.waitForTimeout(350); };
 const api = (page, path) => page.evaluate((p) => fetch(`/local-api/company${p}`).then((r) => r.json()), path);
 const VIEWS = ["hq", "projects", "work", "agents", "resources", "system"];
-const TABS = { projects: ["overview", "all", "universe", "local", "reports"], work: ["today", "board", "calendar", "upcoming", "project", "agent", "done"], agents: ["team", "request", "runs"], resources: ["overview", "quotas", "usage", "providers", "routing", "nex"], system: ["overview", "servers", "integrations", "activity", "data", "security", "settings"] };
+const TABS = { projects: ["overview", "all", "universe", "local", "reports"], work: ["today", "board", "calendar", "upcoming", "project", "agent", "done"], agents: ["team", "chat", "memory", "knowledge", "request", "runs"], resources: ["overview", "quotas", "usage", "providers", "routing", "nex"], system: ["overview", "servers", "integrations", "activity", "data", "security", "settings"] };
 
 try {
   // ---------------------------------------------------------------- shell: six workspaces, Arabic RTL, legacy routes
@@ -378,6 +378,151 @@ try {
     assert.equal(await co.locator('#coWorkforce .os-tab[aria-current="page"]').getAttribute("href"), `#view/agents/luna/${sub}`);
   }
   console.log("PASS agents: six code-rendered identities; request composer → LUNA run persisted and explained; workspace tabs");
+
+  await go(co, "#view/agents/chat", "#coWorkforce .co-chat-new");
+  await co.locator("#coWorkforce .co-chat-new select[name=agentId]").selectOption("ori");
+  await co.click("#coWorkforce .co-chat-new button[type=submit]");
+  const chatFile = join(work, "chat-note.md");
+  await writeFile(chatFile, "Verified synthetic company note for ORI.\n");
+  await co.locator("#coWorkforce .co-chat-compose input[type=file]").setInputFiles(chatFile);
+  await co.waitForSelector('#coWorkforce .co-chat-compose .co-chat-files:has-text("chat-note.md")');
+  await co.locator("#coWorkforce .co-chat-compose textarea").fill("راجع حالة الشركة بإيجاز");
+  await co.click("#coWorkforce .co-chat-compose button[type=submit]");
+  await co.waitForFunction(() => document.querySelector("#coWorkforce .co-chat-assistant .co-chat-text")?.textContent?.includes("رد تجريبي"), null, { timeout: 20000 });
+  const chatBefore = await text(co, "#coWorkforce .co-chat-transcript");
+  assert.match(chatBefore, /راجع حالة الشركة بإيجاز/);
+  await co.reload();
+  await co.waitForSelector("#coWorkforce .co-chat-assistant .co-chat-text");
+  assert.match(await text(co, "#coWorkforce .co-chat-transcript"), /رد تجريبي/);
+  assert.match(await text(co, "#coWorkforce .co-chat-transcript"), /chat-note.md/);
+  console.log("PASS conversations: create, bounded text attachment, streamed response, durable messages after browser reload");
+
+  await go(co, "#view/agents/memory", "#coWorkforce .co-memory-form");
+  await co.locator("#coWorkforce .co-memory-form").first().locator('input[aria-label="عنوان الذاكرة"]').fill("قرار اختبار الفهرس");
+  await co.locator("#coWorkforce .co-memory-form").first().locator('textarea[aria-label="محتوى الذاكرة"]').fill("هذا القرار خاص باختبار الذاكرة المحلية");
+  await co.locator("#coWorkforce .co-memory-form").first().locator('button[type="submit"]').click();
+  await co.waitForSelector('#coWorkforce .co-memory-card:has-text("قرار اختبار الفهرس")');
+  await co.locator('#coWorkforce input[aria-label="بحث الذاكرة"]').fill("اختبار الفهرس");
+  await co.waitForSelector('#coWorkforce .co-memory-card:has-text("قرار اختبار الفهرس")');
+  await co.locator('#coWorkforce .co-memory-card:has-text("قرار اختبار الفهرس") button:has-text("حذف")').click();
+  await co.locator('.os-dialog button:has-text("حذف")').click();
+  await co.waitForFunction(() => !document.querySelector('#coWorkforce .co-memory-card'));
+  console.log("PASS memory: owner creates, FTS5 finds, and deletion removes indexed result");
+
+  await go(co, "#view/agents/knowledge", "#coWorkforce .co-memory-form");
+  await co.locator('#coWorkforce .co-memory-form input[aria-label="عنوان المصدر"]').fill("مذكرة معرفة تجريبية");
+  await co.locator('#coWorkforce .co-memory-form textarea[aria-label="نص المصدر"]').fill("المعلومة الموثقة لهذا الاختبار: فهرسة المعرفة المحلية تعمل.");
+  await co.locator('#coWorkforce .co-memory-form button:has-text("إضافة إلى المعرفة")').click();
+  await co.waitForSelector('#coWorkforce .co-memory-card:has-text("مذكرة معرفة تجريبية")');
+  await co.locator('#coWorkforce input[aria-label="بحث المعرفة"]').fill("فهرسة المعرفة");
+  await co.waitForSelector('#coWorkforce .co-knowledge-results:has-text("مذكرة معرفة تجريبية")');
+  await co.locator('#coWorkforce select[aria-label="مشروع المستند المعتمد"]').selectOption(project.id);
+  await co.locator('#coWorkforce button:has-text("استيراد من المشروع")').click();
+  await co.waitForSelector('#coWorkforce .co-memory-card:has-text("STATUS.md")');
+  await co.locator('#coWorkforce .co-memory-card:has-text("مذكرة معرفة تجريبية") button:has-text("حذف")').click();
+  await co.locator('.os-dialog button:has-text("حذف")').click();
+  await co.waitForFunction(() => !document.querySelector('#coWorkforce .co-knowledge-results li'));
+  console.log("PASS knowledge: owner text and approved project document ingestion, FTS5 citation, deletion from search");
+
+  // ---------------------------------------------------------------- V5 capability engine: library, console, artifact, audit
+  await go(co, "#view/agents/tools", '#coWorkforce .cap-card[data-tool="report.executionPdf"]');
+  const capSearch = co.locator('#coWorkforce input[aria-label="بحث القدرات"]');
+  await capSearch.click();
+  await capSearch.pressSequentially("تقويم", { delay: 30 });
+  assert.equal(await co.evaluate(() => document.activeElement?.getAttribute("aria-label")), "بحث القدرات", "typing in the capability search keeps focus");
+  assert.ok(await co.locator('#coWorkforce .cap-card[data-tool="calendar.exportTasks"]').isVisible());
+  assert.equal(await co.locator('#coWorkforce .cap-card[data-tool="security.gitleaks"]').isVisible(), false, "search filters in place");
+  await capSearch.fill("");
+  await co.click('#coWorkforce .cap-card[data-tool="report.executionPdf"] button:has-text("تشغيل")');
+  await co.click('.co-drawer button[type=submit]');
+  await co.waitForSelector(".co-drawer .cap-result .cap-art-card", { timeout: 30000 });
+  assert.match(await text(co, ".co-drawer .cap-result"), /نجح/);
+  await co.keyboard.press("Escape");
+  const pdfArtifacts = (await api(co, "/artifacts?kind=pdf")).artifacts;
+  assert.equal(pdfArtifacts[0].agentId, "luna");
+  const pdfHead = await co.evaluate(async (id) => { const r = await fetch(`/local-api/company/artifacts/${id}/download`); const b = new Uint8Array(await r.arrayBuffer()); return { type: r.headers.get("content-type"), csp: r.headers.get("content-security-policy"), magic: String.fromCharCode(...b.slice(0, 5)) }; }, pdfArtifacts[0].id);
+  assert.deepEqual([pdfHead.type, pdfHead.magic], ["application/pdf", "%PDF-"]);
+  assert.match(pdfHead.csp, /sandbox/);
+  // an approval-gated capability refuses to run without the owner's explicit confirmation
+  await co.click('#coWorkforce .cap-card[data-tool="security.osv"] button:has-text("تشغيل")');
+  await co.click('.co-drawer button[type=submit]');
+  assert.equal(await co.locator(".co-drawer .cap-result .cap-art-card").count(), 0);
+  await co.keyboard.press("Escape");
+  await co.click('#coWorkforce .cap-tabs button:has-text("سجل التنفيذ")');
+  await co.waitForSelector("#coWorkforce .cap-audit tbody tr");
+  assert.match(await text(co, "#coWorkforce .cap-audit"), /report\.executionPdf/);
+  const audit = (await api(co, "/executions?toolId=report.executionPdf")).executions;
+  assert.equal(audit[0].actorType, "owner");
+  assert.equal(audit[0].status, "succeeded");
+  console.log("PASS capabilities: library search keeps focus, owner console runs LUNA's Arabic PDF, artifact served sandboxed, approval gate holds, audit persisted");
+
+  // ---------------------------------------------------------------- V5 Operations Room: ORI workflow from the UI, approval gate, accounting
+  await go(co, "#view/agents/operations", "#coWorkforce .op-template");
+  assert.equal(await co.locator("#coWorkforce .op-template").count(), 6, "six workflow templates");
+  await co.locator("#coWorkforce .op-template", { hasText: "تقرير الشركة الأسبوعي" }).locator("button", { hasText: "تشغيل" }).click();
+  await co.click(".co-drawer button[type=submit]");
+  await co.waitForFunction(async () => { const d = await fetch("/local-api/company/workflows?limit=1").then((r) => r.json()); return ["succeeded", "partial", "failed"].includes(d.workflows[0]?.status); }, null, { timeout: 45000 });
+  const weekly = (await api(co, "/workflows?limit=1")).workflows[0];
+  const weeklyDetail = await api(co, `/workflows/${weekly.id}`);
+  assert.ok(["succeeded", "partial"].includes(weeklyDetail.status), weeklyDetail.steps.map((s) => `${s.key}:${s.status}:${s.errorCode}`).join(" "));
+  assert.ok(weeklyDetail.steps.filter((s) => s.kind === "tool" && s.status === "succeeded").length >= 3, "specialist tool steps ran");
+  assert.ok(weeklyDetail.events.some((e) => e.kind === "delegated" && e.agentId === "nex"));
+  assert.ok(weeklyDetail.artifacts.some((a) => a.kind === "pdf" && a.agentId === "luna"), "LUNA's PDF is a workflow deliverable");
+  await co.waitForFunction(() => /اكتمل/.test(document.querySelector("#coWorkforce .op-detail-head .ops-badge")?.innerText || ""), null, { timeout: 15000 });
+  assert.ok(await co.locator("#coWorkforce .op-stage svg.rb-robot").count() >= 3, "the stage shows the participating robots");
+  assert.match(await text(co, "#coWorkforce .op-report"), /الأدلة/);
+  // security review pauses for the owner's approval of the OSV step, then resumes after a rejection
+  await co.locator("#coWorkforce .op-template", { hasText: "مراجعة أمن المستودع" }).locator("button", { hasText: "تشغيل" }).click();
+  await co.locator(".co-drawer select[name=projectId]").selectOption({ index: 0 });
+  await co.click(".co-drawer button[type=submit]");
+  await co.waitForSelector('#coWorkforce .op-step-waiting-approval button:has-text("رفض")', { timeout: 45000 });
+  await co.click('#coWorkforce .op-step-waiting-approval button:has-text("رفض")');
+  await co.waitForFunction(async () => { const d = await fetch("/local-api/company/workflows?limit=1").then((r) => r.json()); return ["succeeded", "partial", "failed"].includes(d.workflows[0]?.status); }, null, { timeout: 45000 });
+  const secure = await api(co, `/workflows/${(await api(co, "/workflows?limit=1")).workflows[0].id}`);
+  assert.equal(secure.steps.find((s) => s.key === "dependencies").status, "skipped");
+  await go(co, "#view/resources/accounting", "#rsAccounting .op-acct tbody tr");
+  assert.equal(await co.locator("#rsAccounting .op-acct tbody tr").count(), 6);
+  assert.ok(await co.locator('#rsAccounting .ops-badge:has-text("مطابق للسجلات")').count(), "accounting reconciles to persisted records");
+  assert.equal((await api(co, "/accounting?range=24h")).reconciliation.ok, true);
+  console.log("PASS operations: ORI weekly report delegates to specialists with a PDF deliverable; OSV step waits for the owner and resumes after rejection; accounting reconciled");
+
+  // ---------------------------------------------------------------- V5 integration: chat search focus, rename dialog, export, context; memory conflicts
+  await go(co, "#view/agents/chat", "#coWorkforce .co-chat-layout");
+  const chatSearch = co.locator('#coWorkforce input[aria-label="بحث المحادثات"]');
+  await chatSearch.click();
+  await chatSearch.pressSequentially("محادثة", { delay: 60 });
+  await co.waitForTimeout(700);
+  assert.equal(await co.evaluate(() => document.activeElement?.getAttribute("aria-label")), "بحث المحادثات", "chat search keeps focus while results refresh");
+  assert.equal(await chatSearch.inputValue(), "محادثة");
+  await chatSearch.fill("");
+  await co.waitForTimeout(500);
+  await co.locator("#coWorkforce .co-chat-thread").first().click();
+  await co.waitForSelector("#coWorkforce .co-chat-header");
+  await co.waitForSelector("#coWorkforce .co-chat-context");
+  assert.match(await text(co, "#coWorkforce .co-chat-context"), /سياق الرد التالي/);
+  await co.click('#coWorkforce .co-chat-header button:has-text("إعادة تسمية")');
+  await co.locator('.os-dialog input[aria-label="اسم المحادثة"]').fill("محادثة معاد تسميتها");
+  await co.keyboard.press("Enter");
+  await co.waitForFunction(() => /محادثة معاد تسميتها/.test(document.querySelector("#coWorkforce .co-chat-header h3")?.innerText || ""));
+  const exported = await co.evaluate(async () => { const href = document.querySelector('#coWorkforce .co-chat-export a[href*="format=md"]').getAttribute("href"); const r = await fetch(href); return { type: r.headers.get("content-type"), text: await r.text() }; });
+  assert.match(exported.type, /markdown/);
+  assert.match(exported.text, /# محادثة معاد تسميتها/);
+  // memory conflict: the owner sees both notes and decides; nothing is deleted
+  await co.evaluate(async () => {
+    const token = (await fetch("/local-api/session").then((r) => r.json())).token;
+    const post = (body) => fetch("/local-api/company/memory", { method: "POST", headers: { "Content-Type": "application/json", "X-Abud-Session": token }, body: JSON.stringify(body) });
+    await post({ scope: "company", title: "سياسة الإصدار", body: "الإصدار كل أسبوعين" });
+    await post({ scope: "company", title: "سياسة الإصدار.", body: "الإصدار شهريًا" });
+  });
+  await go(co, "#view/agents/memory/conflicts", "#coWorkforce .co-conflict");
+  assert.match(await text(co, "#coWorkforce .co-conflict"), /الإصدار كل أسبوعين/);
+  assert.match(await text(co, "#coWorkforce .co-conflict"), /الإصدار شهريًا/);
+  await co.click('#coWorkforce .co-conflict button:has-text("اعتماد الجديدة")');
+  await co.waitForFunction(() => !document.querySelector("#coWorkforce .co-conflict"));
+  const archived = (await api(co, "/memory?state=archived")).notes.find((n) => n.body === "الإصدار كل أسبوعين");
+  assert.ok(archived?.supersededBy, "the superseded note is archived with a pointer, not deleted");
+  assert.equal(await co.locator("#coWorkforce .ops-seggroup button", { hasText: "مكتبة المعرفة" }).count(), 1, "memory and knowledge share one tab");
+  console.log("PASS integration: chat search keeps focus, rename dialog, Markdown export, context budget shown; memory conflict resolved by the owner with provenance kept");
 
   // ---------------------------------------------------------------- NEX: recommendation → approval; router untouched
   await go(co, "#view/resources/nex", '#rsNex .co-rec[data-rec="router-retry"]');

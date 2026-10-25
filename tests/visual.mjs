@@ -11,14 +11,18 @@ import { chromium } from "playwright";
 const [origin = "http://127.0.0.1:4172", outDir = "local/qa", widthsArg = "1440,1024,768,390,360", routesArg = "all"] = process.argv.slice(2);
 const WIDTHS = widthsArg.split(",").map(Number);
 const ROUTES = {
-  hq: "hq", projects: "projects", "projects-all": "projects/all", "projects-universe": "projects/universe", work: "work", "work-board": "work/board", "work-calendar": "work/calendar",
-  agents: "agents", "agents-request": "agents/request", "agents-runs": "agents/runs", "agent-ori": "agents/ori", "agent-mia": "agents/mia", "agent-nex": "agents/nex",
+  hq: "hq", projects: "projects", "projects-all": "projects/all", "projects-universe": "projects/universe", "projects-local": "projects/local", "projects-reports": "projects/reports",
+  work: "work", "work-board": "work/board", "work-calendar": "work/calendar",
+  "work-upcoming": "work/upcoming", "work-project": "work/project", "work-agent": "work/agent", "work-done": "work/done",
+  agents: "agents", "agents-operations": "agents/operations", "agents-chat": "agents/chat", "agents-tools": "agents/tools", "agents-memory": "agents/memory", "agents-knowledge": "agents/knowledge", "agents-conflicts": "agents/memory/conflicts",
+  "agent-mia-studio": "agents/mia/studio", "agent-ori-usage": "agents/ori/usage", "agent-luna-files": "agents/luna/files", "agent-zen-chat": "agents/zen/chat", "agent-rex-tools": "agents/rex/tools", "resources-accounting": "resources/accounting",
+  "agents-request": "agents/request", "agents-runs": "agents/runs", "agent-ori": "agents/ori", "agent-mia": "agents/mia", "agent-nex": "agents/nex",
   "agent-luna": "agents/luna", "agent-zen": "agents/zen", "agent-rex": "agents/rex", "agent-nex-art": "agents/nex/art", "agent-rex-runs": "agents/rex/runs",
-  resources: "resources", "resources-quotas": "resources/quotas", "resources-providers": "resources/providers", "resources-routing": "resources/routing",
-  system: "system", "system-activity": "system/activity", "system-settings": "system/settings",
+  resources: "resources", "resources-quotas": "resources/quotas", "resources-usage": "resources/usage", "resources-providers": "resources/providers", "resources-routing": "resources/routing", "resources-nex": "resources/nex",
+  system: "system", "system-servers": "system/servers", "system-activity": "system/activity", "system-settings": "system/settings",
   "system-integrations": "system/integrations", "system-data": "system/data", "system-security": "system/security",
-  "work-done": "work/done", "work-project": "work/project", "project-detail": "projects/p/gh:abudoxali%2F-abud-github-universe", "project-repo": "projects/p/gh:abudoxali%2F-abud-github-universe/repo",
-  "system-servers": "system/servers", "project-elhabak": "projects/p/gh:abudoxali%2Felhabak-construction-system-v1"
+  "project-detail": "projects/p/gh:abudoxali%2F-abud-github-universe", "project-repo": "projects/p/gh:abudoxali%2F-abud-github-universe/repo",
+  "project-elhabak": "projects/p/gh:abudoxali%2Felhabak-construction-system-v1"
 };
 const pick = routesArg === "all" ? Object.keys(ROUTES) : routesArg.split(",");
 

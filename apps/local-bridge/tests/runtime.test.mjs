@@ -1,19 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { openDatabase } from "../src/db.mjs";
 import { createCompany } from "../src/company.mjs";
 import { createRuntime, selectRoute, extractJson } from "../src/runtime.mjs";
+import { createConversations } from "../src/conversations.mjs";
 import { createRouterClient, createRouterService } from "../src/omniroute.mjs";
 import { recommend } from "../src/nex.mjs";
 import { CONN, TEST_KEY, defaultChat, startStubRouter } from "./fixtures.mjs";
 
 const TERMINAL = new Set(["succeeded", "failed", "blocked", "cancelled"]);
 
-async function setup({ chat, env = {}, patchOverview = (o) => o } = {}) {
+async function setup({ chat, env = {}, patchOverview = (o) => o, dbPath = ":memory:" } = {}) {
   const stub = await startStubRouter(chat ? { chat } : {});
   const client = createRouterClient({ env: { OMNIROUTE_BASE_URL: `http://127.0.0.1:${stub.port}`, OMNIROUTE_API_KEY: TEST_KEY, ...env } });
   const service = createRouterService({ client });
-  const company = createCompany({ db: openDatabase(":memory:") });
+  const company = createCompany({ db: openDatabase(dbPath) });
   company.seed();
   // Test policies point at the stub's providers: agy (restricted), codex (subscription), nvidia (api-free-tier).
   for (const p of company.listPolicies()) company.updatePolicy(p.domain, { candidates: ["agy/gemini-flash", "codex/gpt-x", "nvidia/model-a", "nvidia/model-b"], maxRetries: 2 });
@@ -56,6 +60,67 @@ test("route selection excludes restricted and non-opted-in subscription provider
     const offline = selectRoute({ policy, agentConfig: null, overview: { connection: { state: "offline" } } });
     assert.equal(offline.chosen, null);
   } finally { await env.close(); }
+});
+
+test("conversation messages use the existing run, scoped history and persisted assistant result", async () => {
+  const env = await setup();
+  try {
+    const conversations = createConversations({ company: env.company, runtime: env.runtime });
+    env.runtime.setConversations(conversations);
+    const project = env.company.listProjects()[0];
+    const thread = conversations.create({ agentId: "ori", projectId: project.id });
+    assert.throws(() => conversations.upload(thread.id, { filename: "../secret.txt", data: Buffer.from("x").toString("base64") }), { code: "filename-invalid" });
+    assert.throws(() => conversations.upload(thread.id, { filename: "fake.png", data: Buffer.from("not a png").toString("base64") }), { code: "attachment-mime" });
+    const attached = conversations.upload(thread.id, { filename: "brief.md", data: Buffer.from("Verified test fact: Alpha is the test project.").toString("base64") });
+    assert.equal(attached.readableByAgent, true);
+    const first = conversations.send(thread.id, { content: "ما حالة المشروع؟", idempotencyKey: "chat-first-001", attachmentIds: [attached.id] });
+    const firstRun = await env.wait(first.run.id);
+    assert.equal(firstRun.status, "succeeded", firstRun.errorMessage);
+    assert.equal(firstRun.conversationId, thread.id);
+    assert.deepEqual(conversations.messages(thread.id).slice(0, 2).map((m) => [m.role, m.state]), [["owner", "complete"], ["assistant", "complete"]]);
+    assert.ok(conversations.messages(thread.id).some((m) => m.role === "tool" && m.source === "project.read"));
+    assert.ok(conversations.messages(thread.id).some((m) => m.role === "event" && m.metadata.event === "run.succeeded"));
+    assert.equal(conversations.messages(thread.id)[1].content, firstRun.output);
+    assert.equal(conversations.messages(thread.id)[0].attachments[0].filename, "brief.md");
+    assert.match(env.stub.chats[0].messages.at(-1).content, /Verified test fact/);
+    assert.equal(conversations.list({ q: "حالة المشروع" }).length, 1, "search includes messages in the scoped thread");
+    assert.equal(conversations.list({ q: "missing" }).length, 0);
+    const second = conversations.send(thread.id, { content: "وما الخطوة التالية؟", idempotencyKey: "chat-second-001" });
+    assert.equal(conversations.send(thread.id, { content: "وما الخطوة التالية؟", idempotencyKey: "chat-second-001" }).deduplicated, true);
+    await env.wait(second.run.id);
+    assert.equal(env.stub.chats.length, 2);
+    assert.ok(env.stub.chats[1].messages.some((m) => m.role === "assistant" && m.content === firstRun.output));
+    assert.ok(env.stub.chats[1].messages.some((m) => m.role === "user" && m.content === "ما حالة المشروع؟"));
+    assert.throws(() => conversations.update(thread.id, { projectId: null }), { code: "conversation-project-locked" });
+    conversations.update(thread.id, { state: "archived" });
+    assert.throws(() => conversations.send(thread.id, { content: "x" }), { code: "conversation-archived" });
+    conversations.update(thread.id, { state: "active" });
+    assert.equal(conversations.list({ agentId: "ori" })[0].id, thread.id);
+  } finally { await env.close(); }
+});
+
+test("conversation and run survive Bridge store reopen with SQLite integrity", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "abud-conversation-"));
+  const file = join(dir, "company.db");
+  const env = await setup({ dbPath: file });
+  let threadId;
+  try {
+    const conversations = createConversations({ company: env.company, runtime: env.runtime });
+    env.runtime.setConversations(conversations);
+    threadId = conversations.create({ agentId: "zen" }).id;
+    const queued = conversations.send(threadId, { content: "احتفظ بالمحادثة", idempotencyKey: "chat-reopen-001" });
+    assert.equal((await env.wait(queued.run.id)).status, "succeeded");
+  } finally { await env.close(); env.company.db.close(); }
+  try {
+    const db = openDatabase(file);
+    const company = createCompany({ db });
+    const conversations = createConversations({ company, runtime: { enqueue() { throw new Error("unexpected inference"); } } });
+    assert.equal(db.raw.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
+    assert.equal(db.raw.prepare("PRAGMA foreign_key_check").all().length, 0);
+    assert.equal(conversations.messages(threadId)[1].state, "complete");
+    assert.equal(company.getRun(conversations.messages(threadId)[1].runId).conversationId, threadId);
+    db.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("end-to-end: owner request → LUNA → OmniRoute inference → persisted result, usage, follow-up task and audit trail", async () => {

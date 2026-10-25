@@ -298,6 +298,293 @@ export const MIGRATIONS = [
       );
       CREATE INDEX vps_actions_status ON vps_actions(status, created_at);
     `
+  },
+  {
+    version: 6,
+    name: "v5-conversations",
+    sql: `
+      CREATE TABLE conversations (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL REFERENCES agents(id),
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived','deleted')),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE INDEX conversations_agent_state ON conversations(agent_id, state, updated_at DESC);
+      CREATE INDEX conversations_project ON conversations(project_id, updated_at DESC);
+      CREATE INDEX conversations_task ON conversations(task_id, updated_at DESC);
+      ALTER TABLE agent_runs ADD COLUMN conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL;
+      CREATE INDEX agent_runs_conversation ON agent_runs(conversation_id, created_at);
+      CREATE TABLE conversation_messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+        role TEXT NOT NULL CHECK (role IN ('owner','assistant','tool','event')),
+        content TEXT NOT NULL CHECK (length(content) <= 30000),
+        state TEXT NOT NULL CHECK (state IN ('pending','complete','failed','blocked','cancelled')),
+        source TEXT NOT NULL DEFAULT 'runtime', metadata TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX conversation_messages_turn ON conversation_messages(run_id, role) WHERE role IN ('owner','assistant');
+      CREATE INDEX conversation_messages_thread ON conversation_messages(conversation_id, created_at, id);
+      CREATE TABLE conversation_attachments (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        message_id TEXT REFERENCES conversation_messages(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL CHECK (length(filename) BETWEEN 1 AND 120),
+        mime TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 1 AND 1048576),
+        data BLOB NOT NULL,
+        extracted_text TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX conversation_attachments_message ON conversation_attachments(message_id);
+      CREATE INDEX conversation_attachments_thread ON conversation_attachments(conversation_id, created_at);
+    `
+  },
+  {
+    version: 7,
+    name: "v5-memory-provenance-fts",
+    sql: `
+      ALTER TABLE memory_notes ADD COLUMN owner_agent TEXT REFERENCES agents(id);
+      ALTER TABLE memory_notes ADD COLUMN source_ref TEXT;
+      ALTER TABLE memory_notes ADD COLUMN source_at TEXT;
+      ALTER TABLE memory_notes ADD COLUMN reviewed_at TEXT;
+      ALTER TABLE memory_notes ADD COLUMN confidence TEXT NOT NULL DEFAULT 'unverified' CHECK (confidence IN ('verified','supported','unverified'));
+      ALTER TABLE memory_notes ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'internal' CHECK (sensitivity IN ('internal','restricted'));
+      ALTER TABLE memory_notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1);
+      ALTER TABLE memory_notes ADD COLUMN retention_until TEXT;
+      ALTER TABLE memory_notes ADD COLUMN state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived'));
+      CREATE INDEX memory_notes_state_scope ON memory_notes(state, scope, scope_ref, updated_at DESC);
+      CREATE VIRTUAL TABLE memory_fts USING fts5(title, body, content='memory_notes', content_rowid='rowid');
+      INSERT INTO memory_fts(memory_fts) VALUES('rebuild');
+      CREATE TRIGGER memory_fts_insert AFTER INSERT ON memory_notes BEGIN
+        INSERT INTO memory_fts(rowid,title,body) VALUES (new.rowid,new.title,new.body);
+      END;
+      CREATE TRIGGER memory_fts_delete AFTER DELETE ON memory_notes BEGIN
+        INSERT INTO memory_fts(memory_fts,rowid,title,body) VALUES ('delete',old.rowid,old.title,old.body);
+      END;
+      CREATE TRIGGER memory_fts_update AFTER UPDATE ON memory_notes BEGIN
+        INSERT INTO memory_fts(memory_fts,rowid,title,body) VALUES ('delete',old.rowid,old.title,old.body);
+        INSERT INTO memory_fts(rowid,title,body) VALUES (new.rowid,new.title,new.body);
+      END;
+    `
+  },
+  {
+    version: 8,
+    name: "v5-knowledge-documents",
+    sql: `
+      CREATE TABLE knowledge_documents (
+        id TEXT PRIMARY KEY,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        source_type TEXT NOT NULL CHECK (source_type IN ('owner-text','project-doc')),
+        source_ref TEXT NOT NULL,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        content_sha256 TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+        bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 100000),
+        source_bytes INTEGER, truncated INTEGER NOT NULL DEFAULT 0 CHECK (truncated IN (0,1)),
+        created_at TEXT NOT NULL, indexed_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        UNIQUE (project_id, source_type, source_ref)
+      );
+      CREATE INDEX knowledge_documents_project ON knowledge_documents(project_id,state,indexed_at DESC);
+      CREATE TABLE knowledge_chunks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id TEXT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL,
+        content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 1500),
+        start_char INTEGER NOT NULL, end_char INTEGER NOT NULL,
+        UNIQUE (document_id, ordinal)
+      );
+      CREATE VIRTUAL TABLE knowledge_fts USING fts5(content, content='knowledge_chunks', content_rowid='id');
+      CREATE TRIGGER knowledge_fts_insert AFTER INSERT ON knowledge_chunks BEGIN
+        INSERT INTO knowledge_fts(rowid,content) VALUES (new.id,new.content);
+      END;
+      CREATE TRIGGER knowledge_fts_delete AFTER DELETE ON knowledge_chunks BEGIN
+        INSERT INTO knowledge_fts(knowledge_fts,rowid,content) VALUES ('delete',old.id,old.content);
+      END;
+      CREATE TRIGGER knowledge_fts_update AFTER UPDATE ON knowledge_chunks BEGIN
+        INSERT INTO knowledge_fts(knowledge_fts,rowid,content) VALUES ('delete',old.id,old.content);
+        INSERT INTO knowledge_fts(rowid,content) VALUES (new.id,new.content);
+      END;
+    `
+  },
+  {
+    // Capability engine: every tool execution is audited, generated files are stored as artifacts, the owner can disable a
+    // capability, spans stay local, and knowledge gains approved web pages. knowledge_documents is rebuilt to widen its
+    // source_type CHECK; foreign keys are suspended for this migration only so the rebuild cannot cascade into chunks.
+    version: 9,
+    name: "v5-capability-engine",
+    foreignKeysOff: true,
+    sql: `
+      CREATE TABLE tool_executions (
+        id TEXT PRIMARY KEY,
+        tool_id TEXT NOT NULL, tool_version TEXT NOT NULL,
+        agent_id TEXT NOT NULL REFERENCES agents(id),
+        actor_type TEXT NOT NULL, actor_id TEXT NOT NULL,
+        run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+        workflow_id TEXT,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        status TEXT NOT NULL CHECK (status IN ('running','succeeded','failed','denied','timeout','cancelled')),
+        input TEXT NOT NULL DEFAULT '{}', output_summary TEXT,
+        error_code TEXT, error_message TEXT,
+        artifact_ids TEXT NOT NULL DEFAULT '[]',
+        started_at TEXT NOT NULL, finished_at TEXT, duration_ms INTEGER
+      );
+      CREATE INDEX tool_executions_agent ON tool_executions(agent_id, started_at DESC);
+      CREATE INDEX tool_executions_tool ON tool_executions(tool_id, started_at DESC);
+      CREATE INDEX tool_executions_run ON tool_executions(run_id);
+      CREATE INDEX tool_executions_workflow ON tool_executions(workflow_id);
+      CREATE INDEX tool_executions_status ON tool_executions(status, started_at);
+      CREATE TABLE artifacts (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('image','calendar','pdf','report','canvas')),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        filename TEXT NOT NULL CHECK (length(filename) BETWEEN 1 AND 120),
+        mime TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 1 AND 8388608),
+        sha256 TEXT NOT NULL,
+        data BLOB NOT NULL,
+        agent_id TEXT REFERENCES agents(id),
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+        execution_id TEXT REFERENCES tool_executions(id) ON DELETE SET NULL,
+        workflow_id TEXT,
+        state TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','approved','archived')),
+        metadata TEXT NOT NULL DEFAULT '{}',
+        approved_at TEXT, created_at TEXT NOT NULL
+      );
+      CREATE INDEX artifacts_project ON artifacts(project_id, created_at DESC);
+      CREATE INDEX artifacts_agent ON artifacts(agent_id, created_at DESC);
+      CREATE INDEX artifacts_workflow ON artifacts(workflow_id);
+      CREATE TABLE capability_state (
+        tool_id TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+        disabled_reason TEXT, health TEXT, health_at TEXT, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE visual_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+        kind TEXT NOT NULL CHECK (kind IN ('fabric')),
+        spec TEXT NOT NULL CHECK (length(spec) <= 400000),
+        width INTEGER NOT NULL, height INTEGER NOT NULL,
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE telemetry_spans (
+        span_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL, parent_span_id TEXT,
+        name TEXT NOT NULL, kind TEXT,
+        start_at TEXT NOT NULL, duration_ms REAL NOT NULL,
+        status TEXT NOT NULL,
+        agent_id TEXT, tool_id TEXT, run_id TEXT,
+        attributes TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX telemetry_spans_at ON telemetry_spans(start_at);
+      CREATE INDEX telemetry_spans_agent ON telemetry_spans(agent_id, start_at);
+      CREATE INDEX telemetry_spans_trace ON telemetry_spans(trace_id);
+      CREATE TABLE knowledge_documents_v9 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        source_type TEXT NOT NULL CHECK (source_type IN ('owner-text','project-doc','web-page')),
+        source_ref TEXT NOT NULL,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        content_sha256 TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+        bytes INTEGER NOT NULL CHECK (bytes BETWEEN 1 AND 100000),
+        source_bytes INTEGER, truncated INTEGER NOT NULL DEFAULT 0 CHECK (truncated IN (0,1)),
+        created_at TEXT NOT NULL, indexed_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        source_url TEXT, fetched_at TEXT, etag TEXT, last_checked_at TEXT, freshness TEXT,
+        UNIQUE (project_id, source_type, source_ref)
+      );
+      INSERT INTO knowledge_documents_v9 (id,project_id,source_type,source_ref,title,content_sha256,state,bytes,source_bytes,truncated,created_at,indexed_at,updated_at)
+        SELECT id,project_id,source_type,source_ref,title,content_sha256,state,bytes,source_bytes,truncated,created_at,indexed_at,updated_at FROM knowledge_documents;
+      DROP TABLE knowledge_documents;
+      ALTER TABLE knowledge_documents_v9 RENAME TO knowledge_documents;
+      CREATE INDEX knowledge_documents_project ON knowledge_documents(project_id,state,indexed_at DESC);
+    `
+  },
+  {
+    // Bounded multi-agent workflows: a persisted plan (steps with agent, tool, inputs, dependencies and depth), every
+    // state change as an event, and limits stored with the workflow so a restarted Bridge resumes under the same bounds.
+    version: 10,
+    name: "v5-orchestration",
+    sql: `
+      CREATE TABLE workflows (
+        id TEXT PRIMARY KEY,
+        template TEXT NOT NULL,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
+        objective TEXT NOT NULL CHECK (length(objective) <= 2000),
+        primary_agent TEXT NOT NULL REFERENCES agents(id),
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        parent_run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued','running','waiting-approval','succeeded','partial','failed','cancelled')),
+        limits TEXT NOT NULL,
+        input TEXT NOT NULL DEFAULT '{}',
+        report TEXT, evidence TEXT NOT NULL DEFAULT '[]',
+        error_code TEXT, error_message TEXT,
+        created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT, updated_at TEXT NOT NULL
+      );
+      CREATE INDEX workflows_status ON workflows(status, created_at DESC);
+      CREATE INDEX workflows_project ON workflows(project_id, created_at DESC);
+      CREATE TABLE workflow_steps (
+        id TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        agent_id TEXT NOT NULL REFERENCES agents(id),
+        kind TEXT NOT NULL CHECK (kind IN ('tool','synthesis','followups')),
+        title TEXT NOT NULL,
+        depends_on TEXT NOT NULL DEFAULT '[]',
+        depth INTEGER NOT NULL CHECK (depth BETWEEN 1 AND 3),
+        optional INTEGER NOT NULL DEFAULT 0 CHECK (optional IN (0,1)),
+        tool_id TEXT, input TEXT NOT NULL DEFAULT '{}', expected TEXT,
+        status TEXT NOT NULL CHECK (status IN ('pending','running','succeeded','failed','skipped','cancelled','waiting-approval')),
+        run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+        execution_id TEXT, approval_id TEXT,
+        output TEXT, evidence TEXT NOT NULL DEFAULT '[]',
+        error_code TEXT, error_message TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT, finished_at TEXT,
+        UNIQUE (workflow_id, key)
+      );
+      CREATE INDEX workflow_steps_workflow ON workflow_steps(workflow_id, ordinal);
+      CREATE INDEX workflow_steps_status ON workflow_steps(status);
+      CREATE TABLE workflow_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        step_id TEXT, at TEXT NOT NULL, kind TEXT NOT NULL, agent_id TEXT,
+        detail TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX workflow_events_workflow ON workflow_events(workflow_id, id);
+    `
+  },
+  {
+    // Integration: memory conflicts keep both records and their provenance until the owner decides; conversation
+    // summaries are extractive and hash-verified against the stored messages they cover (originals are never removed);
+    // time-range indexes keep accounting and telemetry queries off full scans.
+    version: 11,
+    name: "v5-integration",
+    sql: `
+      ALTER TABLE memory_notes ADD COLUMN conflicts_with TEXT;
+      ALTER TABLE memory_notes ADD COLUMN conflict_state TEXT CHECK (conflict_state IN ('open','kept-new','kept-existing','kept-both'));
+      ALTER TABLE memory_notes ADD COLUMN superseded_by TEXT;
+      CREATE INDEX memory_notes_conflict ON memory_notes(conflict_state);
+      CREATE TABLE conversation_summaries (
+        conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+        upto_rowid INTEGER NOT NULL,
+        covered INTEGER NOT NULL,
+        digest TEXT NOT NULL,
+        text TEXT NOT NULL CHECK (length(text) <= 12000),
+        method TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX agent_runs_created ON agent_runs(created_at);
+      CREATE INDEX tool_executions_started ON tool_executions(started_at);
+      CREATE INDEX conversation_attachments_created ON conversation_attachments(created_at);
+    `
   }
 ];
 
@@ -309,6 +596,10 @@ export function parseJson(value, fallback) {
   try { return JSON.parse(value); } catch (_) { return fallback; }
 }
 
+/** The verified copy taken before the most recent schema upgrade in this process (null when none was needed). */
+let lastPreMigrationBackup = null;
+export const preMigrationBackup = () => lastPreMigrationBackup;
+
 /** Opens (or creates) the store and applies pending migrations inside one transaction each. */
 export function openDatabase(path) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -317,22 +608,44 @@ export function openDatabase(path) {
   if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL;");
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
   const applied = new Set(db.prepare("SELECT version FROM schema_migrations").all().map((row) => row.version));
+  // An existing store is copied (VACUUM INTO) and verified before any schema upgrade, so a newer build started from this
+  // checkout can never alter the daily database without a restorable copy. A failed copy stops the upgrade.
+  const pending = MIGRATIONS.filter((m) => !applied.has(m.version));
+  lastPreMigrationBackup = null; // reported only by the open that actually upgraded the store
+  if (path !== ":memory:" && pending.length && applied.size) {
+    const from = Math.max(...applied);
+    const dir = join(dirname(path), "backups");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, `company-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomBytes(6).toString("hex")}.db`);
+    db.prepare("VACUUM INTO ?").run(file);
+    const copy = new DatabaseSync(file, { readOnly: true });
+    try {
+      if (copy.prepare("PRAGMA integrity_check").get().integrity_check !== "ok" || copy.prepare("SELECT MAX(version) AS v FROM schema_migrations").get().v !== from) throw new Error("pre-migration-backup-failed");
+    } finally { copy.close(); }
+    lastPreMigrationBackup = { file, fromVersion: from, toVersion: Math.max(...pending.map((m) => m.version)), at: nowIso() };
+  }
   for (const migration of MIGRATIONS) {
     if (applied.has(migration.version)) continue;
+    // A table rebuild must not cascade deletes into child rows; the pragma only takes effect outside a transaction, so
+    // it is lowered before BEGIN and every reference is re-verified before COMMIT.
+    if (migration.foreignKeysOff) db.exec("PRAGMA foreign_keys = OFF");
     db.exec("BEGIN");
     try {
       db.exec(migration.sql);
+      if (migration.foreignKeysOff && db.prepare("PRAGMA foreign_key_check").all().length) throw new Error(`migration-${migration.version}-foreign-key-violation`);
       db.prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)").run(migration.version, migration.name, nowIso());
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;
+    } finally {
+      if (migration.foreignKeysOff) db.exec("PRAGMA foreign_keys = ON");
     }
   }
   return wrap(db, path);
 }
 
-const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets"];
+const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets", "conversations", "knowledge_documents", "tool_executions", "artifacts", "workflows"];
 const backupHealth = new Map();
 
 function wrap(db, path) {
@@ -422,7 +735,10 @@ function wrap(db, path) {
           const foreignKeyViolations = copy.prepare("PRAGMA foreign_key_check").all().length;
           const schemaVersion = copy.prepare("SELECT MAX(version) AS v FROM schema_migrations").get().v;
           const counts = {};
+          // A backup taken before a later migration lacks its tables; those are reported as absent, not as zero rows.
+          const has = (store, table) => Boolean(store.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
           for (const table of RESTORE_TABLES) {
+            if (!has(copy, table) || !has(db, table)) { counts[table] = { backup: has(copy, table) ? copy.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n : null, live: has(db, table) ? db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n : null }; continue; }
             counts[table] = {
               backup: copy.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n,
               live: db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n

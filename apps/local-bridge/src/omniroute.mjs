@@ -56,7 +56,7 @@ export function boundedChatTimeouts(input = {}) {
 /** Reads an OpenAI-style SSE stream into the non-streaming response shape ({model, choices:[{message}], usage}).
  * `onChunk(chars)` fires for every chunk that carries content or reasoning, so callers can time the first token and
  * detect stalls. Throws "too-large" past MAX_BODY_BYTES and "invalid-stream" for unparseable events. */
-async function readEventStream(response, { onChunk, onActivity, signal }) {
+async function readEventStream(response, { onChunk, onActivity, onText, signal }) {
   const reader = response.body.getReader();
   const onAbort = () => { reader.cancel().catch(() => {}); };
   signal?.addEventListener("abort", onAbort, { once: true });
@@ -79,11 +79,11 @@ async function readEventStream(response, { onChunk, onActivity, signal }) {
     const delta = choice?.delta ?? {};
     let piece = delta.content;
     if (Array.isArray(piece)) piece = piece.map((part) => part?.text ?? "").join("");
-    if (typeof piece === "string" && piece) { content += piece; onChunk?.(content.length); }
+    if (typeof piece === "string" && piece) { content += piece; onChunk?.(content.length); onText?.(content); }
     // Some compatible routers send a final complete message after deltas. Treat it as a snapshot.
     const snapshot = choice?.message?.content;
     if (typeof snapshot === "string" && snapshot !== content) {
-      if (!content || snapshot.startsWith(content)) { content = snapshot; onChunk?.(content.length); }
+      if (!content || snapshot.startsWith(content)) { content = snapshot; onChunk?.(content.length); onText?.(content); }
     }
     if (choice?.finish_reason) finish = choice.finish_reason;
   };
@@ -109,6 +109,9 @@ async function readEventStream(response, { onChunk, onActivity, signal }) {
   } finally {
     signal?.removeEventListener("abort", onAbort);
   }
+  // A stream that completed but carried no visible text (e.g. reasoning used the whole output budget) is an empty
+  // output, which the runtime may retry on another eligible model; a cut-off stream is incomplete.
+  if (completed && eventCount && !content) throw Object.assign(new Error("empty-output"), { emptyOutput: true, usage });
   if (!completed || !eventCount || !content) throw new Error("incomplete-stream");
   return { model, choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: finish }], usage: usage ?? undefined };
 }
@@ -174,7 +177,7 @@ export function createRouterClient({ env = process.env, fetchImpl = globalThis.f
    *   timeout           the whole attempt exceeded `totalMs`.
    * A non-SSE reply (errors, or a router that ignores `stream`) is parsed as JSON exactly as before. Never throws; resolves
    * to {ok, code, status, data, meta}; `data` always has the non-streaming shape and meta.timing carries per-phase times. */
-  async function chat({ model, messages, maxTokens, temperature, signal, timeouts = {}, onProgress = null }) {
+  async function chat({ model, messages, maxTokens, temperature, signal, timeouts = {}, onProgress = null, onText = null }) {
     if (!config.valid) return { ok: false, code: "misconfigured", message: config.error };
     const limits = boundedChatTimeouts(timeouts);
     const path = "/v1/chat/completions";
@@ -238,7 +241,7 @@ export function createRouterClient({ env = process.env, fetchImpl = globalThis.f
     let body = null;
     if (response.ok && /text\/event-stream/i.test(header("content-type") || "")) {
       try {
-        body = await readEventStream(response, { signal: controller.signal,
+        body = await readEventStream(response, { signal: controller.signal, onText,
           onActivity: () => { if (timing.firstTokenMs != null) arm("stalled", limits.idleMs); },
           onChunk: (chars) => {
             if (timing.firstTokenMs == null) { timing.firstTokenMs = now() - postStarted; timing.phase = "generating"; }
@@ -249,6 +252,7 @@ export function createRouterClient({ env = process.env, fetchImpl = globalThis.f
       } catch (error) {
         if (reason) return failed(meta);
         done();
+        if (error?.emptyOutput) return { ok: false, code: "empty-output", status: response.status, message: "no visible output (the model may have spent the output budget on reasoning)", usage: error.usage ?? null, meta: { ...meta, latencyMs: timing.totalMs } };
         return { ok: false, code: error?.providerError ? "provider-unavailable" : "bad-response", status: response.status, message: error?.providerError ? errorMessage({ error: error.providerError }) : error?.message === "too-large" ? "response-too-large" : error?.message === "incomplete-stream" ? "incomplete-stream" : "invalid-stream", meta: { ...meta, latencyMs: timing.totalMs } };
       }
       if (reason) return failed(meta);
@@ -269,7 +273,7 @@ export function createRouterClient({ env = process.env, fetchImpl = globalThis.f
     done();
     meta.latencyMs = timing.totalMs;
     if (response.ok && body?.choices?.[0]?.message?.content) timing.firstTokenMs = now() - postStarted;
-    if (response.ok && body?.choices?.[0]?.message?.content) return { ok: true, status: response.status, data: body, meta };
+    if (response.ok && body?.choices?.[0]?.message?.content) { onText?.(body.choices[0].message.content); return { ok: true, status: response.status, data: body, meta }; }
     if (response.ok) return { ok: false, code: "bad-response", status: response.status, message: "empty-output", meta };
     const message = errorMessage(body);
     const errCode = typeof body?.error?.code === "string" ? body.error.code : null;

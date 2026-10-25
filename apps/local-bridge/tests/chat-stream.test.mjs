@@ -106,3 +106,16 @@ test("overall duration cap wins even when the header phase allows longer", async
   assert.equal(result.code, "timeout");
   assert.ok(result.meta.timing.totalMs >= 19500);
 });
+
+test("a completed stream with no visible text is a retryable empty output that keeps its token usage", async () => {
+  const events = [
+    'data: {"model":"flash","choices":[{"delta":{"reasoning_content":"thinking"}}]}\n\n',
+    'data: {"choices":[{"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":1400,"completion_tokens":1600}}\n\n',
+    "data: [DONE]\n\n"
+  ];
+  const router = client(() => new Response(stream(events), { headers }));
+  const result = await call(router, { onText: () => {} });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "empty-output");
+  assert.deepEqual([result.usage.prompt_tokens, result.usage.completion_tokens], [1400, 1600]);
+});

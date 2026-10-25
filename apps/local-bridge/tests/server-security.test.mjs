@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer, requestIsLocal } from "../src/server.mjs";
@@ -9,12 +9,12 @@ import { TEST_KEY, startStubRouter } from "./fixtures.mjs";
 
 const REPO_ROOT = resolve(process.cwd(), "../..");
 
-async function startBridge(env) {
+async function startBridge(env, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), "abud-srv-"));
   await writeFile(join(dir, "worlds.json"), JSON.stringify({ githubOwner: "x", worlds: [] }));
-  const server = createServer({ root: REPO_ROOT, configPath: join(dir, "worlds.json"), workspaceConfigPath: join(dir, "workspace.json"), policyPath: join(dir, "policy.json"), dbPath: ":memory:", vpsConfigPath: join(dir, "no-vps.json"), env, agentOptions: { runImpl: async () => ({ ok: false, reason: "not-found" }), home: dir } });
+  const server = createServer({ root: REPO_ROOT, configPath: join(dir, "worlds.json"), workspaceConfigPath: join(dir, "workspace.json"), policyPath: join(dir, "policy.json"), dbPath: options.dbPath || ":memory:", vpsConfigPath: join(dir, "no-vps.json"), env, agentOptions: { runImpl: async () => ({ ok: false, reason: "not-found" }), home: dir } });
   await new Promise((resolveReady) => server.listen(0, "127.0.0.1", resolveReady));
-  return { port: server.address().port, close: () => new Promise((resolveClosed) => server.close(resolveClosed)) };
+  return { port: server.address().port, server, close: () => new Promise((resolveClosed) => server.close(resolveClosed)) };
 }
 
 /** Raw request so that arbitrary Host / Origin / Sec-Fetch-Site headers can be sent. */
@@ -100,6 +100,66 @@ test("full API against a stub router: structured data, correct states, and no se
     for (const secret of [TEST_KEY, "OIDC-SECRET", "SECRET-SHOULD-NOT-LEAK", "owner@example.com"]) assert.ok(!everything.includes(secret), `response leaked ${secret}`);
     assert.ok(stub.hits.every((hit) => hit.method === "GET"));
   } finally { await bridge.close(); await stub.close(); }
+});
+
+test("conversation API persists queued messages and guards cross-thread event streams", async () => {
+  const bridge = await startBridge({});
+  try {
+    const base = `http://127.0.0.1:${bridge.port}/local-api/company`;
+    const token = JSON.parse((await raw(bridge.port, "/local-api/session")).body).token;
+    const write = async (method, path, body) => {
+      const response = await fetch(`${base}${path}`, { method, headers: { "Content-Type": "application/json", "X-Abud-Session": token }, body: body == null ? undefined : JSON.stringify(body) });
+      return { status: response.status, data: await response.json() };
+    };
+    const made = await write("POST", "/conversations", { agentId: "ori", title: "اختبار محادثة" });
+    assert.equal(made.status, 201);
+    const id = made.data.id;
+    const file = await write("POST", `/conversations/${id}/attachments`, { filename: "note.txt", data: Buffer.from("A small fact").toString("base64") });
+    assert.equal(file.status, 201);
+    assert.equal(file.data.readableByAgent, true);
+    assert.equal((await fetch(`${base}/conversations/${id}/attachments/${file.data.id}`)).headers.get("content-disposition").startsWith("attachment;"), true);
+    const sent = await write("POST", `/conversations/${id}/messages`, { content: "مرحبًا", idempotencyKey: "test-chat-001", attachmentIds: [file.data.id] });
+    assert.equal(sent.status, 201);
+    assert.equal(sent.data.run.conversationId, id);
+    const detail = await (await fetch(`${base}/conversations/${id}`)).json();
+    assert.deepEqual(detail.messages.map((m) => m.state), ["complete", "pending"]);
+    assert.equal(detail.messages[0].attachments[0].filename, "note.txt");
+    assert.equal((await write("POST", `/conversations/${id}/messages`, { content: "مرحبًا", idempotencyKey: "test-chat-001" })).data.deduplicated, true);
+    const other = (await write("POST", "/conversations", { agentId: "zen" })).data;
+    assert.equal((await fetch(`${base}/conversations/${other.id}/runs/${sent.data.run.id}/events`)).status, 404);
+    assert.equal((await write("PATCH", `/conversations/${id}`, { projectId: "nonexistent" })).status, 409, "project scope is locked after a message");
+    const controller = new AbortController();
+    const stream = await fetch(`${base}/conversations/${id}/runs/${sent.data.run.id}/events`, { signal: controller.signal });
+    assert.equal(stream.status, 200);
+    assert.match(await stream.body.getReader().read().then((r) => new TextDecoder().decode(r.value)), /"type":"snapshot"/);
+    controller.abort();
+    assert.equal((await write("DELETE", `/conversations/${other.id}`)).data.state, "deleted");
+    assert.equal((await fetch(`${base}/conversations/${other.id}`)).status, 404);
+  } finally { await bridge.close(); }
+});
+
+test("conversation API survives a Bridge restart on the same private SQLite file", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "abud-chat-restart-"));
+  const file = join(dir, "company.db");
+  let bridge = await startBridge({}, { dbPath: file });
+  try {
+    const token = JSON.parse((await raw(bridge.port, "/local-api/session")).body).token;
+    const post = async (path, body) => {
+      const response = await fetch(`http://127.0.0.1:${bridge.port}/local-api/company${path}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Abud-Session": token }, body: JSON.stringify(body) });
+      assert.equal(response.status, 201);
+      return response.json();
+    };
+    const thread = await post("/conversations", { agentId: "zen", title: "باقية بعد إعادة التشغيل" });
+    const sent = await post(`/conversations/${thread.id}/messages`, { content: "احفظ هذه الرسالة", idempotencyKey: "restart-test-001" });
+    await bridge.server.runtime.stop();
+    await bridge.close();
+    await new Promise((resolveTick) => setImmediate(resolveTick));
+    bridge = await startBridge({}, { dbPath: file });
+    const detail = JSON.parse((await raw(bridge.port, `/local-api/company/conversations/${thread.id}`)).body);
+    assert.equal(detail.messages[0].content, "احفظ هذه الرسالة");
+    assert.equal(detail.messages[1].runId, sent.run.id);
+    assert.equal(bridge.server.company.db.raw.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
+  } finally { await bridge.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
 test("bridge with an unreachable router still serves every endpoint with explicit offline state", async () => {

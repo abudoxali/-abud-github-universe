@@ -1,7 +1,7 @@
 import { createServer as createHttpServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -13,9 +13,15 @@ import { createWorkspaceScanner, loadWorkspaceConfig, publicWorkspaceConfig } fr
 import { evaluatePolicy, loadPolicy } from "./policy.mjs";
 import { createTtlCache, mapLimit, redact } from "./util.mjs";
 import { classifyPreviousRun, createLifecycleRecorder, readPreviousRun, safeStack } from "./lifecycle.mjs";
-import { openDatabase } from "./db.mjs";
+import { openDatabase, preMigrationBackup } from "./db.mjs";
 import { createCompany, HttpError } from "./company.mjs";
 import { createRuntime } from "./runtime.mjs";
+import { createConversations } from "./conversations.mjs";
+import { createKnowledge } from "./knowledge.mjs";
+import { createArtifacts, createTemplates } from "./artifacts.mjs";
+import { createTelemetry } from "./telemetry.mjs";
+import { MCP_TOOLS } from "./mcp-server.mjs";
+import { createAccounting } from "./accounting.mjs";
 import { createOperations, recommend } from "./nex.mjs";
 import { AGENTS, agentById } from "./catalog.mjs";
 import { createGitHubReader } from "./github.mjs";
@@ -33,6 +39,13 @@ const CONTENT_TYPES = {
   ".woff2": "font/woff2"
 };
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+/** Browser libraries for the internal UI, served from the bridge's pinned npm dependencies by fixed name only. */
+const BRIDGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
+const VENDOR = {
+  "internal/vendor/fabric.min.js": join(BRIDGE_ROOT, "node_modules", "fabric", "dist", "index.min.js"),
+  "internal/vendor/echarts.min.js": join(BRIDGE_ROOT, "node_modules", "echarts", "dist", "echarts.min.js")
+};
+const INLINE_ARTIFACT = new Set(["image/png", "image/webp", "image/jpeg", "image/avif", "application/pdf"]);
 const FORCE_REFRESH_MIN_GAP_MS = 5000;
 const MAX_JSON_BODY = 256 * 1024;
 const IDENTITY_RESOLVE_LIMIT = 12; // per manual sync
@@ -98,14 +111,14 @@ export function requestIsLocal(request, port) {
   return true;
 }
 
-async function readJson(request) {
+async function readJson(request, limit = MAX_JSON_BODY) {
   const type = String(request.headers["content-type"] || "");
   if (!/^application\/json\b/i.test(type)) throw new HttpError(415, "unsupported-media-type", "المحتوى يجب أن يكون JSON");
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > MAX_JSON_BODY) throw new HttpError(413, "payload-too-large", "حجم الطلب كبير جدًا");
+    if (size > limit) throw new HttpError(413, "payload-too-large", "حجم الطلب كبير جدًا");
     chunks.push(chunk);
   }
   if (!size) return {};
@@ -132,6 +145,7 @@ export function createServer({
   routerClient = createRouterClient({ env }),
   githubReader = createGitHubReader(),
   agentOptions = {},
+  capabilityOptions = {},
   background = false,
   instance = null,
   log = (line) => console.log(line)
@@ -149,6 +163,16 @@ export function createServer({
   const db = openDatabase(dbPath);
   const company = createCompany({ db });
   company.seed();
+  const upgraded = dbPath !== ":memory:" ? preMigrationBackup() : null;
+  if (upgraded && upgraded.file.startsWith(dirname(dbPath))) {
+    company.log({ actorType: "system", actorId: "bridge", action: "store.migrated", targetType: "system", targetId: "store", outcome: "info", summary: `ترقية مخطط قاعدة البيانات من ${upgraded.fromVersion} إلى ${upgraded.toVersion} بعد نسخة احتياطية متحقق منها`, metadata: { backup: basename(upgraded.file) } });
+    company.raise({ key: `store-migrated:${upgraded.toVersion}`, level: "info", kind: "store", title: `تمت ترقية قاعدة البيانات إلى الإصدار ${upgraded.toVersion}`, body: `أُخذت نسخة احتياطية متحقق منها قبل الترقية: ${basename(upgraded.file)}`, targetType: "system", targetId: "store" });
+  }
+  const knowledge = createKnowledge({ company });
+  const artifacts = createArtifacts({ company });
+  const templates = createTemplates({ company });
+  const telemetry = createTelemetry({ db });
+  const accounting = createAccounting({ company });
   const startup = createStartup({ root, env, log, ...startupOptions });
   const vps = createVps({ company, configPath: vpsConfigPath, log, ...vpsOptions });
   const vpsReady = vps.reload().catch((error) => { log(JSON.stringify({ event: "vps-config-error", name: error?.name || "Error" })); });
@@ -209,13 +233,23 @@ export function createServer({
     getUsage: (range) => usage(range),
     workspace: { scan: (refresh) => runWorkspaceScan(refresh), paths: () => workspaceScanner?.paths ?? new Map() },
     vps,
-    log
+    log,
+    artifacts,
+    telemetry,
+    capabilityOptions
   });
+  const conversations = createConversations({ company, runtime });
+  runtime.setConversations(conversations);
+  runtime.setKnowledge(knowledge);
   vps.setEnqueue((input, actor) => runtime.enqueue(input, actor));
   const operations = createOperations({ company, getOverview: (force) => overview(force), log });
   const interrupted = runtime.recoverInterrupted();
   if (interrupted) log(`marked ${interrupted} interrupted run(s) as failed`);
   if (background) { operations.start(); setImmediate(() => runtime.pump()); vpsReady.then(() => vps.start()); }
+  const pruneTelemetry = () => { try { telemetry.prune(company.settings().telemetryRetentionDays); conversations.purgeAttachments(); } catch (_) { /* best effort */ } };
+  const telemetryTimer = background ? setInterval(pruneTelemetry, 6 * 3_600_000) : null;
+  telemetryTimer?.unref?.();
+  if (background) setTimeout(pruneTelemetry, 30_000).unref();
 
   /** Asks GitHub (read-only, bounded) for the current identity of observed remotes so a renamed account or transferred
    * repository maps to one project. Without gh authentication nothing is confirmed and identities stay as observed. */
@@ -391,6 +425,59 @@ export function createServer({
     return { ...run, steps: run.workflowId ? company.listRuns({ workflowId: run.workflowId, limit: 20 }).filter((r) => r.id !== run.id).reverse() : [] };
   });
   route("POST", "/runs/([^/]+)/cancel", ({ params }) => runtime.cancel(params[0], owner));
+  route("GET", "/conversations", ({ query }) => ({ conversations: conversations.list({ agentId: query.get("agentId"), projectId: query.get("projectId"), state: query.get("state") || "active", before: query.get("before"), limit: query.get("limit"), q: query.get("q") }) }));
+  route("POST", "/conversations", ({ body }) => conversations.create(body));
+  route("GET", "/conversations/([^/]+)", ({ params }) => ({ ...conversations.get(params[0]), messages: conversations.messages(params[0]) }));
+  route("PATCH", "/conversations/([^/]+)", ({ params, body }) => conversations.update(params[0], body));
+  route("DELETE", "/conversations/([^/]+)", ({ params }) => conversations.update(params[0], { state: "deleted" }));
+  route("GET", "/conversations/([^/]+)/context", ({ params }) => conversations.contextPreview(params[0]));
+  route("GET", "/conversations/([^/]+)/messages", ({ params, query }) => ({ messages: conversations.messages(params[0], { before: query.get("before"), limit: query.get("limit") }) }));
+  route("POST", "/conversations/([^/]+)/messages", ({ params, body }) => conversations.send(params[0], body));
+  route("GET", "/conversations/([^/]+)/attachments", ({ params }) => ({ attachments: conversations.attachments(params[0], { pendingOnly: true }) }));
+  route("POST", "/conversations/([^/]+)/attachments", ({ params, body }) => conversations.upload(params[0], body));
+  route("DELETE", "/conversations/([^/]+)/attachments/([^/]+)", ({ params }) => conversations.removeAttachment(params[0], params[1]));
+  route("GET", "/knowledge", ({ query }) => ({ documents: knowledge.list({ projectId: query.get("projectId"), sourceType: query.get("sourceType"), state: query.get("state") || "active" }) }));
+  route("GET", "/knowledge/search", ({ query }) => ({ results: knowledge.search({ q: query.get("q"), projectId: query.get("projectId"), sourceType: query.get("sourceType") }) }));
+  route("POST", "/knowledge", ({ body }) => knowledge.ingestOwner(body));
+  route("POST", "/knowledge/import-project", async ({ body }) => {
+    const projectId = company.getProject(body.projectId).id;
+    if (!["README.md", "STATUS.md"].includes(body.doc)) throw new HttpError(422, "validation", "اختر README.md أو STATUS.md");
+    await runWorkspaceScan("all");
+    const result = await runtime.invokeTool("zen", "project.docs", { projectId, doc: body.doc }, { toolCalls: [] });
+    if (!result.docs?.length) throw new HttpError(404, "knowledge-source", "لم يُعثر على مستند معتمد لهذا المشروع");
+    return { documents: result.docs.map((doc) => knowledge.ingestProject(projectId, doc)) };
+  });
+  route("POST", "/knowledge/reindex", () => knowledge.reindex());
+  route("GET", "/knowledge/([^/]+)", ({ params }) => knowledge.preview(params[0]));
+  route("PATCH", "/knowledge/([^/]+)", ({ params, body }) => knowledge.setState(params[0], body.state));
+  route("DELETE", "/knowledge/([^/]+)", ({ params }) => knowledge.remove(params[0]));
+  // V5 capability engine
+  route("GET", "/capabilities", async ({ query }) => ({ capabilities: await runtime.capabilityRegistry({ refresh: query.get("refresh") === "1" }), checkedAt: new Date().toISOString() }));
+  route("PATCH", "/capabilities/([A-Za-z0-9.]+)", ({ params, body }) => runtime.setCapabilityEnabled(params[0], { enabled: body.enabled, reason: body.reason }, owner));
+  route("POST", "/capabilities/([A-Za-z0-9.]+)/execute", ({ params, body }) => runtime.executeCapability({ agentId: typeof body.agentId === "string" ? body.agentId : "", toolId: params[0], input: body.input && typeof body.input === "object" && !Array.isArray(body.input) ? body.input : {}, projectId: typeof body.projectId === "string" && body.projectId ? body.projectId : null, confirm: body.confirm === true }, owner));
+  // V5 multi-agent workflows (ORI orchestration) and accounting
+  route("GET", "/workflow-templates", () => ({ templates: runtime.orchestrator.templates() }));
+  route("GET", "/workflows", ({ query }) => ({ workflows: runtime.orchestrator.list({ status: query.get("status"), projectId: query.get("projectId"), limit: query.get("limit") }) }));
+  route("POST", "/workflows", ({ body }) => runtime.orchestrator.create({ template: String(body.template ?? ""), projectId: body.projectId || null, topic: body.topic ?? null, urls: body.urls ?? null, limits: body.limits && typeof body.limits === "object" ? body.limits : {}, priority: body.priority }, owner));
+  route("GET", "/workflows/([^/]+)", ({ params }) => runtime.orchestrator.get(params[0]));
+  route("POST", "/workflows/([^/]+)/cancel", ({ params }) => runtime.orchestrator.cancel(params[0], owner));
+  route("POST", "/workflows/([^/]+)/steps/([A-Za-z0-9-]+)/retry", ({ params }) => runtime.orchestrator.retryStep(params[0], params[1], owner));
+  route("GET", "/accounting", ({ query }) => accounting.report({ range: query.get("range") || "30d", agentId: query.get("agentId") || null, projectId: query.get("projectId") || null }));
+  // MCP bridge (stdio server in mcp-server.mjs): ORI, read-only allowlist, audited as actor "mcp".
+  route("POST", "/mcp/tools/([A-Za-z0-9.]+)", async ({ params, body }) => {
+    if (!MCP_TOOLS.includes(params[0])) throw new HttpError(403, "mcp-not-exposed", "هذه الأداة غير متاحة عبر MCP");
+    return runtime.executeCapability({ agentId: "ori", toolId: params[0], input: body.input && typeof body.input === "object" && !Array.isArray(body.input) ? body.input : {} }, { type: "mcp", id: "mcp" });
+  });
+  route("GET", "/executions", ({ query }) => ({ executions: runtime.listExecutions({ agentId: query.get("agentId"), toolId: query.get("toolId"), runId: query.get("runId"), workflowId: query.get("workflowId"), status: query.get("status"), before: query.get("before"), limit: query.get("limit") }) }));
+  route("GET", "/executions/([^/]+)", ({ params }) => runtime.getExecution(params[0]));
+  route("GET", "/artifacts", ({ query }) => ({ artifacts: artifacts.list({ projectId: query.get("projectId"), agentId: query.get("agentId"), workflowId: query.get("workflowId"), state: query.get("state"), kind: query.get("kind"), before: query.get("before"), limit: query.get("limit") }) }));
+  route("GET", "/artifacts/([^/]+)", ({ params }) => artifacts.get(params[0]));
+  route("PATCH", "/artifacts/([^/]+)", ({ params, body }) => artifacts.setState(params[0], body.state, owner));
+  route("DELETE", "/artifacts/([^/]+)", ({ params }) => artifacts.remove(params[0]));
+  route("GET", "/templates", ({ query }) => ({ templates: templates.list({ state: query.get("state") }) }));
+  route("POST", "/templates", ({ body }) => templates.create(body));
+  route("PATCH", "/templates/([^/]+)", ({ params, body }) => templates.update(params[0], body));
+  route("GET", "/telemetry/spans", ({ query }) => ({ spans: telemetry.recent({ runId: query.get("runId"), limit: Math.min(Math.max(Number(query.get("limit")) || 50, 1), 200) }), exporter: "local SQLite only" }));
   route("GET", "/policies", () => ({ policies: company.listPolicies() }));
   route("PATCH", "/policies/([a-z]+)", ({ params, body }) => company.updatePolicy(params[0], body));
   route("GET", "/budgets", () => ({ budgets: company.listBudgets() }));
@@ -411,9 +498,13 @@ export function createServer({
   route("POST", "/notifications/([0-9]+)/ack", ({ params }) => company.acknowledge(params[0]));
   route("GET", "/settings", () => ({ settings: company.settings(), store: { schemaVersion: db.schemaVersion(), backups: db.listBackups(backupDir) }, router: { ...routerClient.config } }));
   route("PATCH", "/settings", ({ body }) => ({ settings: company.updateSettings(body) }));
-  route("GET", "/memory", ({ query }) => ({ notes: company.listMemory({ scope: query.get("scope"), scopeRef: query.get("scopeRef") }) }));
+  route("GET", "/memory", ({ query }) => ({ notes: company.listMemory({ scope: query.get("scope"), scopeRef: query.get("scopeRef"), state: query.get("state") || "active", approved: query.get("approved") == null ? null : query.get("approved") === "1" }) }));
+  route("GET", "/memory/search", ({ query }) => ({ notes: company.searchMemory({ q: query.get("q"), scope: query.get("scope"), scopeRef: query.get("scopeRef"), includePending: query.get("pending") === "1" }) }));
+  route("POST", "/memory/reindex", () => company.reindexMemory());
   route("POST", "/memory", ({ body }) => ({ notes: company.upsertMemory(body, owner) }));
   route("DELETE", "/memory/([^/]+)", ({ params }) => company.deleteMemory(params[0]));
+  route("POST", "/memory/([^/]+)/resolve", ({ params, body }) => company.resolveMemoryConflict(params[0], String(body.decision ?? ""), owner));
+  route("GET", "/memory-conflicts", () => ({ conflicts: company.memoryConflicts() }));
   route("POST", "/import/browser", ({ body }) => company.importBrowser(body));
   route("GET", "/export", () => company.exportAll());
   route("POST", "/backup", () => {
@@ -508,19 +599,62 @@ export function createServer({
           // Writes need the per-process session token (readable only by same-origin pages) and a JSON body.
           if (!sessionValid(request)) return send(response, 403, { error: "session-required", message: "انتهت الجلسة؛ أعد تحميل الصفحة" });
         }
+        const events = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/conversations\/([^/]+)\/runs\/([^/]+)\/events$/);
+        if (events) {
+          const conversation = conversations.get(decodeURIComponent(events[1]));
+          const run = company.getRun(decodeURIComponent(events[2]));
+          if (run.conversationId !== conversation.id) throw new HttpError(404, "not-found", "التشغيل غير موجود في هذه المحادثة");
+          response.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cross-Origin-Resource-Policy": "same-origin" });
+          const write = (event) => { if (!response.destroyed) response.write(`data: ${JSON.stringify(event)}\n\n`); };
+          write({ type: "snapshot", run, messages: conversations.messages(conversation.id).filter((m) => m.runId === run.id) });
+          if (!["queued", "running"].includes(run.status)) { response.end(); return; }
+          const unsubscribe = runtime.subscribe(run.id, (event) => { write(event); if (event.type === "done") response.end(); });
+          const heartbeat = setInterval(() => { if (!response.destroyed) response.write(": keepalive\n\n"); }, 15000);
+          const cleanup = () => { clearInterval(heartbeat); unsubscribe(); };
+          response.once("close", cleanup);
+          return;
+        }
+        const download = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/conversations\/([^/]+)\/attachments\/([^/]+)$/);
+        if (download) {
+          const file = conversations.getAttachment(decodeURIComponent(download[1]), decodeURIComponent(download[2]));
+          response.writeHead(200, { "Content-Type": file.mime, "Content-Length": file.size_bytes, "Content-Disposition": `attachment; filename="attachment"; filename*=UTF-8''${encodeURIComponent(file.filename)}`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cross-Origin-Resource-Policy": "same-origin" });
+          response.end(file.data);
+          return;
+        }
+        const exportMatch = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/conversations\/([^/]+)\/export$/);
+        if (exportMatch) {
+          const file = conversations.exportThread(decodeURIComponent(exportMatch[1]), url.searchParams.get("format") === "json" ? "json" : "md");
+          response.writeHead(200, { "Content-Type": file.mime, "Content-Disposition": `attachment; filename="conversation"; filename*=UTF-8''${encodeURIComponent(file.filename)}`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cross-Origin-Resource-Policy": "same-origin" });
+          response.end(file.body);
+          return;
+        }
+        const artifactFile = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/artifacts\/([^/]+)\/(download|view)$/);
+        if (artifactFile) {
+          const file = artifacts.content(decodeURIComponent(artifactFile[1]));
+          const inline = artifactFile[2] === "view" && INLINE_ARTIFACT.has(file.mime);
+          // Generated files are served as inert content: sandboxed, never sniffed, never framed by another origin.
+          response.writeHead(200, { "Content-Type": file.mime, "Content-Length": file.sizeBytes, "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="artifact"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+            "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN", "Referrer-Policy": "no-referrer", "Cross-Origin-Resource-Policy": "same-origin" });
+          response.end(file.data);
+          return;
+        }
         const match = routes.find((r) => r.method === request.method && r.pattern.test(url.pathname));
         if (!match) return send(response, routes.some((r) => r.pattern.test(url.pathname)) ? 405 : 404, { error: routes.some((r) => r.pattern.test(url.pathname)) ? "method-not-allowed" : "not-found" });
         const params = url.pathname.match(match.pattern).slice(1).map((p) => decodeURIComponent(p));
-        const body = ["POST", "PATCH"].includes(request.method) ? await readJson(request) : null;
+        // Larger bodies only where the payload is a file: attachments, an exported canvas image, a template.
+        const bodyLimit = /^\/local-api\/company\/conversations\/[^/]+\/attachments$/.test(url.pathname) ? 1_500_000
+          : url.pathname === "/local-api/company/capabilities/design.saveCanvas/execute" ? 6_500_000
+          : /^\/local-api\/company\/templates(?:\/[^/]+)?$/.test(url.pathname) ? 600_000 : MAX_JSON_BODY;
+        const body = ["POST", "PATCH"].includes(request.method) ? await readJson(request, bodyLimit) : null;
         const result = await match.handler({ params, body: body ?? {}, query: url.searchParams });
-        return send(response, request.method === "POST" && !/\/(decide|rollback|cancel|ack|sync|snapshot|backup|verify|browser|approve|reject|execute|probe|diagnostics|logs|action)$/.test(url.pathname) ? 201 : 200, result);
+        return send(response, request.method === "POST" && !/\/(decide|rollback|cancel|ack|sync|snapshot|backup|verify|browser|approve|reject|execute|probe|diagnostics|logs|action|retry|resolve)$/.test(url.pathname) ? 201 : 200, result);
       }
 
       if (url.pathname === "/local-api/session") return send(response, 200, { token: sessionToken });
       if (url.pathname === "/local-api/health") {
         return send(response, 200, {
-          status: "ok", service: "abud-local-universe", apiVersion: 3, readOnly: false, pid: process.pid, uptimeSec: Math.round(process.uptime()),
-          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true }
+          status: "ok", service: "abud-local-universe", apiVersion: 5, readOnly: false, pid: process.pid, uptimeSec: Math.round(process.uptime()),
+          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true, conversations: true, knowledge: true, toolEngine: true, workflows: true }
         });
       }
       if (url.pathname === "/local-api/account") return send(response, 200, { account: await localAccount() });
@@ -561,6 +695,7 @@ export function createServer({
       if (url.pathname.startsWith("/local-api/")) return send(response, 404, { error: "not-found" });
 
       const asset = url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname.slice(1));
+      if (Object.hasOwn(VENDOR, asset)) return send(response, 200, await readFile(VENDOR[asset]), CONTENT_TYPES[".js"]);
       if (!isAllowedAsset(asset) && !isInternalAsset(asset)) return send(response, 404, { error: "not-found" });
       const file = resolve(root, asset);
       let body = await readFile(file);
@@ -583,11 +718,13 @@ export function createServer({
       return send(response, 500, { error: "local-bridge-failed", message: "خطأ داخلي في الـ Bridge" });
     }
   });
-  server.on("close", () => { runtime.stop(); operations.stop(); vps.stop(); try { db.close(); } catch (_) { /* already closed */ } });
+  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); operations.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
   server.company = company;
   server.vps = vps;
   server.vpsReady = vpsReady;
   server.runtime = runtime;
+  server.artifacts = artifacts;
+  server.telemetry = telemetry;
   server.operations = operations;
   return server;
 }
