@@ -18,6 +18,7 @@ import { createCompany, HttpError } from "./company.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { createConversations } from "./conversations.mjs";
 import { createKnowledge } from "./knowledge.mjs";
+import { createLearning } from "./learning.mjs";
 import { createArtifacts, createTemplates } from "./artifacts.mjs";
 import { createTelemetry } from "./telemetry.mjs";
 import { MCP_TOOLS } from "./mcp-server.mjs";
@@ -238,7 +239,9 @@ export function createServer({
     telemetry,
     capabilityOptions
   });
-  const conversations = createConversations({ company, runtime });
+  const learning = createLearning({ company, runtime });
+  runtime.setLearning(learning);
+  const conversations = createConversations({ company, runtime, learning });
   runtime.setConversations(conversations);
   runtime.setKnowledge(knowledge);
   vps.setEnqueue((input, actor) => runtime.enqueue(input, actor));
@@ -518,6 +521,35 @@ export function createServer({
   route("DELETE", "/memory/([^/]+)", ({ params }) => company.deleteMemory(params[0]));
   route("POST", "/memory/([^/]+)/resolve", ({ params, body }) => company.resolveMemoryConflict(params[0], String(body.decision ?? ""), owner));
   route("GET", "/memory-conflicts", () => ({ conflicts: company.memoryConflicts() }));
+  // ---------------- Learning Engine & Cognitive Memory (V6 Checkpoint 2)
+  route("GET", "/learning/summary", () => learning.dashboardSummary());
+  route("GET", "/learning/proposals", ({ query }) => ({
+    proposals: learning.listProposals({
+      status: query.get("status"),
+      kind: query.get("kind"),
+      agentId: query.get("agentId"),
+      projectId: query.get("projectId"),
+      limit: query.get("limit")
+    })
+  }));
+  route("GET", "/learning/proposals/([^/]+)", ({ params }) => learning.getProposal(params[0]));
+  route("POST", "/learning/proposals", ({ body }) => learning.propose(body, owner));
+  route("POST", "/learning/proposals/([^/]+)/approve", ({ params, body }) => learning.approveProposal(params[0], body || {}, owner));
+  route("POST", "/learning/proposals/([^/]+)/reject", ({ params, body }) => learning.rejectProposal(params[0], body?.reason ?? null, owner));
+  route("POST", "/learning/outcomes", ({ body }) => learning.recordOutcome(body));
+  route("GET", "/learning/skills", ({ query }) => ({
+    skills: learning.listSkills({
+      agentId: query.get("agentId"),
+      status: query.get("status"),
+      limit: query.get("limit")
+    })
+  }));
+  route("GET", "/learning/skills/([^/]+)", ({ params }) => learning.getSkill(params[0]));
+  route("POST", "/learning/skills", ({ body }) => learning.createSkill(body, owner));
+  route("POST", "/learning/skills/([^/]+)/evaluate", ({ params }) => learning.evaluateSkill(params[0]));
+  route("POST", "/learning/skills/([^/]+)/activate", ({ params }) => learning.activateSkill(params[0], owner));
+  route("PATCH", "/learning/skills/([^/]+)", ({ params, body }) => learning.updateSkill(params[0], body, owner));
+  route("POST", "/learning/skills/([^/]+)/rollback", ({ params }) => learning.rollbackSkill(params[0], owner));
   route("POST", "/import/browser", ({ body }) => company.importBrowser(body));
   route("GET", "/export", () => company.exportAll());
   route("POST", "/backup", () => {
@@ -660,7 +692,7 @@ export function createServer({
           : /^\/local-api\/company\/templates(?:\/[^/]+)?$/.test(url.pathname) ? 600_000 : MAX_JSON_BODY;
         const body = ["POST", "PATCH"].includes(request.method) ? await readJson(request, bodyLimit) : null;
         const result = await match.handler({ params, body: body ?? {}, query: url.searchParams });
-        return send(response, request.method === "POST" && !/\/(decide|rollback|cancel|ack|sync|snapshot|backup|verify|browser|approve|reject|execute|probe|diagnostics|logs|action|retry|resolve)$/.test(url.pathname) ? 201 : 200, result);
+        return send(response, request.method === "POST" && !/\/(decide|rollback|cancel|ack|sync|snapshot|backup|verify|browser|approve|reject|execute|probe|diagnostics|logs|action|retry|resolve|evaluate|activate)$/.test(url.pathname) ? 201 : 200, result);
       }
 
       if (url.pathname === "/local-api/session") return send(response, 200, { token: sessionToken });

@@ -674,6 +674,106 @@ export const MIGRATIONS = [
       );
       CREATE UNIQUE INDEX auto_policies_scope ON auto_policies(agent_id, tool_id, scope, COALESCE(project_id, ''));
     `
+  },
+  {
+    // C2: preserve explicit rowids for the external-content FTS index while widening memory scopes.
+    // retention_until remains the sole expiry field; usage timestamps never extend retention implicitly.
+    version: 14,
+    name: "v6-memory-learning",
+    foreignKeysOff: true,
+    sql: `
+      DROP TRIGGER memory_fts_insert;
+      DROP TRIGGER memory_fts_delete;
+      DROP TRIGGER memory_fts_update;
+      CREATE TABLE memory_notes_v14 (
+        id TEXT PRIMARY KEY,
+        scope TEXT NOT NULL CHECK (scope IN ('company','project','agent','owner','meeting')),
+        scope_ref TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL, body TEXT NOT NULL,
+        source TEXT NOT NULL, approved INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        owner_agent TEXT REFERENCES agents(id),
+        source_ref TEXT, source_at TEXT, reviewed_at TEXT,
+        confidence TEXT NOT NULL DEFAULT 'unverified' CHECK (confidence IN ('verified','supported','unverified')),
+        sensitivity TEXT NOT NULL DEFAULT 'internal' CHECK (sensitivity IN ('internal','restricted')),
+        version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+        retention_until TEXT,
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','archived')),
+        conflicts_with TEXT,
+        conflict_state TEXT CHECK (conflict_state IN ('open','kept-new','kept-existing','kept-both')),
+        superseded_by TEXT,
+        kind TEXT NOT NULL DEFAULT 'fact' CHECK (kind IN ('fact','preference','episodic','procedural','decision','meeting')),
+        evidence TEXT NOT NULL DEFAULT '[]' CHECK (CASE WHEN json_valid(evidence) THEN json_type(evidence) = 'array' ELSE 0 END),
+        use_count INTEGER NOT NULL DEFAULT 0 CHECK (typeof(use_count) = 'integer' AND use_count >= 0),
+        last_used_at TEXT
+      );
+      INSERT INTO memory_notes_v14 (
+        rowid,id,scope,scope_ref,title,body,source,approved,created_at,updated_at,
+        owner_agent,source_ref,source_at,reviewed_at,confidence,sensitivity,version,
+        retention_until,state,conflicts_with,conflict_state,superseded_by
+      ) SELECT rowid,id,scope,scope_ref,title,body,source,approved,created_at,updated_at,
+        owner_agent,source_ref,source_at,reviewed_at,confidence,sensitivity,version,
+        retention_until,state,conflicts_with,conflict_state,superseded_by FROM memory_notes;
+      DROP TABLE memory_notes;
+      ALTER TABLE memory_notes_v14 RENAME TO memory_notes;
+      CREATE INDEX memory_scope ON memory_notes(scope, scope_ref);
+      CREATE INDEX memory_notes_state_scope ON memory_notes(state, scope, scope_ref, updated_at DESC);
+      CREATE INDEX memory_notes_conflict ON memory_notes(conflict_state);
+      INSERT INTO memory_fts(memory_fts) VALUES('rebuild');
+      CREATE TRIGGER memory_fts_insert AFTER INSERT ON memory_notes BEGIN
+        INSERT INTO memory_fts(rowid,title,body) VALUES (new.rowid,new.title,new.body);
+      END;
+      CREATE TRIGGER memory_fts_delete AFTER DELETE ON memory_notes BEGIN
+        INSERT INTO memory_fts(memory_fts,rowid,title,body) VALUES ('delete',old.rowid,old.title,old.body);
+      END;
+      CREATE TRIGGER memory_fts_update AFTER UPDATE ON memory_notes BEGIN
+        INSERT INTO memory_fts(memory_fts,rowid,title,body) VALUES ('delete',old.rowid,old.title,old.body);
+        INSERT INTO memory_fts(rowid,title,body) VALUES (new.rowid,new.title,new.body);
+      END;
+
+      CREATE TABLE learning_proposals (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('new-fact','preference','procedure','recurring-failure','better-strategy','memory-correction')),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        body TEXT NOT NULL CHECK (length(body) BETWEEN 1 AND 30000),
+        scope TEXT NOT NULL CHECK (scope IN ('company','project','agent','owner','meeting')),
+        scope_ref TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL, source_ref TEXT,
+        evidence TEXT NOT NULL DEFAULT '[]' CHECK (CASE WHEN json_valid(evidence) THEN json_type(evidence) = 'array' ELSE 0 END),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','superseded')),
+        proposed_confidence TEXT NOT NULL DEFAULT 'unverified' CHECK (proposed_confidence IN ('verified','supported','unverified')),
+        auto_promoted INTEGER NOT NULL DEFAULT 0 CHECK (auto_promoted IN (0,1)),
+        resulting_memory_id TEXT REFERENCES memory_notes(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        decided_at TEXT, decided_by TEXT, promoted_at TEXT,
+        CHECK (auto_promoted = 0 OR status IN ('approved','superseded'))
+      );
+      CREATE INDEX learning_proposals_status ON learning_proposals(status, created_at DESC);
+      CREATE INDEX learning_proposals_agent_project ON learning_proposals(agent_id, project_id, created_at DESC);
+
+      CREATE TABLE agent_skills (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        steps TEXT NOT NULL DEFAULT '[]' CHECK (CASE WHEN json_valid(steps) THEN json_type(steps) = 'array' ELSE 0 END),
+        applicability TEXT NOT NULL DEFAULT '[]' CHECK (CASE WHEN json_valid(applicability) THEN json_type(applicability) = 'array' ELSE 0 END),
+        version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','testing','active','retired')),
+        evaluation TEXT CHECK (evaluation IS NULL OR (CASE WHEN json_valid(evaluation) THEN json_type(evaluation) = 'object' ELSE 0 END)),
+        rollback_to TEXT REFERENCES agent_skills(id) ON DELETE SET NULL,
+        created_from_proposal TEXT REFERENCES learning_proposals(id) ON DELETE SET NULL,
+        approved_by TEXT,
+        approved_at TEXT,
+        use_count INTEGER NOT NULL DEFAULT 0 CHECK (typeof(use_count) = 'integer' AND use_count >= 0),
+        last_used_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX agent_skills_agent_status ON agent_skills(agent_id, status, updated_at DESC);
+      CREATE INDEX agent_skills_status ON agent_skills(status);
+    `
   }
 ];
 
@@ -734,7 +834,7 @@ export function openDatabase(path) {
   return wrap(db, path);
 }
 
-const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets", "conversations", "knowledge_documents", "tool_executions", "artifacts", "workflows"];
+const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets", "conversations", "knowledge_documents", "tool_executions", "artifacts", "workflows", "learning_proposals", "agent_skills"];
 const backupHealth = new Map();
 
 function wrap(db, path) {

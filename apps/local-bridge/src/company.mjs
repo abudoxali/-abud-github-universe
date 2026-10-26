@@ -151,10 +151,11 @@ export function createCompany({ db, now = () => new Date() }) {
     webAllowedHosts: ["developer.mozilla.org", "nodejs.org", "docs.github.com", "github.com", "raw.githubusercontent.com", "www.sqlite.org", "sqlite.org", "learn.microsoft.com", "en.wikipedia.org", "ar.wikipedia.org"],
     telemetryRetentionDays: 14,
     // Conversation context budget (estimated tokens) and retention for files of deleted conversations (0 = keep).
-    conversationContextTokens: 3000, attachmentRetentionDays: 0 };
+    conversationContextTokens: 3000, attachmentRetentionDays: 0,
+    learning: { autoPromoteExplicitCorrections: true } };
   function settings() {
     const stored = Object.fromEntries(db.all("SELECT key, value FROM settings").map((row) => [row.key, parseJson(row.value, null)]));
-    return { ...SETTINGS_DEFAULTS, ...stored };
+    return { ...SETTINGS_DEFAULTS, ...stored, learning: { ...SETTINGS_DEFAULTS.learning, ...(stored.learning || {}) } };
   }
   function updateSettings(patch) {
     const next = {};
@@ -176,6 +177,10 @@ export function createCompany({ db, now = () => new Date() }) {
     if ("conversationContextTokens" in patch) next.conversationContextTokens = numberIn(patch.conversationContextTokens, "conversationContextTokens", 1000, 12000, { integer: true, nullable: false });
     if ("attachmentRetentionDays" in patch) next.attachmentRetentionDays = numberIn(patch.attachmentRetentionDays, "attachmentRetentionDays", 0, 3650, { integer: true, nullable: false });
     if ("telemetryRetentionDays" in patch) next.telemetryRetentionDays = numberIn(patch.telemetryRetentionDays, "telemetryRetentionDays", 1, 90, { integer: true, nullable: false });
+    if ("learning" in patch && patch.learning && typeof patch.learning === "object") {
+      const current = settings().learning;
+      next.learning = { ...current, autoPromoteExplicitCorrections: patch.learning.autoPromoteExplicitCorrections !== false };
+    }
     if ("inferenceTimeouts" in patch) {
       const bounds = { connectMs: [1000, 20000], headersMs: [5000, 120000], firstTokenMs: [5000, 120000], idleMs: [5000, 120000], totalMs: [20000, 300000] };
       const input = patch.inferenceTimeouts;
@@ -801,8 +806,9 @@ export function createCompany({ db, now = () => new Date() }) {
   // ---------------- memory
   const memoryRow = (m) => ({ id: m.id, scope: m.scope, scopeRef: m.scope_ref, title: m.title, body: m.body, source: m.source, sourceRef: m.source_ref,
     sourceAt: m.source_at, ownerAgent: m.owner_agent, approved: m.approved === 1, confidence: m.confidence, sensitivity: m.sensitivity, version: m.version,
-    retentionUntil: m.retention_until, state: m.state, reviewedAt: m.reviewed_at, createdAt: m.created_at, updatedAt: m.updated_at,
-    conflictsWith: m.conflicts_with ?? null, conflictState: m.conflict_state ?? null, supersededBy: m.superseded_by ?? null });
+    retentionUntil: m.retention_until, expiresAt: m.retention_until ?? null, state: m.state, reviewedAt: m.reviewed_at, createdAt: m.created_at, updatedAt: m.updated_at,
+    conflictsWith: m.conflicts_with ?? null, conflictState: m.conflict_state ?? null, supersededBy: m.superseded_by ?? null,
+    kind: m.kind ?? "fact", evidence: parseJson(m.evidence, []), useCount: m.use_count ?? 0, lastUsedAt: m.last_used_at ?? null });
   /** Same scope and the same normalized title but different content: a conflict to be decided by the owner. */
   const normalizeTitle = (value) => String(value).toLowerCase().replace(/[\p{P}\p{S}]+/gu, " ").replace(/\s+/g, " ").trim();
   function findConflict({ id = null, scope, scopeRef, title, body }) {
@@ -835,63 +841,82 @@ export function createCompany({ db, now = () => new Date() }) {
     });
     return { note: memoryRow(db.get("SELECT * FROM memory_notes WHERE id = ?", note.id)), other: other ? memoryRow(db.get("SELECT * FROM memory_notes WHERE id = ?", other.id)) : null };
   }
-  function listMemory({ scope = null, scopeRef = null, state = "active", approved = null, limit = 200 } = {}) {
+  function listMemory({ scope = null, scopeRef = null, state = "active", approved = null, kind = null, limit = 200 } = {}) {
     const where = [], params = [];
     if (state) { where.push("state = ?"); params.push(state); }
     if (scope) { where.push("scope = ?"); params.push(scope); }
     if (scopeRef != null) { where.push("scope_ref = ?"); params.push(scopeRef); }
     if (approved != null) { where.push("approved = ?"); params.push(approved ? 1 : 0); }
+    if (kind != null) { where.push("kind = ?"); params.push(kind); }
     return db.all(`SELECT * FROM memory_notes ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC LIMIT ?`, ...params, Math.min(Math.max(Number(limit) || 200, 1), 200)).map(memoryRow);
   }
   function upsertMemory(input, actor = { type: "owner", id: "owner" }) {
-    const scope = oneOf(input.scope, ["company", "project", "agent"], "scope");
-    const scopeRef = scope === "company" ? "" : scope === "agent" ? (isActiveAgent(input.scopeRef) ? input.scopeRef : (() => { throw bad("validation", "Invalid agent"); })()) : ensureProject(input.scopeRef);
-    const title = str(input.title, { field: "العنوان", max: 120, required: true });
-    const body = str(input.body, { field: "المحتوى", max: 2000, required: true, multiline: true });
+    const scope = oneOf(input.scope, ["company", "project", "agent", "owner", "meeting"], "scope", input.id ? undefined : "company");
+    let scopeRef = "";
+    if (scope === "company") scopeRef = "";
+    else if (scope === "agent") scopeRef = isActiveAgent(input.scopeRef) ? input.scopeRef : (() => { throw bad("validation", "Invalid agent"); })();
+    else if (scope === "owner") scopeRef = input.scopeRef ? (isActiveAgent(input.scopeRef) || input.scopeRef === "owner" ? input.scopeRef : (() => { throw bad("validation", "Invalid agent"); })()) : "";
+    else if (scope === "project") scopeRef = ensureProject(input.scopeRef);
+    else if (scope === "meeting") scopeRef = input.scopeRef ? str(input.scopeRef, { field: "مرجع الاجتماع", max: 120 }) : "";
+    const title = str(input.title, { field: "العنوان", max: 160, required: true });
+    const body = str(input.body, { field: "المحتوى", max: 30000, required: true, multiline: true });
     const existing = input.id ? db.get("SELECT * FROM memory_notes WHERE id = ?", String(input.id)) : null;
     if (input.id && !existing) throw notFound("الملاحظة");
     if (existing && actor.type !== "owner") throw new HttpError(403, "memory-owner-review", "تعديل ذاكرة موجودة يحتاج المالك");
+    const kind = oneOf(input.kind, ["fact", "preference", "episodic", "procedural", "decision", "meeting"], "kind", existing?.kind ?? "fact");
     const confidence = oneOf(input.confidence, ["verified", "supported", "unverified"], "confidence", existing?.confidence ?? "unverified");
     const sensitivity = oneOf(input.sensitivity, ["internal", "restricted"], "sensitivity", existing?.sensitivity ?? "internal");
     const state = oneOf(input.state, ["active", "archived"], "state", existing?.state ?? "active");
     const sourceRef = input.sourceRef === undefined ? existing?.source_ref ?? null : str(input.sourceRef, { field: "مرجع المصدر", max: 400 });
     const sourceAt = input.sourceAt === undefined ? existing?.source_at ?? null : input.sourceAt == null ? null : str(input.sourceAt, { field: "وقت المصدر", max: 40 });
-    const retentionUntil = input.retentionUntil === undefined ? existing?.retention_until ?? null : input.retentionUntil == null ? null : str(input.retentionUntil, { field: "تاريخ الاحتفاظ", max: 40 });
+    const retentionUntil = input.retentionUntil === undefined ? (input.expiresAt === undefined ? existing?.retention_until ?? null : input.expiresAt == null ? null : str(input.expiresAt, { field: "تاريخ الاحتفاظ", max: 40 })) : input.retentionUntil == null ? null : str(input.retentionUntil, { field: "تاريخ الاحتفاظ", max: 40 });
     const approved = actor.type === "owner" ? (input.approved === undefined ? existing?.approved ?? 1 : input.approved ? 1 : 0) : 0;
     const reviewedAt = actor.type === "owner" && approved ? at() : existing?.reviewed_at ?? null;
+    const evidence = Array.isArray(input.evidence) ? JSON.stringify(input.evidence.map(String)) : (existing?.evidence ?? "[]");
+    const ownerAgent = (scope === "agent" || scope === "owner") ? (input.ownerAgent || (isActiveAgent(scopeRef) ? scopeRef : null) || existing?.owner_agent || null) : (actor.type === "agent" ? actor.id : existing?.owner_agent ?? null);
     const id = existing?.id ?? newId("mem");
     const conflict = state === "active" ? findConflict({ id, scope, scopeRef, title, body }) : null;
     db.tx(() => {
-      if (existing) db.run("UPDATE memory_notes SET scope=?,scope_ref=?,title=?,body=?,approved=?,owner_agent=?,source_ref=?,source_at=?,reviewed_at=?,confidence=?,sensitivity=?,version=version+1,retention_until=?,state=?,updated_at=? WHERE id=?",
-        scope, scopeRef ?? "", title, body, approved, scope === "agent" ? scopeRef : existing.owner_agent, sourceRef, sourceAt, reviewedAt, confidence, sensitivity, retentionUntil, state, at(), id);
-      else db.run("INSERT INTO memory_notes (id,scope,scope_ref,title,body,source,approved,created_at,updated_at,owner_agent,source_ref,source_at,reviewed_at,confidence,sensitivity,retention_until,state) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        id, scope, scopeRef ?? "", title, body, `${actor.type}:${actor.id}`, approved, at(), at(), scope === "agent" ? scopeRef : actor.type === "agent" ? actor.id : null, sourceRef, sourceAt, reviewedAt, confidence, sensitivity, retentionUntil, state);
+      if (existing) db.run("UPDATE memory_notes SET scope=?,scope_ref=?,title=?,body=?,approved=?,owner_agent=?,source_ref=?,source_at=?,reviewed_at=?,confidence=?,sensitivity=?,version=version+1,retention_until=?,state=?,kind=?,evidence=?,updated_at=? WHERE id=?",
+        scope, scopeRef ?? "", title, body, approved, ownerAgent, sourceRef, sourceAt, reviewedAt, confidence, sensitivity, retentionUntil, state, kind, evidence, at(), id);
+      else db.run("INSERT INTO memory_notes (id,scope,scope_ref,title,body,source,approved,created_at,updated_at,owner_agent,source_ref,source_at,reviewed_at,confidence,sensitivity,retention_until,state,kind,evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        id, scope, scopeRef ?? "", title, body, `${actor.type}:${actor.id}`, approved, at(), at(), ownerAgent, sourceRef, sourceAt, reviewedAt, confidence, sensitivity, retentionUntil, state, kind, evidence);
       if (conflict && !(existing?.conflict_state && existing.conflict_state !== "open")) {
         db.run("UPDATE memory_notes SET conflicts_with = ?, conflict_state = 'open' WHERE id = ?", conflict.id, id);
         // An agent's conflicting note never replaces owner-confirmed knowledge: it stays pending until the owner decides.
         if (actor.type !== "owner") db.run("UPDATE memory_notes SET approved = 0 WHERE id = ?", id);
         log({ actorType: actor.type, actorId: actor.id, action: "memory.conflict.detected", targetType: "memory", targetId: id, outcome: "info", summary: `تعارض محتمل مع «${conflict.title}» — بانتظار قرار المالك`, metadata: { other: conflict.id } });
       }
-      log({ actorType: actor.type, actorId: actor.id, action: existing ? "memory.updated" : "memory.created", targetType: scope === "project" ? "project" : "memory", targetId: scope === "project" ? scopeRef : id, summary: `ذاكرة ${({ company: "الشركة", agent: "الوكيل", project: "المشروع" })[scope] ?? scope}: ${title}` });
+      log({ actorType: actor.type, actorId: actor.id, action: existing ? "memory.updated" : "memory.created", targetType: scope === "project" ? "project" : "memory", targetId: scope === "project" ? scopeRef : id, summary: `ذاكرة ${({ company: "الشركة", agent: "الوكيل", project: "المشروع", owner: "المالك", meeting: "الاجتماع" })[scope] ?? scope}: ${title}` });
     });
     return listMemory({ scope, scopeRef: scopeRef ?? "", state: null });
   }
-  function searchMemory({ q, agentId = null, projectId = null, scope = null, scopeRef = null, includePending = false, limit = 20 } = {}) {
+  function searchMemory({ q, agentId = null, projectId = null, scope = null, scopeRef = null, kind = null, includePending = false, limit = 20 } = {}) {
     const terms = String(q ?? "").match(/[\p{L}\p{N}_]{2,}/gu)?.slice(0, 8) ?? [];
     if (!terms.length) return [];
     const match = terms.map((term) => `"${term.replaceAll('"', '""')}"*`).join(" AND ");
     const where = ["memory_fts MATCH ?", "m.state = 'active'", "(m.retention_until IS NULL OR m.retention_until > ?)"];
     const params = [match, at()];
+    if (kind) { where.push("m.kind = ?"); params.push(kind); }
     if (agentId) {
       if (!isActiveAgent(agentId)) throw bad("validation", "وكيل غير معروف أو معطل");
-      where.push("m.approved = 1", "m.sensitivity = 'internal'", "((m.scope = 'company' AND m.scope_ref = '') OR (m.scope = 'agent' AND m.scope_ref = ?) OR (m.scope = 'project' AND m.scope_ref = ?))");
-      params.push(agentId, projectId ?? "");
+      where.push("m.approved = 1", "m.sensitivity = 'internal'", "((m.scope = 'company' AND m.scope_ref = '') OR (m.scope = 'agent' AND m.scope_ref = ?) OR (m.scope = 'owner' AND (m.scope_ref = ? OR m.owner_agent = ? OR m.scope_ref = '')) OR (m.scope = 'project' AND m.scope_ref = ?))");
+      params.push(agentId, agentId, agentId, projectId ?? "");
     } else {
       if (!includePending) where.push("m.approved = 1");
       if (scope) { where.push("m.scope = ?"); params.push(scope); }
       if (scopeRef != null) { where.push("m.scope_ref = ?"); params.push(scopeRef); }
     }
     return db.all(`SELECT m.* FROM memory_fts JOIN memory_notes m ON m.rowid = memory_fts.rowid WHERE ${where.join(" AND ")} ORDER BY bm25(memory_fts), m.updated_at DESC LIMIT ?`, ...params, Math.min(Math.max(Number(limit) || 20, 1), 50)).map(memoryRow);
+  }
+  function recordMemoryUsage(ids = []) {
+    if (!ids || !ids.length) return;
+    const atIso = at();
+    db.tx(() => {
+      for (const id of ids) {
+        db.run("UPDATE memory_notes SET use_count = use_count + 1, last_used_at = ? WHERE id = ?", atIso, String(id));
+      }
+    });
   }
   function reindexMemory() {
     db.run("INSERT INTO memory_fts(memory_fts) VALUES ('rebuild')");
@@ -995,7 +1020,7 @@ export function createCompany({ db, now = () => new Date() }) {
     listPolicies, getPolicy, updatePolicy,
     recordQuota, quotaHistory, pruneQuota, lastQuotaObservation,
     createApproval, listApprovals, getApproval, setApprovalStatus,
-    listMemory, searchMemory, reindexMemory, upsertMemory, resolveMemoryConflict, memoryConflicts, deleteMemory, importBrowser, exportAll, at
+    listMemory, searchMemory, reindexMemory, upsertMemory, resolveMemoryConflict, memoryConflicts, deleteMemory, recordMemoryUsage, importBrowser, exportAll, at
   };
 }
 

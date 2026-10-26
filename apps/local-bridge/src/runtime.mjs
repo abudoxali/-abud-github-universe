@@ -72,7 +72,7 @@ export function extractJson(output) {
 const INFRA_REQUEST = /سيرفر|السيرفر|خادم|الخادم|الخوادم|vps|server|nginx|pm2|postgres|uptime|deploy|نشر/i;
 const VPS_HANDLER_IDS = ["listHosts", "getHealth", "getMetrics", "listServices", "getServiceStatus", "getDeploymentInfo", "getRecentEvents", "getRedactedLogs", "runSafeDiagnostic", "createActionProposal", "getActionResult"];
 
-export function createRuntime({ company, routerClient, getOverview, getUsage, workspace, vps = null, now = Date.now, log = () => {}, artifacts = null, telemetry = null, capabilityOptions = {} }) {
+export function createRuntime({ company, routerClient, getOverview, getUsage, workspace, vps = null, now = Date.now, log = () => {}, artifacts = null, telemetry = null, capabilityOptions = {}, learning = null }) {
   artifacts ??= createArtifacts({ company });
   telemetry ??= createTelemetry({ db: company.db, now });
   const autoPolicies = createAutoPolicies({ company });
@@ -81,6 +81,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
   const listeners = new Map(); // ephemeral stream observers; durable state stays in SQLite
   let conversations = null;
   let knowledge = null;
+  let _learning = learning;
   const emit = (runId, event) => { for (const listener of listeners.get(runId) || []) { try { listener(event); } catch (_) { /* disconnected viewer */ } } };
   const subscribe = (runId, listener) => {
     const group = listeners.get(runId) || new Set(); group.add(listener); listeners.set(runId, group);
@@ -410,19 +411,88 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
   }
 
   function memoryContext(agentId, projectId, request = "") {
-    const searched = request ? company.searchMemory({ q: request, agentId, projectId, limit: 8 }) : [];
-    const recent = [...company.listMemory({ scope: "company", scopeRef: "" }), ...company.listMemory({ scope: "agent", scopeRef: agentId }), ...(projectId ? company.listMemory({ scope: "project", scopeRef: projectId }) : [])]
-      .filter((n) => n.approved && n.sensitivity === "internal" && (!n.retentionUntil || n.retentionUntil > new Date(now()).toISOString()));
-    const notes = [...new Map([...searched, ...recent].map((n) => [n.id, n])).values()].slice(0, 8);
+    const searched = request ? company.searchMemory({ q: request, agentId, projectId, limit: 12 }) : [];
+    const ownerPrefsAgent = company.listMemory({ scope: "owner", scopeRef: agentId });
+    const ownerPrefsGen = company.listMemory({ scope: "owner", scopeRef: "" });
+    const agentNotes = company.listMemory({ scope: "agent", scopeRef: agentId });
+    const projectNotes = projectId ? company.listMemory({ scope: "project", scopeRef: projectId }) : [];
+    const companyNotes = company.listMemory({ scope: "company", scopeRef: "" });
+
+    const nowIsoStr = new Date(now()).toISOString();
+    const isEligible = (n) => n && n.approved && n.sensitivity === "internal" && n.state !== "archived" && (!n.retentionUntil || n.retentionUntil > nowIsoStr) && (!n.expiresAt || n.expiresAt > nowIsoStr);
+
+    const pool = new Map();
+    for (const note of [...searched, ...ownerPrefsAgent, ...ownerPrefsGen, ...agentNotes, ...projectNotes, ...companyNotes]) {
+      if (note && isEligible(note) && !pool.has(note.id)) {
+        pool.set(note.id, note);
+      }
+    }
+
+    const allCandidates = [...pool.values()];
+
+    // Tier 1: Preferences (owner first, then agent)
+    const ownerPrefs = allCandidates.filter(n => n.scope === "owner" || (n.kind === "preference" && n.scope === "owner"));
+    const agentPrefs = allCandidates.filter(n => n.kind === "preference" && n.scope === "agent");
+
+    // Tier 2: Procedural (notes with kind procedural/procedure + active matching skills)
+    const proceduralNotes = allCandidates.filter(n => (n.kind === "procedural" || n.kind === "procedure") && !ownerPrefs.includes(n) && !agentPrefs.includes(n));
+    const matchingSkills = _learning ? _learning.matchingSkills({ agentId, request }) : [];
+    const skillEntries = matchingSkills.map(s => ({
+      id: `skill:${s.id}`,
+      scope: "agent",
+      title: `مهارة إجرائية: ${s.title}`,
+      body: JSON.stringify({ steps: s.steps, applicability: s.applicability }).slice(0, 600),
+      kind: "procedural",
+      source: "agent_skills",
+      sourceRef: s.id,
+      sourceAt: s.approvedAt || s.createdAt,
+      confidence: "verified",
+      reviewedAt: s.approvedAt,
+      updatedAt: s.updatedAt
+    }));
+
+    // Tier 3: Facts and others (recency ranked)
+    const facts = allCandidates.filter(n => !ownerPrefs.includes(n) && !agentPrefs.includes(n) && !proceduralNotes.includes(n));
+    facts.sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""));
+
+    const ordered = [...ownerPrefs, ...agentPrefs, ...proceduralNotes, ...skillEntries, ...facts];
+
     let used = 0;
     const kept = [];
-    for (const note of notes) {
-      const entry = { id: note.id, scope: note.scope, title: note.title, body: note.body.slice(0, 600), source: note.source, sourceRef: note.sourceRef,
-        sourceAt: note.sourceAt, confidence: note.confidence, reviewedAt: note.reviewedAt, updatedAt: note.updatedAt };
+    const seen = new Set();
+    for (const item of ordered) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      const entry = {
+        id: item.id,
+        scope: item.scope,
+        title: item.title,
+        body: item.body.slice(0, 600),
+        kind: item.kind,
+        source: item.source,
+        sourceRef: item.sourceRef,
+        sourceAt: item.sourceAt,
+        confidence: item.confidence,
+        reviewedAt: item.reviewedAt,
+        updatedAt: item.updatedAt
+      };
       used += entry.body.length;
       if (used > 2400) break;
       kept.push(entry);
     }
+
+    const noteIds = kept.filter(e => !e.id.startsWith("skill:")).map(e => e.id);
+    if (noteIds.length) {
+      company.recordMemoryUsage(noteIds);
+    }
+    if (_learning) {
+      for (const entry of kept) {
+        if (entry.id.startsWith("skill:")) {
+          _learning.recordSkillUsage(entry.id.slice("skill:".length));
+        }
+      }
+    }
+
     return kept;
   }
   function knowledgeContext(projectId, request) {
@@ -720,7 +790,8 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
       const health = state && !state.enabled ? null : await toolHealth(id);
       availability[id] = { available: (!state || Boolean(state.enabled)) && health?.state === "available" };
     }));
-    return selectTools({ agent: { ...def, ...config }, grants: config.tools, projectId, request, context: { ...(projectId ? { projectId } : {}), q: request.slice(0, 300) }, inputs, availability });
+    const skills = _learning ? _learning.matchingSkills({ agentId, request }) : [];
+    return selectTools({ agent: { ...def, ...config }, grants: config.tools, projectId, request, context: { ...(projectId ? { projectId } : {}), q: request.slice(0, 300) }, inputs, availability, skills });
   }
 
   async function gather(def, capability, projectId, toolCalls, request = "", runId = null, runSpan = null, signal = null) {
@@ -1131,8 +1202,11 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
   return {
     autoPolicies, toolSelectPreview, enqueue, cancel, pump, recoverInterrupted, invokeTool, routePreview, proposeRouterChange, decideApproval, rollbackRouterChange, catalogView, subscribe,
     executeCapability, getExecution, listExecutions, capabilityRegistry, setCapabilityEnabled, artifacts, telemetry, capabilities, readProjectDoc: (rel, doc) => readDoc(rel, doc), orchestrator,
+    memoryContext,
     setConversations(service) { conversations = service; },
     setKnowledge(service) { knowledge = service; },
+    setLearning(service) { _learning = service; },
+    get learning() { return _learning; },
     async stop() { stopped = true; for (const controller of running.values()) controller.abort(); await Promise.allSettled([...jobs]); }, running
   };
 }

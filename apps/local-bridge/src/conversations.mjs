@@ -51,7 +51,7 @@ function decodeAttachment(input) {
   return { filename, mime, bytes, extractedText: content.slice(0, 8000) };
 }
 
-export function createConversations({ company, runtime }) {
+export function createConversations({ company, runtime, learning = null }) {
   const { db } = company;
   // V6: Dynamic agent validation helper
   const isActiveAgent = (id) => db.get("SELECT 1 FROM agents WHERE id = ? AND active = 1", id) != null;
@@ -173,6 +173,20 @@ export function createConversations({ company, runtime }) {
       db.run("INSERT INTO conversation_messages (id,conversation_id,run_id,role,content,state,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)", newId("msg"), id, run.id, "assistant", "", "pending", `agent:${conversation.agentId}`, at, at);
       const title = conversation.title === "محادثة جديدة" ? content.slice(0, 100) : conversation.title;
       db.run("UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?", title, at, id);
+      const learningEngine = learning || runtime?.learning;
+      if (learningEngine?.onOwnerMessage) {
+        try {
+          learningEngine.onOwnerMessage({
+            conversationId: id,
+            messageId: ownerMessageId,
+            agentId: conversation.agentId,
+            projectId: conversation.projectId,
+            content
+          });
+        } catch (_) {
+          /* non-blocking learning hook */
+        }
+      }
       return { run, conversation: get(id) };
     });
   }
