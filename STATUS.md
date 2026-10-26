@@ -1,46 +1,102 @@
 # ABUD FUN Company OS — STATUS
 
-## V6 — Cognitive Workforce & Voice Operations — in progress (2026-10-26)
+## V6 — Cognitive Workforce & Voice Operations — implemented, owner acceptance pending (2026-10-26)
 
-**Overall: Checkpoint 1 of 5 complete (≈20%).** Branch `v6/cognitive-workforce` in the isolated worktree
-`.claude/worktrees/v6`, based on V5 `a7b38d5` (tagged `v5-local-stable`). The daily Bridge (:4172) and
-`local/company.db` were not touched. Nothing pushed or merged.
+**Classification: V6 RELEASE CANDIDATE (local, not cut over).** All five checkpoints are implemented and pass
+automated tests on the isolated dev bridge. The remaining items need the owner and are listed under *Owner steps*.
+Branch `v6/cognitive-workforce` in the worktree `.claude/worktrees/v6`, based on V5 `a7b38d5` (tag
+`v5-local-stable`). 12 local commits from `b3f23a9` to `15cd678`, 61 files, about +7,000 lines. **Nothing was pushed,
+merged or cut over.** The daily Bridge (:4172) still runs V5 from the main checkout, and `local/company.db` was not
+modified.
 
-### Baseline and data safety
-- V5 baseline re-verified fresh: 154/154 Bridge tests on the V6 worktree.
-- Pre-V6 backup: `local/backups/company-pre-v6-2026-10-26T00-56-40Z.db` (VACUUM INTO, integrity ok, 0 FK violations;
-  projects 40, tasks 19, conversations 1, approvals 3, artifacts 6).
-- Hardware (nvidia-smi): RTX 4070 12282 MiB, driver 610.88; Python 3.11.15 (uv) and 3.14; Node 24.11.0.
-- Schema 12 (agent registry) rehearsed on a copy of the daily DB: 11→12, integrity ok, 0 FK violations, every count
-  and task id unchanged, task indexes rebuilt, idempotent on a second open. **Not applied to the daily DB.**
+### Data safety
+- Pre-V6 backup: `local/backups/company-pre-v6-2026-10-26T00-56-40Z.db` (VACUUM INTO, integrity ok, 0 FK violations).
+- Migrations 12–15 are additive. Six-id CHECK constraints are relaxed through table rebuilds. They were rehearsed on a
+  copy of the daily DB, schema 11 → 15:
+  - integrity ok, 0 FK violations
+  - projects 40, tasks 19, conversations 1, approvals 3, artifacts 6, tool executions 52, workflows 3, memory 1 — all unchanged
+  - task ids identical; memory FTS triggers and search intact
+  - a second open is idempotent
+- Rollback: V5 code plus the pre-V6 backup. The launcher accepts apiVersion ≥ 3, so V4.1, V5 and V6 all start.
 
-### Checkpoint 1 — Dynamic Workforce & Automatic Tool Selection — TESTED WITH FIXTURES
-| Item | State | Evidence |
-|---|---|---|
-| Agent Registry (profiles, specializations, voice/memory/routing fields, templates, lifecycle API) | IMPLEMENTED, TESTED WITH FIXTURES | `b3f23a9`; registry + migration tests |
-| Six-id CHECK constraints removed (table rebuilds) | TESTED WITH FIXTURES + daily-DB copy rehearsal | migration test, rehearsal above |
-| Expanded specializations in prompts | IMPLEMENTED | catalog `specializationsAr`, systemPrompt |
-| Tool discovery metadata + deterministic selector | TESTED WITH FIXTURES | `fa28085`; tool-selector tests (6 agents, refusals) |
-| Tiers A/B/C (auto read, owner auto-policy or approval, never auto for C) | TESTED WITH FIXTURES | runtime-tool-selection + auto-policies tests |
-| Compact Arabic action summaries (`actionsAr`) | TESTED WITH FIXTURES | conversation test, UI shows collapsed details |
-| Dynamic roster UI, generic avatar for custom agents, registry admin panel, role quick actions | TESTED WITH FIXTURES (browser) | `deaf027`; `tests/v6-workforce.mjs` 14/14 at 1440/390/360 |
-| Temporary 7th agent (isolated store): create, render, picker, conversation, deactivate | TESTED WITH FIXTURES | registry tests + browser test |
-| Live OmniRoute verification of auto tool selection on the daily install | OWNER ACCEPTANCE PENDING | requires cutover |
+### Checkpoint state
+| # | Area | State | Evidence |
+|---|---|---|---|
+| 1 | Agent Registry: profiles, specializations, templates, lifecycle, no six-agent limit | TESTED WITH FIXTURES | `b3f23a9`; registry + migration tests; 7th agent in isolated store |
+| 1 | Automatic tool selection, tiers A/B/C, owner auto-policies, `actionsAr` | TESTED WITH FIXTURES | `fa28085`; selector tests for six agents, refusals, one inference per run |
+| 1 | Dynamic roster UI, role quick actions, registry admin panel | TESTED WITH FIXTURES (browser) | `deaf027`; `tests/v6-workforce.mjs` 14/14 |
+| 2 | Cognitive memory: kinds, evidence, usage, owner/meeting scopes | TESTED WITH FIXTURES | `ade7334`; `learning.test.mjs` |
+| 2 | Learning engine: correction detection, proposals, verified outcomes → evaluated skills, rollback | TESTED WITH FIXTURES | Scenarios B and C in `learning.test.mjs`; agents get 403 on approvals |
+| 3 | Local STT (faster-whisper large-v3-turbo, CUDA, CPU fallback) | LIVE VERIFIED (synthetic audio) | `0f5f46f`; benchmarks below |
+| 3 | Local Egyptian TTS (Habibi EGY) + six voice identities | LIVE VERIFIED, OWNER LISTENING PENDING | `02ff1bf`; `evaluate_voices.py` |
+| 3 | Bridge voice supervisor + push-to-talk chat UI + robot states | TESTED WITH FIXTURES + one real end-to-end | `5374dc0`, `76b5a75`; `voice.test.mjs` |
+| 4 | Meeting Center: individual/group, sequential turns, addressing, interrupt, budgets, restart recovery, outcomes | TESTED WITH FIXTURES (backend + browser) | `506d7c3`; Scenarios F/G/H in `meetings.test.mjs`; `tests/v6-meetings.mjs` 14/14 |
+| 5 | «اسأل الشركة», System voice panel, الذاكرة والخبرات view, apiVersion 6 | TESTED WITH FIXTURES | `2245a14`; `ask.test.mjs` |
+| 5 | Live OmniRoute run of V6 flows on the daily install | OWNER ACCEPTANCE PENDING | requires cutover |
+| 5 | Windows sign-in autostart with V6 | OWNER ACCEPTANCE PENDING | launcher accepts apiVersion 6; not run |
 
-Tests: `npm test` in `apps/local-bridge` → **196/196 pass**; `npm run check` ok.
+### Tests (fresh, 2026-10-26)
+- `cd apps/local-bridge && npm test`: **216/216 pass** (V5 baseline 154). `npm run check` ok.
+- Voice worker, `python -m unittest test_worker` from the voice venv: **23/23 pass**.
+- Browser, against the isolated dev bridge `node tests/dev-bridge.mjs 4191`:
+  - `tests/v6-meetings.mjs`: **14/14** (1440/1024/768/390/360, no overflow, no uncaught errors)
+  - `tests/v6-workforce.mjs`: **14/14**
+- All model output in these tests comes from the stub router. Live OmniRoute inference for V6 flows was not run.
 
-### In progress
-- Checkpoint 2 (cognitive memory & learning engine) — implementation running.
-- Checkpoint 3 part 1 (voice): Voice Worker code + license inventory written (14/14 unit tests); local STT setup and
-  measurements running. Habibi-TTS **EGY** checkpoint recorded as Apache-2.0; Unified/SAU/UAE weights are
-  non-commercial and excluded. No voice latency/VRAM numbers measured yet.
+### Voice (measured on RTX 4070 12 GB, driver 610.88)
+- **STT** large-v3-turbo float16:
+  - cold load 1.9 s
+  - 15.2 s clip transcribed in 0.35–0.6 s (RTF ≈ 0.03)
+  - peak about +2.5 GB VRAM, released on unload
+  - CPU int8 fallback RTF 1.68
+- **TTS** Habibi-TTS Specialized/EGY (Apache-2.0) on F5-TTS (MIT) + Vocos (MIT):
+  - about 0.9–1.0 s for about 4.5 s of speech once warm
+  - a one-time warm-up of about 24–30 s (`POST /warmup`) is triggered when the owner turns voice on
+  - STT and TTS together peak at 4.6 GB VRAM; the process exits back to the idle baseline
+- **Six identities:** synthetic Kokoro-82M speakers (Apache-2.0, no voice clones): ORI am_michael, MIA af_bella,
+  NEX bm_george, LUNA af_heart, ZEN am_puck, REX am_onyx. Round-trip CER 0–1.6%, 116–140 WPM, median F0: females
+  196/203 Hz, males 93–151 Hz. All are `provisional` until the owner listens.
+- **Rejected references:**
+  - Habibi's `EGY.mp3` is an ElevenLabs library voice.
+  - F5's "female" example is a male voice (98 Hz).
+  - Neither carries rights to build a synthetic identity.
+- **Fixed:** F5 sized Arabic output by UTF-8 byte ratio, which doubled durations. Blob audio was blocked by the page
+  CSP (`media-src 'self' blob:` added).
+- Real end-to-end through the Bridge supervisor: worker up in 0.6 s, ORI sentence synthesized in 0.92 s, transcribed
+  back exactly. **Egyptian colloquial STT accuracy on the owner's own voice: OWNER LIVE TEST PENDING** (sentences in
+  `apps/voice-worker/fixtures.json`).
 
-### Not implemented yet
-Checkpoint 3 TTS + six voices, Checkpoint 4 Meeting Center, Checkpoint 5 integration/final acceptance.
+### Performance (isolated dev bridge, headless Chromium)
+- 60.2 FPS on the team view and the meeting room. Robot script about 0.34 ms average, 1.6 ms max per frame.
+- API p50: `/summary` 7.1 ms, `/capabilities` 10 ms, others ≤ 1.1 ms. Accounting over a 20,000-row ledger: p50 126 ms.
 
-### Development routing note
-Implementation is done by headless Claude Code workers routed through OmniRoute (`codex/gpt-6.1-sol`; Kiro credits
-ran out mid-task), reviewed and verified by the orchestrating session before each commit.
+### Security and privacy
+- Tool permissions stay server-side. Tier C never auto-executes. Tier B needs an owner auto-policy or approval.
+  Agents cannot approve proposals, outcomes or skills. Skills cannot add tools beyond grants.
+- Meeting outcomes are proposals. A consensus authorizes nothing. Meeting runs can only be created by the Meeting
+  Center.
+- The voice worker is loopback-only, checks the Host header and refuses browser Origins. Audio is never stored or sent
+  to OmniRoute; only the transcript enters the conversation, under the same approval rules as typed text.
+- No secrets, personal paths, audio, weights or databases are in the V6 diff (scanned before the final commits).
+
+### Development process note
+The first part ran on headless Claude Code workers routed through OmniRoute. Kiro credits ran out, Codex hit rate
+limits, then Gemini was used. The owner then asked the orchestrating session to finish directly. A worker's
+unfinished state is preserved at `refs/backup/v6-workers-wip`.
+
+### Owner steps (cannot be done from a session)
+1. Listen to the six voices and approve or replace them. Samples: `%LOCALAPPDATA%\ABUD-FUN-OS\voice\tmp\samples\`.
+2. Speak the Egyptian test sentences into a conversation (🎙 تحدّث) and check the transcripts.
+3. Approve the cutover: back up the DB again, merge the V6 branch into the daily checkout, restart through
+   `ABUD-OS.ps1 restart`, then confirm a sign-in autostart.
+
+### Remaining limitations (genuine)
+- Daily-routine automation (§12) and owner-scoped personal folders (§13) reuse the existing V5 operations and
+  workspace roots. No new V6 scheduler was added.
+- The "الأداء" agent tab was not added. Per-agent performance stays in «الموارد الذكية» and «سجل التشغيل».
+- Hands-free continuous listening is intentionally not implemented. Push-to-talk only.
+- An orphaned voice worker after a Bridge crash is reused on the next start, not killed. It unloads models after
+  10 idle minutes.
 
 ---
 
