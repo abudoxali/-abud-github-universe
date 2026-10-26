@@ -1,5 +1,50 @@
 # ABUD FUN Company OS — STATUS
 
+## V6 — Cognitive Workforce & Voice Operations — in progress (2026-10-26)
+
+**Overall: Checkpoint 1 of 5 complete (≈20%).** Branch `v6/cognitive-workforce` in the isolated worktree
+`.claude/worktrees/v6`, based on V5 `a7b38d5` (tagged `v5-local-stable`). The daily Bridge (:4172) and
+`local/company.db` were not touched. Nothing pushed or merged.
+
+### Baseline and data safety
+- V5 baseline re-verified fresh: 154/154 Bridge tests on the V6 worktree.
+- Pre-V6 backup: `local/backups/company-pre-v6-2026-10-26T00-56-40Z.db` (VACUUM INTO, integrity ok, 0 FK violations;
+  projects 40, tasks 19, conversations 1, approvals 3, artifacts 6).
+- Hardware (nvidia-smi): RTX 4070 12282 MiB, driver 610.88; Python 3.11.15 (uv) and 3.14; Node 24.11.0.
+- Schema 12 (agent registry) rehearsed on a copy of the daily DB: 11→12, integrity ok, 0 FK violations, every count
+  and task id unchanged, task indexes rebuilt, idempotent on a second open. **Not applied to the daily DB.**
+
+### Checkpoint 1 — Dynamic Workforce & Automatic Tool Selection — TESTED WITH FIXTURES
+| Item | State | Evidence |
+|---|---|---|
+| Agent Registry (profiles, specializations, voice/memory/routing fields, templates, lifecycle API) | IMPLEMENTED, TESTED WITH FIXTURES | `b3f23a9`; registry + migration tests |
+| Six-id CHECK constraints removed (table rebuilds) | TESTED WITH FIXTURES + daily-DB copy rehearsal | migration test, rehearsal above |
+| Expanded specializations in prompts | IMPLEMENTED | catalog `specializationsAr`, systemPrompt |
+| Tool discovery metadata + deterministic selector | TESTED WITH FIXTURES | `fa28085`; tool-selector tests (6 agents, refusals) |
+| Tiers A/B/C (auto read, owner auto-policy or approval, never auto for C) | TESTED WITH FIXTURES | runtime-tool-selection + auto-policies tests |
+| Compact Arabic action summaries (`actionsAr`) | TESTED WITH FIXTURES | conversation test, UI shows collapsed details |
+| Dynamic roster UI, generic avatar for custom agents, registry admin panel, role quick actions | TESTED WITH FIXTURES (browser) | `deaf027`; `tests/v6-workforce.mjs` 14/14 at 1440/390/360 |
+| Temporary 7th agent (isolated store): create, render, picker, conversation, deactivate | TESTED WITH FIXTURES | registry tests + browser test |
+| Live OmniRoute verification of auto tool selection on the daily install | OWNER ACCEPTANCE PENDING | requires cutover |
+
+Tests: `npm test` in `apps/local-bridge` → **196/196 pass**; `npm run check` ok.
+
+### In progress
+- Checkpoint 2 (cognitive memory & learning engine) — implementation running.
+- Checkpoint 3 part 1 (voice): Voice Worker code + license inventory written (14/14 unit tests); local STT setup and
+  measurements running. Habibi-TTS **EGY** checkpoint recorded as Apache-2.0; Unified/SAU/UAE weights are
+  non-commercial and excluded. No voice latency/VRAM numbers measured yet.
+
+### Not implemented yet
+Checkpoint 3 TTS + six voices, Checkpoint 4 Meeting Center, Checkpoint 5 integration/final acceptance.
+
+### Development routing note
+Implementation is done by headless Claude Code workers routed through OmniRoute (`codex/gpt-6.1-sol`; Kiro credits
+ran out mid-task), reviewed and verified by the orchestrating session before each commit.
+
+---
+
+
 ## V5 — final release acceptance — 2026-10-26 (Africa/Cairo)
 
 **State: ABUD FUN Company OS V5 — operationally ready, awaiting the owner's manual Windows sign-in acceptance.** Everything else needed for the "Stable Local Release" classification was executed and verified on the owner's daily install. That covers backup and restore rehearsal, an isolated 5→11 migration and rollback rehearsal, the controlled cutover, OmniRoute repair, per-agent acceptance, a real multi-agent workflow, daily UI QA, the launcher and supervisor, read-only VPS checks, full regression and security. The one item that cannot be run from a session is a real Windows sign-out/sign-in; it is listed under owner steps. Branch `codex/v5-agent-intelligence`. The release is one local commit on top of V4.1 `ac7c6e8` (`release: finalize ABUD FUN Company OS V5 local stable`). **Nothing was pushed, merged into `main`, or deployed.**
