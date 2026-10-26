@@ -1,18 +1,19 @@
 # ABUD FUN Company OS — STATUS
 
-## V6 — Cognitive Workforce & Voice Operations — implemented, owner acceptance pending (2026-10-26)
+## V6 — Cognitive Workforce & Voice Operations — complete, owner acceptance pending (2026-10-26)
 
-**Classification: V6 RELEASE CANDIDATE (local, not cut over).** All five checkpoints are implemented and pass
-automated tests on the isolated dev bridge. The remaining items need the owner and are listed under *Owner steps*.
+**Classification: V6 RELEASE CANDIDATE (local, not cut over).** All five checkpoints and every item in the mission's
+feature list are implemented and pass automated tests, plus a live check against the real OmniRoute on synthetic data.
+The remaining items need the owner and are listed under *Owner steps*.
 Branch `v6/cognitive-workforce` in the worktree `.claude/worktrees/v6`, based on V5 `a7b38d5` (tag
-`v5-local-stable`). 12 local commits from `b3f23a9` to `15cd678`, 61 files, about +7,000 lines. **Nothing was pushed,
+`v5-local-stable`). Local commits from `b3f23a9` onward (the last one adds routines, folder scopes and the performance tab), about +9,000 lines. **Nothing was pushed,
 merged or cut over.** The daily Bridge (:4172) still runs V5 from the main checkout, and `local/company.db` was not
 modified.
 
 ### Data safety
 - Pre-V6 backup: `local/backups/company-pre-v6-2026-10-26T00-56-40Z.db` (VACUUM INTO, integrity ok, 0 FK violations).
-- Migrations 12–15 are additive. Six-id CHECK constraints are relaxed through table rebuilds. They were rehearsed on a
-  copy of the daily DB, schema 11 → 15:
+- Migrations 12–16 are additive. Six-id CHECK constraints are relaxed through table rebuilds. They were rehearsed on a
+  copy of the daily DB, schema 11 → 16:
   - integrity ok, 0 FK violations
   - projects 40, tasks 19, conversations 1, approvals 3, artifacts 6, tool executions 52, workflows 3, memory 1 — all unchanged
   - task ids identical; memory FTS triggers and search intact
@@ -32,16 +33,30 @@ modified.
 | 3 | Bridge voice supervisor + push-to-talk chat UI + robot states | TESTED WITH FIXTURES + one real end-to-end | `5374dc0`, `76b5a75`; `voice.test.mjs` |
 | 4 | Meeting Center: individual/group, sequential turns, addressing, interrupt, budgets, restart recovery, outcomes | TESTED WITH FIXTURES (backend + browser) | `506d7c3`; Scenarios F/G/H in `meetings.test.mjs`; `tests/v6-meetings.mjs` 14/14 |
 | 5 | «اسأل الشركة», System voice panel, الذاكرة والخبرات view, apiVersion 6 | TESTED WITH FIXTURES | `2245a14`; `ask.test.mjs` |
-| 5 | Live OmniRoute run of V6 flows on the daily install | OWNER ACCEPTANCE PENDING | requires cutover |
+| 5 | Owner-enabled routines (§12): daily summary, deadlines, approvals, AI usage, weekly team meeting, security and knowledge reminders; fixed schedule in Cairo time, no model calls, missed vs executed recorded | TESTED WITH FIXTURES + browser | `routines.test.mjs` (7), `tests/v6-ops.mjs` |
+| 5 | Context boundaries (§13): protected locations never authorizable, personal folders need explicit confirmation, owner-managed scopes, access history, measured outbound inference, data-flow map | TESTED WITH FIXTURES + browser | `context.test.mjs` (6), `tests/v6-ops.mjs` |
+| 5 | الأداء tab per agent from the persisted accounting report; meeting quick actions open the Meeting Center preselected | TESTED WITH FIXTURES (browser) | `tests/v6-ops.mjs` |
+| 5 | Live run against the real local OmniRoute on a temporary DB and synthetic repositories | LIVE VERIFIED (synthetic data) | `tests/v6-live.mjs` 6/6, see below |
+| 5 | The same flows on the owner's daily install | OWNER ACCEPTANCE PENDING | requires cutover |
 | 5 | Windows sign-in autostart with V6 | OWNER ACCEPTANCE PENDING | launcher accepts apiVersion 6; not run |
 
 ### Tests (fresh, 2026-10-26)
-- `cd apps/local-bridge && npm test`: **216/216 pass** (V5 baseline 154). `npm run check` ok.
+- `cd apps/local-bridge && npm test`: **230/230 pass** (V5 baseline 154). `npm run check` ok.
 - Voice worker, `python -m unittest test_worker` from the voice venv: **23/23 pass**.
 - Browser, against the isolated dev bridge `node tests/dev-bridge.mjs 4191`:
   - `tests/v6-meetings.mjs`: **14/14** (1440/1024/768/390/360, no overflow, no uncaught errors)
   - `tests/v6-workforce.mjs`: **14/14**
-- All model output in these tests comes from the stub router. Live OmniRoute inference for V6 flows was not run.
+  - `tests/v6-ops.mjs`: **12/12** (routines, folder scopes and privacy, performance, meeting shortcuts; new views fit 1440/1024/768/390/360)
+- Model output in the suites above comes from the stub router. The live check below is separate.
+
+### Live check against the real OmniRoute (2026-10-26, temporary DB, synthetic repositories — none of the owner's data)
+`DEV_REAL_ROUTER=1 node tests/dev-bridge.mjs 4191`, then `node tests/v6-live.mjs`; models `gemini/gemini-3.1-flash-lite` with `gemini-3-flash-preview` as fallback.
+- **Scenario A:** «NEX، راجع استهلاكنا وحالة النماذج» ran in 21 s. NEX selected `telemetry.providerCompare` and `usage.read` by itself and no unrelated tool, one inference, 3,735 tokens.
+- **ORI:** «راجع حالة مشاريعي وجهّز أولويات النهارده» → `company.overview` + `tasks.query`, 8 s.
+- **Permission refusal:** MIA calling a security tool she was never granted → 403, audited.
+- **Meeting:** the chair-led meeting with an addressed agent: only REX answered, the meeting ended with proposed outcomes (nothing auto-confirmed), 3,463 tokens.
+- **Accounting:** 4 requests and 4 inferences reconciled; cost recorded as unknown for all 4 (the router reported none), never as $0.
+- **Found and fixed during this run:** action summaries repeated «عدد العناصر» and carried no meaning. Each read tool now has a one-sentence summary built from its real result shape, with a guard that falls back to the generic text if a field is missing.
 
 ### Voice (measured on RTX 4070 12 GB, driver 610.88)
 - **STT** large-v3-turbo float16:
@@ -77,11 +92,13 @@ modified.
   Center.
 - The voice worker is loopback-only, checks the Host header and refuses browser Origins. Audio is never stored or sent
   to OmniRoute; only the transcript enters the conversation, under the same approval rules as typed text.
-- No secrets, personal paths, audio, weights or databases are in the V6 diff (scanned before the final commits).
+- Folders: the company inspects only owner-authorized folders. Credential stores, browser profiles, system folders, `.omniroute` and the coding-agent session folders can never be authorized, even with confirmation; Documents, Downloads and Desktop themselves need an explicit personal flag. Refusals are audited and reported by label, never by path.
+- No secrets, personal paths, audio, weights or databases are in the V6 diff (scanned before every commit).
 
 ### Development process note
 The first part ran on headless Claude Code workers routed through OmniRoute. Kiro credits ran out, Codex hit rate
-limits, then Gemini was used. The owner then asked the orchestrating session to finish directly. A worker's
+limits, then Gemini was used. The owner then asked the orchestrating session to finish directly, and the remaining
+items (Meeting Center, voice supervisor, UI, routines, folder scopes, performance) were built and verified by it. A worker's
 unfinished state is preserved at `refs/backup/v6-workers-wip`.
 
 ### Owner steps (cannot be done from a session)
@@ -91,10 +108,10 @@ unfinished state is preserved at `refs/backup/v6-workers-wip`.
    `ABUD-OS.ps1 restart`, then confirm a sign-in autostart.
 
 ### Remaining limitations (genuine)
-- Daily-routine automation (§12) and owner-scoped personal folders (§13) reuse the existing V5 operations and
-  workspace roots. No new V6 scheduler was added.
-- The "الأداء" agent tab was not added. Per-agent performance stays in «الموارد الذكية» and «سجل التشغيل».
 - Hands-free continuous listening is intentionally not implemented. Push-to-talk only.
+- Routines are all off until the owner enables them in العمل ← الروتين. Their schedules assume the Bridge is running; when it is not, due times are recorded as missed on the next start, not run late.
+- Browser-level and file-level protection is enforced for scopes and the audit trail; the file-name deny-list (`NEVER_READ_FILES`) is in place for any future file-reading tool, since V5 tools read only STATUS.md and README.md.
+- Live verification used free Gemini routes; paid or stronger routes were not exercised.
 - An orphaned voice worker after a Bridge crash is reused on the next start, not killed. It unloads models after
   10 idle minutes.
 

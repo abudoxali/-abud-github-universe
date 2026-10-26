@@ -62,7 +62,9 @@ test("owner colloquial requests and summaries remain useful", () => {
     assert.ok(run(AGENTS.find(a => a.id === id), request).selected.some(t => t.toolId === toolId), request);
   }
   assert.match(TOOLS.find(t => t.id === "tasks.query").summarizeAr([{ id: "1" }]), /1/);
-  assert.match(TOOLS.find(t => t.id === "company.overview").summarizeAr({ overdue: [1, 2] }), /المتأخرة: 2/);
+  assert.match(TOOLS.find(t => t.id === "company.overview").summarizeAr({ projects: { total: 1 }, tasks: { open: 2, overdue: [1, 2], blocked: [] }, approvalsPending: 0 }), /2 متأخرة/);
+  // An unexpected shape falls back to the generic sentence instead of showing zeros that look like real counts.
+  assert.doesNotMatch(TOOLS.find(t => t.id === "company.overview").summarizeAr({ overdue: [1, 2] }), /تمت مراجعة 0/);
 });
 test("generic single tokens do not select tools and domain/specialization rank relevant intent", () => {
   const nex = AGENTS.find(a => a.id === "nex");
@@ -102,4 +104,22 @@ test("pure stable selection validates input, bounds candidates and preserves app
   assert.equal(selectTools({ ...opts, maxTools: 0 }).selected.length, 0);
   assert.ok(selectTools({ ...opts, inputs: { "security.osv": { unexpected: true } } }).rejected.some(t => t.toolId === "security.osv" && t.reason === "invalid-inputs"));
   assert.equal(selectTools().selected.length, 0);
+});
+
+test("action summaries are single readable Arabic sentences built from the real result shapes (no repeated phrases)", async () => {
+  const { toolById } = await import("../src/catalog.mjs");
+  const say = (id, result) => toolById(id).summarizeAr(result);
+  assert.equal(say("company.overview", { projects: { total: 8 }, tasks: { open: 5, overdue: [{}, {}, {}], blocked: [{}] }, approvalsPending: 2 }),
+    "تمت مراجعة 8 مشروعًا: 5 مهمة مفتوحة، 3 متأخرة، 1 متعطلة، 2 موافقة معلقة.");
+  assert.equal(say("tasks.query", { tasks: [{ status: "todo", dueDate: "2000-01-01" }, { status: "blocked", dueDate: null }, { status: "done", dueDate: "2000-01-01" }] }), "تم العثور على 3 مهمة، منها 1 متأخرة، و1 متعطلة.");
+  assert.equal(say("approvals.list", { approvals: [], serverActions: [] }), "0 موافقة معلقة.");
+  assert.match(say("usage.read", { available: true, summary: { requests: 12, promptTokens: 1000, completionTokens: 234 }, byProvider: [{}, {}] }), /12 طلب، 1234 رمز، عبر 2 مزوّد/);
+  assert.match(say("telemetry.providerCompare", { range: "7d", models: [{ ref: "a/slow", successRatePct: 70 }, { ref: "b/best", successRatePct: 100 }] }), /الأعلى نجاحًا b\/best \(100٪\)/);
+  for (const [id, result] of [["usage.read", { available: true, summary: {}, byProvider: [], byModel: [] }], ["tasks.query", { tasks: [] }], ["quota.read", { available: true, connections: [], lockouts: [], warnings: [] }]]) {
+    const text = say(id, result);
+    const parts = text.split(/[،:.]/).map((x) => x.trim()).filter(Boolean);
+    assert.equal(new Set(parts).size, parts.length, `${id}: "${text}" repeats a phrase`);
+  }
+  // A result shape the tool did not expect falls back to the generic sentence instead of throwing.
+  assert.match(say("tasks.query", { tasks: "unexpected", total: 3 }), /«/);
 });

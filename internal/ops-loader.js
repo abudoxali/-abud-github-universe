@@ -12,7 +12,7 @@
     document.head.append(node);
   });
   const modules = ["workspace-map", "ops-core", "robot-specs", "robot-engine"];
-  if (health.capabilities?.company) modules.push("ops-company", "ops-hq", "ops-projects-hub", "ops-work", ...(health.capabilities?.toolEngine ? ["ops-capabilities"] : []), ...(health.capabilities?.workflows ? ["ops-operations"] : []), ...(health.capabilities?.voice ? ["ops-voice"] : []), ...(health.capabilities?.meetings ? ["ops-meetings"] : []), ...(health.capabilities?.learning ? ["ops-learning"] : []), "ops-workforce", "ops-resources", "ops-usage", "ops-agents", "ops-system", "ops-servers");
+  if (health.capabilities?.company) modules.push("ops-company", "ops-hq", "ops-projects-hub", "ops-work", ...(health.capabilities?.toolEngine ? ["ops-capabilities"] : []), ...(health.capabilities?.workflows ? ["ops-operations"] : []), ...(health.capabilities?.voice ? ["ops-voice"] : []), ...(health.capabilities?.meetings ? ["ops-meetings"] : []), ...(health.capabilities?.learning ? ["ops-learning"] : []), "ops-routines", "ops-context", "ops-performance", "ops-workforce", "ops-resources", "ops-usage", "ops-agents", "ops-system", "ops-servers");
   else modules.push("ops-usage", "ops-agents", "ops-system");
   for (const file of modules) await loadScript(`./internal/${file}.js`);
   window.AbudOps?.boot();

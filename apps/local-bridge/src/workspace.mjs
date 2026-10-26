@@ -1,8 +1,10 @@
 /* Read-only workspace discovery. Inspects only operator-authorized roots, never follows symlinks/junctions, never reads
  * source or environment files, never runs a git command that writes (GIT_OPTIONAL_LOCKS=0, no fetch/pull/checkout). */
-import { lstat, open, readFile, readdir, stat } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { createTtlCache, mapLimit, redact, run, text } from "./util.mjs";
+import { classifyPath } from "./context.mjs";
 
 const IGNORED_DIRS = /^(?:node_modules|dist|build|out|target|vendor|coverage|__pycache__|venv|\.venv|\.cache|\.next|\.nuxt|\.turbo|\.git|\.claude|\.idea|\.vscode)$/i;
 const MAX_REPOS = 250;
@@ -27,22 +29,72 @@ export async function loadWorkspaceConfig({ configPath, env = process.env } = {}
       if (error?.code !== "ENOENT") return { configured: false, source: "local/workspace.json", error: "invalid-workspace-config", roots: [], maxDepth };
     }
   }
-  const roots = [];
-  for (const candidate of rawRoots.slice(0, 8)) {
+  const roots = [], rejected = [];
+  for (const entry of rawRoots.slice(0, 8)) {
+    // A root is a path string, or { path, label?, personal? } where `personal` is the owner's explicit confirmation.
+    const candidate = typeof entry === "string" ? entry : entry?.path;
     if (typeof candidate !== "string" || !isAbsolute(candidate.trim())) continue;
     const path = resolve(candidate.trim());
     try {
       if (!(await stat(path)).isDirectory()) continue;
     } catch (_) { continue; }
     if (roots.some((root) => caseKey(root.path) === caseKey(path))) continue;
-    roots.push({ id: `root-${roots.length + 1}`, label: text(basename(path), 60) || "workspace", path });
+    const label = text(typeof entry === "object" && entry.label ? entry.label : basename(path), 60) || "workspace";
+    const verdict = classifyPath(path, { personalConfirmed: typeof entry === "object" && entry.personal === true });
+    // Refused scopes are reported by label and reason only; their path is never exposed or inspected.
+    if (!verdict.ok) { rejected.push({ label, code: verdict.code, reasonAr: verdict.reasonAr }); continue; }
+    roots.push({ id: `root-${roots.length + 1}`, label, path, personal: verdict.personal === true });
   }
-  return { configured: roots.length > 0, source, roots, maxDepth };
+  return { configured: roots.length > 0, source, roots, rejected, maxDepth };
+}
+
+/** Owner-managed scopes live in local/workspace.json. An environment-defined list (ABUD_WORKSPACE_ROOTS) takes precedence
+ * and is read-only here. Every write re-validates through the same protected-path policy the loader applies. */
+async function readRootEntries(configPath) {
+  try {
+    const parsed = JSON.parse(await readFile(configPath, "utf8"));
+    return { entries: Array.isArray(parsed?.roots) ? parsed.roots : [], maxDepth: parsed?.maxDepth === 2 ? 2 : 1 };
+  } catch (error) {
+    if (error?.code === "ENOENT") return { entries: [], maxDepth: 1 };
+    throw Object.assign(new Error("invalid-workspace-config"), { code: "invalid-workspace-config" });
+  }
+}
+async function writeRootEntries(configPath, entries, maxDepth) {
+  await mkdir(dirname(configPath), { recursive: true });
+  const temp = `${configPath}.${process.pid}.tmp`;
+  await writeFile(temp, JSON.stringify({ roots: entries, maxDepth }, null, 2), "utf8");
+  await rename(temp, configPath);
+}
+const entryPath = (entry) => resolve(String(typeof entry === "string" ? entry : entry?.path ?? ""));
+
+export async function addWorkspaceRoot({ configPath, env = process.env, path, label, personal = false } = {}) {
+  if (env.ABUD_WORKSPACE_ROOTS) return { ok: false, status: 409, code: "environment-managed", messageAr: "المجلدات محددة بمتغير بيئة؛ عدّلها من هناك" };
+  if (typeof path !== "string" || !isAbsolute(path.trim())) return { ok: false, status: 422, code: "invalid-path", messageAr: "اكتب مسارًا كاملًا لمجلد موجود" };
+  const target = resolve(path.trim());
+  try { if (!(await stat(target)).isDirectory()) throw new Error("not-directory"); } catch (_) { return { ok: false, status: 422, code: "not-a-folder", messageAr: "المسار غير موجود أو ليس مجلدًا" }; }
+  const verdict = classifyPath(target, { personalConfirmed: personal === true });
+  if (!verdict.ok) return { ok: false, status: 422, code: verdict.code, messageAr: verdict.reasonAr };
+  const { entries, maxDepth } = await readRootEntries(configPath);
+  if (entries.some((entry) => caseKey(entryPath(entry)) === caseKey(target))) return { ok: false, status: 409, code: "already-added", messageAr: "هذا المجلد مضاف بالفعل" };
+  if (entries.length >= 8) return { ok: false, status: 422, code: "too-many", messageAr: "الحد الأقصى 8 مجلدات" };
+  await writeRootEntries(configPath, [...entries, { path: target, label: text(label || basename(target), 60), personal: verdict.personal === true }], maxDepth);
+  return { ok: true };
+}
+
+export async function removeWorkspaceRoot({ configPath, env = process.env, id } = {}) {
+  if (env.ABUD_WORKSPACE_ROOTS) return { ok: false, status: 409, code: "environment-managed", messageAr: "المجلدات محددة بمتغير بيئة؛ عدّلها من هناك" };
+  const config = await loadWorkspaceConfig({ configPath, env });
+  const root = config.roots.find((r) => r.id === id);
+  if (!root) return { ok: false, status: 404, code: "not-found", messageAr: "المجلد غير موجود" };
+  const { entries, maxDepth } = await readRootEntries(configPath);
+  await writeRootEntries(configPath, entries.filter((entry) => caseKey(entryPath(entry)) !== caseKey(root.path)), maxDepth);
+  return { ok: true };
 }
 
 export const publicWorkspaceConfig = (config) => ({
   configured: config.configured, source: config.source, error: config.error ?? null, maxDepth: config.maxDepth,
-  roots: config.roots.map((root) => ({ id: root.id, label: root.label }))
+  roots: config.roots.map((root) => ({ id: root.id, label: root.label, personal: root.personal === true })),
+  rejected: config.rejected ?? []
 });
 
 // ---------------------------------------------------------------- pure parsers

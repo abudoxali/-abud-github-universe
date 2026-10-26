@@ -18,7 +18,7 @@
   const activeAgents = () => roster().filter((a) => a.active !== false && a.enabled !== false && !a.removedAt && a.config?.enabled !== false);
   const agentIds = () => C.agentsDef().map((a) => a.id);
   const QUICK_ACTIONS = {
-    ori: ["راجع الشركة", "خطط للأسبوع", "وزّع العمل", "راجع الأولويات"],
+    ori: ["راجع الشركة", "خطط للأسبوع", "وزّع العمل", "ابدأ اجتماع الفريق", "راجع الأولويات"],
     mia: ["راجعي التصميم", "جهّزي عرض", "راجعي اتساق الهوية"],
     nex: ["راجع استهلاك الذكاء الاصطناعي", "حلّل التكاليف", "افحص صحة النماذج", "راجع الأداء"],
     luna: ["نظّمي المهام", "جهّزي اجتماع", "اعملي تقرير", "راجعي المواعيد النهائية"],
@@ -30,7 +30,10 @@
     operations: QUICK_ACTIONS.luna, researcher: QUICK_ACTIONS.zen, security: QUICK_ACTIONS.rex,
     default: ["راجع العمل ضمن تخصصك", "اقترح أولويات العمل"]
   };
+  /** Meeting shortcuts open the real Meeting Center form with the right people preselected; nothing starts until the owner presses start. */
+  const MEETING_ACTIONS = { "ابدأ اجتماع الفريق": () => ({ all: true, title: "اجتماع الفريق" }), "جهّزي اجتماع": () => ({ participants: ["luna", "ori"], title: "" }) };
   async function quickAction(def, text, trigger) {
+    if (MEETING_ACTIONS[text] && window.AbudMeetings?.prefill) { window.AbudMeetings.prefill(MEETING_ACTIONS[text]()); O.go("agents", "meetings"); return; }
     const created = await act(trigger, () => mutate("POST", "/conversations", { agentId: def.id, title: text }), null);
     if (!created) return;
     ui.pick = def.id;
@@ -44,8 +47,8 @@
   function quickActions(def) {
     if (!V5.conversations || !activeAgents().some((a) => a.id === def.id)) return null;
     const actions = (Object.hasOwn(QUICK_ACTIONS, def.id) ? QUICK_ACTIONS[def.id] : null) || (Object.hasOwn(TEMPLATE_ACTIONS, def.templateId) ? TEMPLATE_ACTIONS[def.templateId] : TEMPLATE_ACTIONS.default);
-    return panel("إجراءات سريعة", "يفتح كل إجراء محادثة محفوظة مع الوكيل. البحث والاجتماع يبدأان بمسودة لتكمل تفاصيلها.",
-      h("div", { class: "ag-quick-actions" }, actions.map((text) => button(text === "جهّزي اجتماع" ? `${text} (مسودة طلب)` : text,
+    return panel("إجراءات سريعة", "يفتح كل إجراء محادثة محفوظة مع الوكيل. البحث يبدأ بمسودة لتكمل تفاصيلها، وإجراءات الاجتماع تفتح مركز الاجتماعات بالمشاركين محدَّدين ولا يبدأ شيء قبل ضغطك.",
+      h("div", { class: "ag-quick-actions" }, actions.map((text) => button(text,
         (event) => quickAction(def, text, event.currentTarget), { kind: "secondary" }))));
   }
   function actionSummary(actions) {
@@ -845,6 +848,7 @@
     if (O.state.tab === "runs") return renderRuns();
     if (O.state.tab === "chat") return renderChat();
     if (O.state.tab === "memory") return renderMemoryTab();
+    if (O.state.tab === "performance") return fill(root, window.AbudPerformance ? window.AbudPerformance.render() : notice("bad", "وحدة الأداء غير محمّلة", "أعد تحميل الصفحة."));
     if (O.state.tab === "meetings") return window.AbudMeetings ? window.AbudMeetings.render(root) : fill(root, notice("bad", "وحدة الاجتماعات غير محمّلة", "أعد تحميل الصفحة."));
     if (O.state.tab === "operations") return window.AbudOperations ? window.AbudOperations.renderRoom(root) : fill(root, notice("bad", "وحدة غرفة العمليات غير محمّلة", "أعد تحميل الصفحة."));
     if (O.state.tab === "tools") return window.AbudCapabilities ? window.AbudCapabilities.renderLibrary(root) : fill(root, notice("bad", "وحدة الأدوات غير محمّلة", "أعد تحميل الصفحة."));
@@ -866,14 +870,14 @@
 
   O.registerView({
     id: "agents", order: 40, icon: "agents", ar: "الوكلاء", subtitle: "فريق وكلاء بأدوار متخصصة، يعمل عبر OmniRoute وتحت صلاحيات يفرضها الخادم.",
-    tabs: [["team", "الفريق"], ...(V5.workflows ? [["operations", "غرفة العمليات"]] : []), ...(V5.conversations ? [["chat", "المحادثات"]] : []), ...(V5.meetings ? [["meetings", "الاجتماعات"]] : []), ...(V5.toolEngine ? [["tools", "الأدوات والمهارات"]] : []), ...(V5.knowledge ? [["memory", V5.learning ? "الذاكرة والخبرات" : "الذاكرة والمعرفة"]] : []), ["runs", "سجل التشغيل"], ["request", "طلب متخصص", { hidden: true }], ["workspace", "مساحة الوكيل", { hidden: true }]],
+    tabs: [["team", "الفريق"], ...(V5.workflows ? [["operations", "غرفة العمليات"]] : []), ...(V5.conversations ? [["chat", "المحادثات"]] : []), ...(V5.meetings ? [["meetings", "الاجتماعات"]] : []), ...(V5.toolEngine ? [["tools", "الأدوات والمهارات"]] : []), ...(V5.performance ? [["performance", "الأداء"]] : []), ...(V5.knowledge ? [["memory", V5.learning ? "الذاكرة والخبرات" : "الذاكرة والمعرفة"]] : []), ["runs", "سجل التشغيل"], ["request", "طلب متخصص", { hidden: true }], ["workspace", "مساحة الوكيل", { hidden: true }]],
     defaultTab: "team",
     resolve(rest) {
       if (rest[0] === "workspace") return { tab: "workspace", rest: rest.slice(1) };
-      if (BUILTIN_IDS.includes(rest[0]) || (rest[0] && !["team", "request", "runs", "chat", "meetings", "memory", "knowledge", "operations", "tools"].includes(rest[0]))) return { tab: "workspace", rest };
+      if (BUILTIN_IDS.includes(rest[0]) || (rest[0] && !["team", "request", "runs", "chat", "meetings", "memory", "knowledge", "operations", "tools", "performance"].includes(rest[0]))) return { tab: "workspace", rest };
       // «المعرفة» is part of «الذاكرة والمعرفة»; its old route still lands there.
       if (V5.knowledge && rest[0] === "knowledge") return { tab: "memory", rest: ["knowledge"] };
-      const available = ["team", "request", "runs", ...(V5.workflows ? ["operations"] : []), ...(V5.conversations ? ["chat"] : []), ...(V5.meetings ? ["meetings"] : []), ...(V5.toolEngine ? ["tools"] : []), ...(V5.knowledge ? ["memory"] : [])];
+      const available = ["team", "request", "runs", ...(V5.workflows ? ["operations"] : []), ...(V5.conversations ? ["chat"] : []), ...(V5.meetings ? ["meetings"] : []), ...(V5.toolEngine ? ["tools"] : []), ...(V5.performance ? ["performance"] : []), ...(V5.knowledge ? ["memory"] : [])];
       return available.includes(rest[0]) ? { tab: rest[0], rest: rest.slice(1) } : { tab: null, rest };
     },
     onShow(tab, rest) {

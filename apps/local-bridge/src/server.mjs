@@ -9,7 +9,8 @@ import vm from "node:vm";
 import { isAllowedAsset, isInternalAsset, loadWorldConfig, readGitProject, sanitizeWorldConfig } from "./git.mjs";
 import { createRouterClient, createRouterService, DEFAULT_THRESHOLDS, RANGES } from "./omniroute.mjs";
 import { createAgentService } from "./agents.mjs";
-import { createWorkspaceScanner, loadWorkspaceConfig, publicWorkspaceConfig } from "./workspace.mjs";
+import { addWorkspaceRoot, createWorkspaceScanner, loadWorkspaceConfig, publicWorkspaceConfig, removeWorkspaceRoot } from "./workspace.mjs";
+import { createContextReport } from "./context.mjs";
 import { evaluatePolicy, loadPolicy } from "./policy.mjs";
 import { createTtlCache, mapLimit, redact } from "./util.mjs";
 import { classifyPreviousRun, createLifecycleRecorder, readPreviousRun, safeStack } from "./lifecycle.mjs";
@@ -22,6 +23,7 @@ import { createLearning } from "./learning.mjs";
 import { createMeetings } from "./meetings.mjs";
 import { createVoice } from "./voice.mjs";
 import { createAsk } from "./ask.mjs";
+import { createRoutines } from "./routines.mjs";
 import { createArtifacts, createTemplates } from "./artifacts.mjs";
 import { createTelemetry } from "./telemetry.mjs";
 import { MCP_TOOLS } from "./mcp-server.mjs";
@@ -251,6 +253,8 @@ export function createServer({
   runtime.setMeetings(meetings);
   const voice = createVoice({ env, log, ...voiceOptions });
   const asker = createAsk({ company, runtime, conversations });
+  const routines = createRoutines({ company, meetings, log });
+  const contextReport = createContextReport({ company, workspaceReport: async () => publicWorkspaceConfig(await loadWorkspaceConfig({ configPath: workspaceConfigPath, env })) });
   runtime.setKnowledge(knowledge);
   vps.setEnqueue((input, actor) => runtime.enqueue(input, actor));
   const operations = createOperations({ company, getOverview: (force) => overview(force), log });
@@ -258,7 +262,7 @@ export function createServer({
   if (interrupted) log(`marked ${interrupted} interrupted run(s) as failed`);
   const pausedMeetings = meetings.recover();
   if (pausedMeetings) log(`paused ${pausedMeetings} meeting(s) interrupted by a restart`);
-  if (background) { operations.start(); setImmediate(() => runtime.pump()); vpsReady.then(() => vps.start()); }
+  if (background) { operations.start(); routines.start(); setImmediate(() => runtime.pump()); vpsReady.then(() => vps.start()); }
   const pruneTelemetry = () => { try { telemetry.prune(company.settings().telemetryRetentionDays); conversations.purgeAttachments(); } catch (_) { /* best effort */ } };
   const telemetryTimer = background ? setInterval(pruneTelemetry, 6 * 3_600_000) : null;
   telemetryTimer?.unref?.();
@@ -454,6 +458,29 @@ export function createServer({
   route("GET", "/conversations", ({ query }) => ({ conversations: conversations.list({ agentId: query.get("agentId"), projectId: query.get("projectId"), state: query.get("state") || "active", before: query.get("before"), limit: query.get("limit"), q: query.get("q") }) }));
   route("POST", "/conversations", ({ body }) => conversations.create(body));
   route("POST", "/ask", ({ body }) => asker.ask(body));
+  route("GET", "/context", () => contextReport.overview());
+  route("GET", "/context/access", ({ query }) => ({ access: contextReport.accessHistory({ limit: query.get("limit"), agentId: query.get("agentId"), projectId: query.get("projectId") }) }));
+  route("POST", "/context/scopes", async ({ body }) => {
+    const result = await addWorkspaceRoot({ configPath: workspaceConfigPath, env, path: body.path, label: body.label, personal: body.personal === true });
+    if (!result.ok) {
+      company.log({ actorType: "owner", actorId: "owner", action: "context.scope.refused", targetType: "context", targetId: result.code, outcome: "blocked", summary: `رُفض تصريح مجلد: ${result.messageAr}` });
+      throw new HttpError(result.status, result.code, result.messageAr);
+    }
+    company.log({ actorType: "owner", actorId: "owner", action: "context.scope.added", targetType: "context", targetId: "scope", summary: `صرّح المالك بمجلد جديد${body.personal ? " (شخصي)" : ""}: ${String(body.label || "").slice(0, 60) || "بدون اسم"}` });
+    await runWorkspaceScan("all");
+    return contextReport.overview();
+  });
+  route("DELETE", "/context/scopes/([^/]+)", async ({ params }) => {
+    const result = await removeWorkspaceRoot({ configPath: workspaceConfigPath, env, id: params[0] });
+    if (!result.ok) throw new HttpError(result.status, result.code, result.messageAr);
+    company.log({ actorType: "owner", actorId: "owner", action: "context.scope.removed", targetType: "context", targetId: params[0], summary: "سحب المالك التصريح بمجلد" });
+    await runWorkspaceScan("all");
+    return contextReport.overview();
+  });
+  route("GET", "/routines", () => ({ routines: routines.list() }));
+  route("GET", "/routines/([^/]+)/runs", ({ params, query }) => ({ runs: routines.runs(params[0], query.get("limit")) }));
+  route("PATCH", "/routines/([^/]+)", ({ params, body }) => routines.update(params[0], body));
+  route("POST", "/routines/([^/]+)/run", ({ params }) => routines.runNow(params[0]));
   route("GET", "/voice/status", () => voice.status());
   route("POST", "/voice/start", async () => (await voice.ensure(), voice.status()));
   route("POST", "/voice/warmup", () => voice.warmup());
@@ -739,7 +766,7 @@ export function createServer({
       if (url.pathname === "/local-api/health") {
         return send(response, 200, {
           status: "ok", service: "abud-local-universe", apiVersion: 6, readOnly: false, pid: process.pid, uptimeSec: Math.round(process.uptime()),
-          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true, conversations: true, knowledge: true, toolEngine: true, workflows: true, registry: true, meetings: true, learning: true, voice: true }
+          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true, conversations: true, knowledge: true, toolEngine: true, workflows: true, registry: true, meetings: true, learning: true, voice: true, routines: true, context: true, performance: true }
         });
       }
       if (url.pathname === "/local-api/account") return send(response, 200, { account: await localAccount() });
@@ -803,7 +830,7 @@ export function createServer({
       return send(response, 500, { error: "local-bridge-failed", message: "خطأ داخلي في الـ Bridge" });
     }
   });
-  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); voice.stop(); operations.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
+  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); voice.stop(); operations.stop(); routines.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
   server.company = company;
   server.vps = vps;
   server.vpsReady = vpsReady;

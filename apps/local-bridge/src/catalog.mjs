@@ -361,6 +361,31 @@ const DISCOVERY = {
 };
 
 /** Category, version, adapter and side-effect metadata for the V4.1 tools, derived so their reviewed entries stay intact. */
+/** One short human sentence per tool, from the real result shape; anything unexpected falls back to the generic summary. */
+const cairoToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
+const n = (value) => Number(value ?? 0);
+const SPECIFIC_SUMMARIES = {
+  "company.overview": (r) => `تمت مراجعة ${n(r.projects?.total)} مشروعًا: ${n(r.tasks?.open)} مهمة مفتوحة، ${(r.tasks?.overdue || []).length} متأخرة، ${(r.tasks?.blocked || []).length} متعطلة، ${n(r.approvalsPending)} موافقة معلقة.`,
+  "tasks.query": (r) => { const today = cairoToday(); const late = r.tasks.filter((t) => t.dueDate && t.dueDate < today && !["done", "cancelled"].includes(t.status)).length; const blocked = r.tasks.filter((t) => t.status === "blocked").length;
+    return `تم العثور على ${r.tasks.length} مهمة${late ? `، منها ${late} متأخرة` : ""}${blocked ? `، و${blocked} متعطلة` : ""}.`; },
+  "project.read": (r) => `تمت قراءة مشروع «${r.name}»${r.checkouts ? ` (${r.checkouts.length} نسخة عمل)` : ""}.`,
+  "approvals.list": (r) => `${r.approvals.length} موافقة معلقة${r.serverActions?.length ? ` و${r.serverActions.length} إجراء خادم بانتظار قرارك` : ""}.`,
+  "knowledge.search": (r) => `${r.results.length} نتيجة معرفة ذات صلة بالطلب.`,
+  "usage.read": (r) => `تمت قراءة الاستهلاك: ${n(r.summary?.requests)} طلب، ${n(r.summary?.promptTokens) + n(r.summary?.completionTokens)} رمز، عبر ${r.byProvider.length} مزوّد.`,
+  "quota.read": (r) => `تمت قراءة حصص ${r.connections.length} اتصال؛ ${r.lockouts.length} موقوف مؤقتًا و${r.warnings.length} تحذير.`,
+  "telemetry.providerCompare": (r) => { const best = [...r.models].sort((a, b) => n(b.successRatePct) - n(a.successRatePct))[0]; return `قورن ${r.models.length} نموذج${best ? `؛ الأعلى نجاحًا ${best.ref} (${best.successRatePct}٪)` : ""}.`; },
+  "telemetry.agentStats": (r) => `إحصاءات ${r.agents.length} وكيل للفترة ${r.range}.`,
+  "telemetry.toolLatency": (r) => `قيست أزمنة ${r.tools.length} أداة.`,
+  "security.scan": (r) => `الفحص الأمني: ${r.checks.length} فحص و${r.findings.length} ملاحظة.`,
+  "calendar.exportTasks": (r) => `صُدِّر ${n(r.events)} موعد إلى ملف تقويم.`,
+  "knowledge.freshness": (r) => `فُحصت حداثة ${n(r.checked)} مصدر معرفة.`
+};
+/** A summary is only built when every field it reads is present, so an unexpected shape never shows misleading zeros. */
+const SUMMARY_FIELDS = { "company.overview": ["projects", "tasks"], "tasks.query": ["tasks"], "project.read": ["name"], "approvals.list": ["approvals"], "knowledge.search": ["results"], "usage.read": ["summary", "byProvider"], "quota.read": ["connections", "lockouts", "warnings"], "telemetry.providerCompare": ["models"], "telemetry.agentStats": ["agents"], "telemetry.toolLatency": ["tools"], "security.scan": ["checks", "findings"], "calendar.exportTasks": ["events"], "knowledge.freshness": ["checked"] };
+for (const [id, fn] of Object.entries(SPECIFIC_SUMMARIES)) {
+  SPECIFIC_SUMMARIES[id] = (result) => { for (const key of SUMMARY_FIELDS[id] || []) if (result?.[key] == null) return null; if (id === "tasks.query" && !Array.isArray(result.tasks)) return null; return fn(result); };
+}
+
 for (const tool of TOOLS) {
   tool.descriptionAr ??= DESCRIPTION_AR[tool.id] ?? null;
   tool.category ??= tool.id.startsWith("vps.") ? "infrastructure" : tool.id.startsWith("router.") ? "routing" : tool.id === "security.scan" ? "security" : ["usage.read", "quota.read"].includes(tool.id) ? "telemetry" : "company";
@@ -374,10 +399,12 @@ for (const tool of TOOLS) {
   tool.tier = tool.approval !== "none" || tool.sideEffect === "proposal" || tool.sideEffect === "external-read" ? "C" : tool.readOnly ? "A" : "B";
   tool.summarizeAr = (result) => {
     if (result == null || result.ok === false || result.error || result.available === false || ["error", "unavailable", "failed", "denied"].includes(result.status)) return `لم تتوفر نتيجة موثوقة لأداة «${tool.ar}».`;
+    try { const specific = SPECIFIC_SUMMARIES[tool.id]?.(result); if (specific) return specific; } catch (_) { /* fall back to the generic summary */ }
     if (Array.isArray(result)) return `«${tool.ar}»: ${result.length} عناصر في النتيجة.`;
     const counts = Object.entries(result).filter(([, value]) => Array.isArray(value) || typeof value === "number").slice(0, 6)
       .map(([key, value]) => `${({ tasks: "المهام", projects: "المشاريع", approvals: "الموافقات", blocked: "المتعطلة", overdue: "المتأخرة", pendingApprovals: "الموافقات المعلقة", activeRuns: "التشغيلات الجارية", findings: "النتائج", sources: "المصادر", items: "العناصر", count: "العدد", total: "الإجمالي" })[key] || "عدد العناصر"}: ${Array.isArray(value) ? value.length : value}`);
-    return counts.length ? `«${tool.ar}»: ${counts.join("، ")}.` : `وردت نتيجة «${tool.ar}»؛ التفاصيل متاحة في سجل الأداة.`;
+    const unique = [...new Set(counts)];
+    return unique.length ? `«${tool.ar}»: ${unique.join("، ")}.` : `وردت نتيجة «${tool.ar}»؛ التفاصيل متاحة في سجل الأداة.`;
   };
   tool.intents = DISCOVERY[tool.id];
   tool.categories = [tool.category];

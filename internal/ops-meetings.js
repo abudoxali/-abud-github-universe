@@ -8,7 +8,7 @@
   const C = window.AbudCompany;
   if (!O || !C) return;
   const { h, fill, fmt, notice, panel, empty, button, select, toast, act, mutate, href } = O;
-  const ui = { list: null, current: null, error: null, poll: null, spokenSeq: new Map(), root: null, draft: "" };
+  const ui = { list: null, current: null, error: null, poll: null, spokenSeq: new Map(), root: null, draft: "", prefill: null };
   const STATUS_AR = { scheduled: "مجدول", active: "جارٍ", paused: "متوقف مؤقتًا", ending: "يستخرج النتائج", ended: "انتهى" };
   const MODE_AR = { text: "نصي", voice: "صوتي", hybrid: "نصي وصوتي" };
   const TYPE_AR = { decision: "قرار مقترح", action_item: "مهمة مقترحة", open_question: "سؤال مفتوح", disagreement: "خلاف مسجّل", follow_up: "متابعة" };
@@ -49,10 +49,12 @@
   // ------------------------------------------------------------------ list + create
   function createForm() {
     const list = agents();
-    const title = h("input", { class: "ops-input", name: "title", maxlength: 200, required: true, placeholder: "مثال: مراجعة أولويات الأسبوع", "aria-label": "عنوان الاجتماع" });
+    // A shortcut's preselection survives the list redraw that follows loading; it ends when the meeting is created or the tab is left.
+    const pre = ui.prefill;
+    const title = h("input", { class: "ops-input", name: "title", maxlength: 200, required: true, placeholder: "مثال: مراجعة أولويات الأسبوع", "aria-label": "عنوان الاجتماع", value: pre?.title || null });
     const project = select("projectId", [["", "بدون مشروع"], ...C.projectOptions(false)], "", { "aria-label": "المشروع" });
     const mode = select("mode", Object.entries(MODE_AR), "text", { "aria-label": "نوع الاجتماع" });
-    const picks = list.map((a) => h("label", { class: "mt-pick" }, h("input", { type: "checkbox", name: "participants", value: a.id, checked: a.id === "ori" ? true : null }), C.avatar(a.id, "sm"), h("span", null, a.name)));
+    const picks = list.map((a) => h("label", { class: "mt-pick" }, h("input", { type: "checkbox", name: "participants", value: a.id, checked: (pre ? pre.all || pre.participants?.includes(a.id) : a.id === "ori") ? true : null }), C.avatar(a.id, "sm"), h("span", null, a.name)));
     const chair = select("chair", list.map((a) => [a.id, a.name]), list.some((a) => a.id === "ori") ? "ori" : list[0]?.id, { "aria-label": "رئيس الاجتماع" });
     const agenda = h("textarea", { class: "ops-input", name: "agenda", rows: 3, maxlength: 3000, placeholder: "بند في كل سطر (اختياري)", "aria-label": "جدول الأعمال" });
     const all = button("كل الفريق", () => picks.forEach((p) => { p.querySelector("input").checked = true; }), { kind: "secondary" });
@@ -64,7 +66,7 @@
         const m = await mutate("POST", "/meetings", { title: title.value, projectId: project.value || null, mode: mode.value, chair: chair.value, participants, agenda: agenda.value.split("\n") });
         return mutate("POST", `/meetings/${m.id}/start`, {});
       }, "بدأ الاجتماع");
-      if (created) O.go("agents", "meetings", created.id);
+      if (created) { ui.prefill = null; O.go("agents", "meetings", created.id); }
     } },
       h("div", { class: "co-form-row" }, title, project, mode),
       h("fieldset", { class: "mt-picks" }, h("legend", null, "المشاركون"), ...picks, all),
@@ -168,12 +170,13 @@
   }
 
   window.AbudMeetings = {
+    prefill(value) { ui.prefill = value; },
     render(root) { ui.root = root; draw(); },
     reload(rest) {
       clearTimeout(ui.poll);
       const id = rest?.[0];
       if (id) { if (ui.current?.id !== id) ui.current = null; loadMeeting(id); } else { ui.current = null; loadList(); }
     },
-    stop() { clearTimeout(ui.poll); }
+    stop() { clearTimeout(ui.poll); ui.prefill = null; }
   };
 })();

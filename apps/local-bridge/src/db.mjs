@@ -852,6 +852,40 @@ export const MIGRATIONS = [
       ALTER TABLE agent_runs ADD COLUMN meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL;
       CREATE INDEX agent_runs_meeting ON agent_runs(meeting_id, created_at);
     `
+  },
+  {
+    // V6: owner-enabled routines. Schedules are deterministic (company timezone); a routine is off until the owner turns
+    // it on, and every due time ends as exactly one routine_runs row: executed, failed, or missed (the bridge was down).
+    version: 16,
+    name: "v6-routines",
+    sql: `
+      CREATE TABLE routines (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('daily-summary','deadline-review','approvals-review','ai-usage-summary','weekly-meeting','security-reminder','knowledge-review')),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        schedule TEXT NOT NULL CHECK (CASE WHEN json_valid(schedule) THEN json_type(schedule) = 'object' ELSE 0 END),
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0,1)),
+        enabled_at TEXT,
+        last_due_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX routines_kind ON routines(kind);
+
+      CREATE TABLE routine_runs (
+        id TEXT PRIMARY KEY,
+        routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+        due_at TEXT NOT NULL,
+        ran_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('executed','failed','missed')),
+        trigger TEXT NOT NULL DEFAULT 'schedule' CHECK (trigger IN ('schedule','manual')),
+        summary TEXT NOT NULL,
+        details TEXT NOT NULL DEFAULT '{}' CHECK (CASE WHEN json_valid(details) THEN json_type(details) = 'object' ELSE 0 END),
+        meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL
+      );
+      CREATE UNIQUE INDEX routine_runs_due ON routine_runs(routine_id, due_at) WHERE trigger = 'schedule';
+      CREATE INDEX routine_runs_routine ON routine_runs(routine_id, ran_at DESC);
+    `
   }
 ];
 
@@ -912,7 +946,7 @@ export function openDatabase(path) {
   return wrap(db, path);
 }
 
-const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets", "conversations", "knowledge_documents", "tool_executions", "artifacts", "workflows", "learning_proposals", "agent_skills", "meetings", "meeting_participants", "meeting_turns", "meeting_outcomes"];
+const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets", "conversations", "knowledge_documents", "tool_executions", "artifacts", "workflows", "learning_proposals", "agent_skills", "meetings", "meeting_participants", "meeting_turns", "meeting_outcomes", "routines", "routine_runs"];
 const backupHealth = new Map();
 
 function wrap(db, path) {

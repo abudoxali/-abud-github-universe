@@ -24,6 +24,8 @@ for (const [name, status] of [["atlas-web", "Active — sprint 4"], ["nova-api",
   git(dir, "remote", "add", "origin", `https://github.com/example/${name}.git`);
 }
 await writeFile(join(work, "worlds.json"), JSON.stringify({ githubOwner: "example", worlds: [] }));
+// Scopes live in a config file (not an environment variable) so the owner-managed folder flow can be exercised.
+await writeFile(join(work, "workspace.json"), JSON.stringify({ roots: [{ path: workspace, label: "عمل تجريبي" }] }));
 // Synthetic model replies that cite the evidence ids they were given, so the Operations Room shows a realistic synthesis.
 const FENCE = "```";
 // A meeting chair's closing turn gets a structured outcome block, so the Meeting Center's confirm/reject flow is testable.
@@ -33,9 +35,13 @@ ${JSON.stringify({ summary: "راجع الفريق أولويات الأسبوع
 ${"```"}`;
 const stub = await startStubRouter({ chat: (model, body) => body?.messages?.at(-1)?.content?.includes("انتهى اجتماع") ? { status: 200, headers: { "x-omniroute-provider": "nvidia", "x-omniroute-model": model.split("/").slice(1).join("/") }, body: { model, usage: { prompt_tokens: 900, completion_tokens: 220 }, choices: [{ message: { role: "assistant", content: MEETING_SUMMARY } }] } } : ({ status: 200, headers: { "x-omniroute-provider": "nvidia", "x-omniroute-model": model.split("/").slice(1).join("/") },
   body: { model, usage: { prompt_tokens: 820, completion_tokens: 160 }, choices: [{ message: { role: "assistant", content: `## الخلاصة (رد تجريبي من خادم اختبار)\nالمشروع نشط ولا توجد عوائق حرجة مثبتة [E1]. حالة Git مقروءة [E2]، والفحص الأمني الحتمي لم يجد سرًا [E3].\n\n${FENCE}json\n{"tasks":[{"title":"مراجعة نتائج الفحص الأسبوعي","priority":"medium"}]}\n${FENCE}` } }] } }) });
+// DEV_REAL_ROUTER=1 sends the synthetic company's requests to the real local OmniRoute (still a temporary DB and synthetic
+// repositories — none of the owner's data) so a developer can verify live model behavior. Models come from DEV_ROUTER_MODELS.
+const realRouter = process.env.DEV_REAL_ROUTER === "1";
+const liveModels = (process.env.DEV_ROUTER_MODELS || "gemini/gemini-3.1-flash-lite,gemini/gemini-3-flash-preview").split(",").map((m) => m.trim()).filter(Boolean);
 const server = createServer({
-  configPath: join(work, "worlds.json"), workspaceConfigPath: join(work, "none.json"), policyPath: join(work, "policy.json"), dbPath: join(work, "company.db"), backupDir: join(work, "backups"),
-  vpsConfigPath: join(work, "no-vps.json"), env: { OMNIROUTE_BASE_URL: `http://127.0.0.1:${stub.port}`, OMNIROUTE_API_KEY: TEST_KEY, ABUD_WORKSPACE_ROOTS: workspace,
+  configPath: join(work, "worlds.json"), workspaceConfigPath: join(work, "workspace.json"), policyPath: join(work, "policy.json"), dbPath: join(work, "company.db"), backupDir: join(work, "backups"),
+  vpsConfigPath: join(work, "no-vps.json"), env: { ...(realRouter ? { OMNIROUTE_BASE_URL: process.env.OMNIROUTE_BASE_URL || "http://localhost:20128", OMNIROUTE_API_KEY: process.env.OMNIROUTE_API_KEY } : { OMNIROUTE_BASE_URL: `http://127.0.0.1:${stub.port}`, OMNIROUTE_API_KEY: TEST_KEY }),
     // Voice stays off (text-only) unless the developer opts in with VOICE_HOME or ABUD_VOICE_URL.
     ...(process.env.VOICE_HOME ? { VOICE_HOME: process.env.VOICE_HOME } : {}), ...(process.env.ABUD_VOICE_URL ? { ABUD_VOICE_URL: process.env.ABUD_VOICE_URL } : {}) },
   startupOptions: { env: {}, platform: "test" }, agentOptions: { home: work, env: {}, runImpl: async () => ({ ok: false, reason: "not-found" }) },
@@ -45,7 +51,7 @@ const server = createServer({
 await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
 // Synthetic company data so every workspace has something real to show.
 const company = server.company;
-for (const p of company.listPolicies()) company.updatePolicy(p.domain, { candidates: ["nvidia/model-a", "nvidia/model-b"], maxRetries: 1 });
+for (const p of company.listPolicies()) company.updatePolicy(p.domain, { candidates: realRouter ? liveModels : ["nvidia/model-a", "nvidia/model-b"], maxRetries: 1 });
 const sync = await fetch(`http://127.0.0.1:${port}/local-api/company/projects/sync`, { method: "POST", headers: { "Content-Type": "application/json", "X-Abud-Session": (await (await fetch(`http://127.0.0.1:${port}/local-api/session`)).json()).token }, body: "{}" }).then((r) => r.json()).catch(() => null);
 const project = company.listProjects().find((p) => p.checkouts.length) || company.listProjects()[0];
 if (project && !company.listTasks({ limit: 5 }).length) {

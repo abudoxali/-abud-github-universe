@@ -24,6 +24,7 @@
 
   let searchInput = null;
   function renderHead() {
+    if (O.state.tab === "routines") { fill(head, null); return; }
     if (!C.data("tasks")) { fill(head, O.resourceStatus(O.peek("co:tasks"), "المهام") || O.skeleton(2)); return; }
     // The search box keeps its node (and focus) across data refreshes.
     if (!searchInput) searchInput = h("input", { class: "ops-input pj-search", type: "search", placeholder: "ابحث في المهام…", "aria-label": "بحث في المهام", oninput: (e) => { ui.query = e.target.value; renderBody(); } });
@@ -56,6 +57,7 @@
   }
 
   function renderBody() {
+    if (O.state.tab === "routines") { fill(body, window.AbudRoutines ? window.AbudRoutines.render() : null); return; }
     if (!C.data("tasks")) { fill(body, null); return; }
     const tab = O.state.tab || "today";
     const tasks = filtered();
@@ -169,7 +171,7 @@
 
   O.registerView({
     id: "work", order: 30, icon: "work", ar: "العمل", subtitle: "مهام الشركة وجداولها في مخزن واحد دائم — للمالك ولفريق الوكلاء.",
-    tabs: [["today", "اليوم"], ["board", "اللوحة"], ["calendar", "التقويم"], ["upcoming", "القادمة"], ["project", "حسب المشروع"], ["agent", "حسب الوكيل"], ["done", "المنجزة"]],
+    tabs: [["today", "اليوم"], ["board", "اللوحة"], ["calendar", "التقويم"], ["upcoming", "القادمة"], ["project", "حسب المشروع"], ["agent", "حسب الوكيل"], ["done", "المنجزة"], ...(window.AbudInternalHealth?.capabilities?.routines ? [["routines", "الروتين"]] : [])],
     defaultTab: store.read("abud-os-work-tab", "today"),
     onShow(tab) { store.write("abud-os-work-tab", tab); C.co.tasks(); C.co.projects(); C.co.catalog(); if (tab === "done") O.api.co("archivedTasks", "/tasks?archived=only", { ttl: 15_000 }); renderAll(); },
     badge() { const today = todayIso(); const n = allTasks().filter((t) => isOpen(t) && t.dueDate && t.dueDate < today).length; return n ? { n, tone: "bad", title: `${n} مهمة متأخرة` } : null; }
