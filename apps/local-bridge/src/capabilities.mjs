@@ -111,7 +111,7 @@ export function createCapabilities({ company, artifacts, knowledge, telemetry, w
   }
 
   // ------------------------------------------------------------------ MIA (sharp; SVG text is shaped by Pango, so Arabic joins and orders correctly)
-  const AGENT_COLORS = Object.fromEntries(AGENTS.map((a) => [a.id, a.color]));
+  const AGENT_COLORS = Object.fromEntries(company.listAgents({ activeOnly: false }).map((a) => [a.id, a.color]));
   const RTL = `direction="rtl" text-anchor="start"`;
   const FONT = `font-family="Segoe UI, Tahoma, Arial, sans-serif"`;
   function frame(width, height, theme = "violet", accent = "#7c3aed") {
@@ -162,7 +162,7 @@ export function createCapabilities({ company, artifacts, knowledge, telemetry, w
   async function brandGraphic({ template, title, subtitle = "", agentId = null, projectId = null, format = "png" }, actor, extra) {
     const project = projectId ? company.getProject(projectId) : null;
     const spotlight = template === "agent-spotlight";
-    const subject = spotlight ? agentById(agentId || actor.id) : null;
+    const subject = spotlight ? company.agentById(agentId || actor.id) : null;
     if (spotlight && !subject) fail(422, "validation", "اختر الوكيل لبطاقة التعريف");
     const accent = subject ? AGENT_COLORS[subject.id] : template === "milestone" ? "#22c55e" : "#f59e0b";
     const W = 1200, H = 675;
@@ -233,7 +233,7 @@ export function createCapabilities({ company, artifacts, knowledge, telemetry, w
     const runs = db.all(`SELECT agent_id, status, parent_run_id, workflow_id, cost_basis, cost_usd, prompt_tokens, completion_tokens, started_at, finished_at, project_id, task_id FROM agent_runs WHERE created_at >= ? ${filter} LIMIT 20000`, ...params);
     const tools = db.all(`SELECT agent_id, status, COUNT(*) AS n FROM tool_executions WHERE started_at >= ? ${filter} GROUP BY agent_id, status`, ...params);
     const usage = db.all(`SELECT agent_id, cost_basis, source, COUNT(*) AS n, SUM(prompt_tokens) AS p, SUM(completion_tokens) AS c, SUM(cost_usd) AS usd FROM usage_events WHERE at >= ? ${filter} GROUP BY agent_id, cost_basis, source`, ...params);
-    const agents = (agentId ? [agentId] : AGENTS.map((a) => a.id)).map((id) => {
+    const agents = (agentId ? [agentId] : company.listAgents({ activeOnly: false }).map((a) => a.id)).map((id) => {
       const mine = runs.filter((r) => r.agent_id === id);
       const durations = mine.filter((r) => r.started_at && r.finished_at).map((r) => Date.parse(r.finished_at) - Date.parse(r.started_at));
       const u = usage.filter((x) => x.agent_id === id);
@@ -299,7 +299,7 @@ export function createCapabilities({ company, artifacts, knowledge, telemetry, w
       const [y, m, d] = t.dueDate.split("-").map(Number);
       return {
         uid: `${t.id}@abud-company-os.local`, start: [y, m, d], duration: { days: 1 }, title: `موعد: ${t.title}`, productId: "abud-company-os/v5",
-        description: `${TASK_AR[t.status] || t.status} · أولوية ${PRIORITY_AR[t.priority] || t.priority}${t.projectId ? ` · ${company.getProject(t.projectId).name}` : ""}${t.assignee && t.assignee !== "owner" ? ` · مسندة إلى ${agentById(t.assignee)?.name || t.assignee}` : ""}`,
+        description: `${TASK_AR[t.status] || t.status} · أولوية ${PRIORITY_AR[t.priority] || t.priority}${t.projectId ? ` · ${company.getProject(t.projectId).name}` : ""}${t.assignee && t.assignee !== "owner" ? ` · مسندة إلى ${company.agentById(t.assignee)?.name || t.assignee}` : ""}`,
         categories: ["ABUD FUN", ...(t.projectId ? [company.getProject(t.projectId).name] : [])], status: "CONFIRMED", busyStatus: "FREE",
         alarms: [{ action: "display", description: `موعد مهمة: ${t.title}`, trigger: { hours: 9, before: true } }]
       };
@@ -331,7 +331,7 @@ export function createCapabilities({ company, artifacts, knowledge, telemetry, w
     w.table([{ label: "المؤشر", weight: 3 }, { label: "القيمة", weight: 1 }], [
       ["مهام مفتوحة", String(open.length)], ["متعطّلة", String(open.filter((t) => t.status === "blocked").length)], ["متأخرة عن موعدها", String(overdue.length)],
       [`أُنجزت خلال ${daysAr(rangeDays)}`, String(done.length)], ["موافقات بانتظار المالك", String(approvals.length)], ["ملفات ناتجة في الفترة", String(deliverables.length)]]);
-    const taskRows = (list) => list.map((t) => [t.title, TASK_AR[t.status] || t.status, agentById(t.assignee)?.name || (t.assignee === "owner" ? "المالك" : "—"), t.dueDate || "—"]);
+    const taskRows = (list) => list.map((t) => [t.title, TASK_AR[t.status] || t.status, company.agentById(t.assignee)?.name || (t.assignee === "owner" ? "المالك" : "—"), t.dueDate || "—"]);
     const taskCols = [{ label: "المهمة", weight: 3.2 }, { label: "الحالة", weight: 1.1 }, { label: "المسؤول", weight: 1 }, { label: "الموعد", weight: 1.2 }];
     if (overdue.length) { w.heading("مهام متأخرة"); w.table(taskCols, taskRows(overdue.slice(0, 15))); }
     w.heading("المواعيد القادمة");
@@ -342,7 +342,7 @@ export function createCapabilities({ company, artifacts, knowledge, telemetry, w
     if (approvals.length) w.table([{ label: "الطلب", weight: 4 }, { label: "منذ (ساعة)", weight: 1.2 }], approvals.slice(0, 12).map((a) => [a.title, String(Math.round((now() - Date.parse(a.createdAt)) / 36e5))]));
     else w.paragraph("لا توجد موافقات معلّقة.");
     w.heading("تشغيلات الوكلاء");
-    const runRows = AGENTS.map((a) => { const mine = runs.filter((r) => r.agent_id === a.id); const n = (s) => String(mine.find((r) => r.status === s)?.n ?? 0); return [a.name, n("succeeded"), n("failed"), n("blocked")]; });
+    const runRows = company.listAgents({ activeOnly: false }).map((a) => { const mine = runs.filter((r) => r.agent_id === a.id); const n = (s) => String(mine.find((r) => r.status === s)?.n ?? 0); return [a.name, n("succeeded"), n("failed"), n("blocked")]; });
     w.table([{ label: "الوكيل", weight: 1.5 }, { label: "نجح", weight: 1 }, { label: "فشل", weight: 1 }, { label: "متوقف", weight: 1 }], runRows);
     if (deliverables.length) { w.heading("الملفات الناتجة"); w.table([{ label: "الملف", weight: 4 }, { label: "الحالة", weight: 1.2 }], deliverables.map((a) => [a.title, a.state === "approved" ? "معتمد" : "مسودة"])); }
     const bytes = await w.finish({ title: `تقرير تنفيذ — ${scope}`, footer: "ABUD FUN Company OS" });

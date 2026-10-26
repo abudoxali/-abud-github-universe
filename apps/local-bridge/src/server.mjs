@@ -277,14 +277,14 @@ export function createServer({
     const today = new Date(Date.now() - 24 * 3_600_000).toISOString();
     const router = await overview(false);
     const usageByAgent = new Map(company.usageByAgent(today).map((u) => [u.agentId, u]));
-    return Promise.all(AGENTS.map(async (def) => {
+    return Promise.all(company.listAgents().map(async (def) => {
       const config = company.agentConfig(def.id);
       const runs = company.listRuns({ agentId: def.id, limit: 5 });
       const active = company.db.get("SELECT COUNT(*) AS n FROM agent_runs WHERE agent_id = ? AND status IN ('queued','running') AND parent_run_id IS NULL", def.id).n;
       const route = await runtime.routePreview({ agentId: def.id });
       const availability = !config.enabled ? "disabled" : router?.connection?.state !== "connected" ? "router-offline" : !route.chosen ? "no-eligible-model" : active ? "working" : "available";
       return {
-        ...def, config, availability, activeRuns: active, lastRun: runs[0] ?? null,
+        ...def, profile: company.registry.get(def.id), config, availability, activeRuns: active, lastRun: runs[0] ?? null,
         openTasks: company.db.get("SELECT COUNT(*) AS n FROM tasks WHERE assignee = ? AND archived_at IS NULL AND status NOT IN ('done','cancelled')", def.id).n,
         currentTask: company.db.get("SELECT id, title FROM tasks WHERE assignee = ? AND archived_at IS NULL AND status = 'in_progress' ORDER BY updated_at DESC LIMIT 1", def.id) ?? null,
         route: { chosen: route.chosen, domain: route.domain }, usage24h: usageByAgent.get(def.id) ?? { runs: 0, tokens: 0, costUsd: 0, unknownCostEvents: 0 }
@@ -408,15 +408,22 @@ export function createServer({
   route("POST", "/tasks/([^/]+)/restore", ({ params }) => company.setTaskArchived(params[0], false, owner));
   route("GET", "/tasks/([^/]+)", ({ params }) => ({ ...company.getTask(params[0]), runs: company.listRuns({ taskId: params[0], limit: 10 }) }));
   route("PATCH", "/tasks/([^/]+)", ({ params, body }) => company.updateTask(params[0], body, owner));
+  route("GET", "/agent-templates", () => ({ templates: company.registry.listTemplates() }));
+  route("GET", "/agent-templates/([^/]+)", ({ params }) => company.registry.getTemplate(params[0]));
+  route("POST", "/agents", ({ body }) => company.registry.createFromTemplate(body));
+  route("PATCH", "/agents/([^/]+)/profile", ({ params, body }) => company.registry.update(params[0], body));
+  route("POST", "/agents/([^/]+)/deactivate", ({ params }) => company.registry.deactivate(params[0]));
+  route("POST", "/agents/([^/]+)/activate", ({ params }) => company.registry.activate(params[0]));
+  route("DELETE", "/agents/([^/]+)", ({ params }) => company.registry.remove(params[0]));
   route("GET", "/agents", async () => ({ agents: await agentsView() }));
-  route("GET", "/agents/([a-z]+)", async ({ params }) => {
-    const def = agentById(params[0]);
+  route("GET", "/agents/([a-z][a-z0-9_-]{1,23})", async ({ params }) => {
+    const def = company.agentById(params[0]);
     if (!def) throw new HttpError(404, "not-found", "الوكيل غير موجود");
-    const view = (await agentsView()).find((a) => a.id === def.id);
+    const view = (await agentsView()).find((a) => a.id === def.id) ?? { ...def, config: company.agentConfig(def.id), profile: company.registry.get(def.id) };
     return { ...view, runs: company.listRuns({ agentId: def.id, limit: 30 }), tasks: company.listTasks({ assignee: def.id, limit: 100 }), routePreview: await runtime.routePreview({ agentId: def.id }),
       memory: company.listMemory({ scope: "agent", scopeRef: def.id }), activity: company.activity({ actorId: def.id, limit: 30 }), policy: company.getPolicy(view.config.policyDomain) };
   });
-  route("PATCH", "/agents/([a-z]+)", ({ params, body }) => company.updateAgent(params[0], body));
+  route("PATCH", "/agents/([a-z][a-z0-9_-]{1,23})", ({ params, body }) => company.updateAgent(params[0], body));
   route("GET", "/route-preview", ({ query }) => runtime.routePreview({ agentId: query.get("agentId"), priority: query.get("priority") || "medium" }));
   route("GET", "/runs", ({ query }) => ({ runs: company.listRuns({ agentId: query.get("agentId"), workflowId: query.get("workflowId"), status: query.get("status"), limit: query.get("limit") }) }));
   route("POST", "/runs", ({ body }) => runtime.enqueue(body, owner));

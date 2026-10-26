@@ -1,6 +1,7 @@
+import { createRegistry } from "./registry.mjs";
 /* Company domain service over the local store. Every mutation validates its input, runs in a transaction and writes an
  * activity event. Errors are HttpError instances with a stable code and an Arabic message for the UI. */
-import { AGENTS, AGENT_IDS, DEFAULT_POLICIES, DOMAINS, MODES, TOOLS, CLASS_INFO, VPS_AGENT_TOOLS, V5_AGENT_TOOLS, agentById, modelClass } from "./catalog.mjs";
+import { AGENTS, AGENT_IDS, DEFAULT_POLICIES, DOMAINS, MODES, TOOLS, CLASS_INFO, VPS_AGENT_TOOLS, V5_AGENT_TOOLS, templateById, modelClass } from "./catalog.mjs";
 import { newId, nowIso, parseJson } from "./db.mjs";
 import { redact, text } from "./util.mjs";
 
@@ -18,7 +19,6 @@ const SECRET_LIKE = /(?:-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9_
 const PRIORITIES = ["high", "medium", "low"];
 const TASK_STATUSES = ["backlog", "todo", "in_progress", "blocked", "review", "done", "cancelled"];
 const PROJECT_STATUSES = ["active", "planned", "paused", "blocked", "shipped", "archived"];
-const ASSIGNEES = ["owner", "none", ...AGENT_IDS];
 const MODEL_REF = /^[A-Za-z0-9._:/@+-]{1,120}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -84,6 +84,25 @@ export function periodStart(period, now = new Date(), timeZone = DEFAULT_TZ) {
 // ---------------------------------------------------------------- service
 export function createCompany({ db, now = () => new Date() }) {
   const at = () => now().toISOString();
+
+  const registry = createRegistry({ db, company: { log: (...args) => log(...args) } });
+  const agentById = (id) => {
+    const row = db.get("SELECT * FROM agents WHERE id = ?", id);
+    if (!row) return null;
+    const base = AGENTS.find(a => a.id === id) ?? AGENTS.find(a => a.id === templateById(row.template_id)?.basedOn);
+    return { ...base, id, name: row.name, titleAr: row.title_ar, roleAr: row.role_ar, summaryAr: row.summary_ar, specializationsAr: parseJson(row.specializations, []), ...parseJson(row.identity_profile, {}), tools: base?.tools ?? [], active: row.active === 1 };
+  };
+  const listAgents = ({ activeOnly = true } = {}) => db.all('SELECT id FROM agents ' + (activeOnly ? 'WHERE active = 1' : '') + ' ORDER BY builtin DESC, id').map(r => agentById(r.id));
+
+  // V6: Dynamic agent ID validation (queries active agents from registry instead of hard-coded list)
+  const getActiveAgentIds = () => db.all("SELECT id FROM agents WHERE active = 1").map((r) => r.id);
+  const isActiveAgent = (id) => db.get("SELECT 1 FROM agents WHERE id = ? AND active = 1", id) != null;
+  const validateAssignee = (value, field, fallback) => {
+    if (value == null) return fallback;
+    if (value === "owner" || value === "none") return value;
+    if (!isActiveAgent(value)) throw bad("validation", `قيمة «${field}» غير مسموحة (الوكيل غير موجود أو معطل)`, { field });
+    return value;
+  };
 
   // ---------------- activity + notifications
   function log({ actorType = "owner", actorId = "owner", action, targetType = null, targetId = null, outcome = "success", summary, metadata = null, evidence = null }) {
@@ -182,6 +201,7 @@ export function createCompany({ db, now = () => new Date() }) {
 
   // ---------------- seed
   function seed() {
+    registry.seedBuiltinProfiles();
     db.tx(() => {
       for (const agent of AGENTS) {
         db.run("INSERT OR IGNORE INTO agents (id, enabled, mode, instructions, policy_domain, model_override, tools, updated_at) VALUES (?,?,?,?,?,?,?,?)",
@@ -277,7 +297,7 @@ export function createCompany({ db, now = () => new Date() }) {
     db.tx(() => {
       db.run("UPDATE projects SET name=?, status=?, priority=?, summary=?, notes=?, blocker=?, focus=?, updated_at=? WHERE id=?", next.name, next.status, next.priority, next.summary, next.notes, next.blocker, next.focus, at(), current.id);
       if ("agents" in patch) {
-        if (!Array.isArray(patch.agents) || !patch.agents.every((a) => AGENT_IDS.includes(a))) throw bad("validation", "قائمة الوكلاء غير صالحة");
+        if (!Array.isArray(patch.agents) || !patch.agents.every((a) => isActiveAgent(a))) throw bad("validation", "قائمة الوكلاء غير صالحة (وكيل غير موجود أو معطل)");
         db.run("DELETE FROM agent_projects WHERE project_id = ?", current.id);
         for (const agentId of new Set(patch.agents)) db.run("INSERT INTO agent_projects (agent_id, project_id) VALUES (?,?)", agentId, current.id);
         changed.push("agents");
@@ -439,7 +459,7 @@ export function createCompany({ db, now = () => new Date() }) {
     else if (!includeArchived) where.push("archived_at IS NULL");
     if (status) { where.push("status = ?"); params.push(oneOf(status, TASK_STATUSES, "status")); }
     if (projectId) { where.push("project_id = ?"); params.push(String(projectId)); }
-    if (assignee) { where.push("assignee = ?"); params.push(oneOf(assignee, ASSIGNEES, "assignee")); }
+    if (assignee) { where.push("assignee = ?"); if (!["owner", "none"].includes(assignee) && !agentById(assignee)) throw bad("validation", "Invalid agent"); params.push(assignee); }
     if (!includeClosed) where.push("status NOT IN ('done','cancelled')");
     return db.all(`SELECT * FROM tasks ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY CASE status WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'todo' THEN 2 WHEN 'review' THEN 3 WHEN 'backlog' THEN 4 ELSE 5 END,
       CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, COALESCE(due_date, '9999-12-31'), created_at LIMIT ?`, ...params, Math.min(Number(limit) || 500, 2000)).map(taskRow);
@@ -467,7 +487,7 @@ export function createCompany({ db, now = () => new Date() }) {
     if (status === "blocked" && !blocker) throw bad("validation", "المهمة المتعطّلة تحتاج وصفًا للعائق");
     const record = {
       title, description: str(input.description, { field: "الوصف", max: 4000, multiline: true }), projectId: ensureProject(input.projectId),
-      assignee: oneOf(input.assignee, ASSIGNEES, "assignee", "owner"), priority: oneOf(input.priority, PRIORITIES, "priority", "medium"), status,
+      assignee: validateAssignee(input.assignee, "assignee", "owner"), priority: oneOf(input.priority, PRIORITIES, "priority", "medium"), status,
       dueDate: date(input.dueDate, "dueDate"), startDate: date(input.startDate, "startDate"), estimateHours: numberIn(input.estimateHours, "estimateHours", 0, 1000),
       tags: tags(input.tags), dependsOn: Array.isArray(input.dependsOn) ? input.dependsOn.filter((d) => typeof d === "string" && db.get("SELECT id FROM tasks WHERE id = ?", d)).slice(0, 10) : []
     };
@@ -490,7 +510,7 @@ export function createCompany({ db, now = () => new Date() }) {
     if ("title" in patch) next.title = str(patch.title, { field: "العنوان", max: 160, required: true });
     if ("description" in patch) next.description = str(patch.description, { field: "الوصف", max: 4000, multiline: true });
     if ("projectId" in patch) next.projectId = ensureProject(patch.projectId);
-    if ("assignee" in patch) next.assignee = oneOf(patch.assignee, ASSIGNEES, "assignee");
+    if ("assignee" in patch) next.assignee = validateAssignee(patch.assignee, "assignee");
     if ("priority" in patch) next.priority = oneOf(patch.priority, PRIORITIES, "priority");
     if ("status" in patch) next.status = oneOf(patch.status, TASK_STATUSES, "status");
     if ("dueDate" in patch) next.dueDate = date(patch.dueDate, "dueDate");
@@ -534,7 +554,7 @@ export function createCompany({ db, now = () => new Date() }) {
     if (!def) throw notFound("الوكيل");
     const row = db.get("SELECT * FROM agents WHERE id = ?", id);
     return {
-      id: def.id, enabled: row.enabled === 1, mode: row.mode, instructions: row.instructions, policyDomain: row.policy_domain,
+      id: def.id, enabled: row.enabled === 1 && row.active === 1, mode: row.mode, instructions: row.instructions, policyDomain: row.policy_domain,
       modelOverride: row.model_override, tools: parseJson(row.tools, def.tools), updatedAt: row.updated_at,
       projects: db.all("SELECT project_id FROM agent_projects WHERE agent_id = ?", id).map((r) => r.project_id)
     };
@@ -643,7 +663,7 @@ export function createCompany({ db, now = () => new Date() }) {
   function upsertBudget(input) {
     const scope = oneOf(input.scope, ["company", "agent", "project", "provider"], "scope");
     let scopeRef = "";
-    if (scope === "agent") scopeRef = oneOf(input.scopeRef, AGENT_IDS, "scopeRef");
+    if (scope === "agent") { if (!isActiveAgent(input.scopeRef)) throw bad("validation", "Invalid agent"); scopeRef = input.scopeRef; }
     else if (scope === "project") scopeRef = ensureProject(input.scopeRef) ?? (() => { throw bad("validation", "المشروع مطلوب"); })();
     else if (scope === "provider") scopeRef = str(input.scopeRef, { field: "provider", max: 40, required: true });
     const period = oneOf(input.period, ["daily", "weekly", "monthly"], "period");
@@ -825,7 +845,7 @@ export function createCompany({ db, now = () => new Date() }) {
   }
   function upsertMemory(input, actor = { type: "owner", id: "owner" }) {
     const scope = oneOf(input.scope, ["company", "project", "agent"], "scope");
-    const scopeRef = scope === "company" ? "" : scope === "agent" ? oneOf(input.scopeRef, AGENT_IDS, "scopeRef") : ensureProject(input.scopeRef);
+    const scopeRef = scope === "company" ? "" : scope === "agent" ? (isActiveAgent(input.scopeRef) ? input.scopeRef : (() => { throw bad("validation", "Invalid agent"); })()) : ensureProject(input.scopeRef);
     const title = str(input.title, { field: "العنوان", max: 120, required: true });
     const body = str(input.body, { field: "المحتوى", max: 2000, required: true, multiline: true });
     const existing = input.id ? db.get("SELECT * FROM memory_notes WHERE id = ?", String(input.id)) : null;
@@ -863,7 +883,7 @@ export function createCompany({ db, now = () => new Date() }) {
     const where = ["memory_fts MATCH ?", "m.state = 'active'", "(m.retention_until IS NULL OR m.retention_until > ?)"];
     const params = [match, at()];
     if (agentId) {
-      if (!AGENT_IDS.includes(agentId)) throw bad("validation", "وكيل غير معروف");
+      if (!isActiveAgent(agentId)) throw bad("validation", "وكيل غير معروف أو معطل");
       where.push("m.approved = 1", "m.sensitivity = 'internal'", "((m.scope = 'company' AND m.scope_ref = '') OR (m.scope = 'agent' AND m.scope_ref = ?) OR (m.scope = 'project' AND m.scope_ref = ?))");
       params.push(agentId, projectId ?? "");
     } else {
@@ -958,14 +978,14 @@ export function createCompany({ db, now = () => new Date() }) {
   function exportAll() {
     return {
       format: "abud-company-export", version: 1, exportedAt: at(), schemaVersion: db.schemaVersion(), settings: settings(),
-      projects: listProjects(), tasks: listTasks({ limit: 2000, includeArchived: true }), agents: AGENT_IDS.map(agentConfig), policies: listPolicies(), budgets: listBudgets(),
+      projects: listProjects(), tasks: listTasks({ limit: 2000, includeArchived: true }), agents: listAgents({ activeOnly: false }).map(a => agentConfig(a.id)), policies: listPolicies(), budgets: listBudgets(),
       approvals: listApprovals(), memory: listMemory(), runs: listRuns({ limit: 300 }).map((r) => ({ ...r, output: r.output ? r.output.slice(0, 4000) : null })),
       activity: activity({ limit: 300 }),
       githubIdentities: db.all("SELECT slug, canonical, repo_id AS repoId, state, resolved_at AS resolvedAt FROM github_identities ORDER BY slug")
     };
   }
 
-  return {
+  return { registry, agentById, listAgents,
     db, log, activity, raise, resolveStale, notifications, acknowledge, settings, updateSettings, seed,
     listProjects, getProject, createProject, updateProject, addMilestone, updateMilestone, syncProjects, linkCheckout,
     canonicalGithub, identitiesToResolve, recordGithubIdentity,

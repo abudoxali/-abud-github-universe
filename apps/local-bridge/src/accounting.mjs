@@ -10,6 +10,7 @@ const RANGES = { "24h": 1, "7d": 7, "30d": 30, "90d": 90 };
 export function createAccounting({ company, now = Date.now }) {
   const { db } = company;
   function report({ range = "30d", agentId = null, projectId = null } = {}) {
+    const AGENTS = company.listAgents({ activeOnly: false });
     if (!RANGES[range]) throw new HttpError(422, "validation", "الفترة يجب أن تكون 24h أو 7d أو 30d أو 90d");
     if (agentId && !AGENTS.some((a) => a.id === agentId)) throw new HttpError(404, "not-found", "الوكيل غير موجود");
     if (projectId) company.getProject(projectId);

@@ -180,9 +180,9 @@ export function createOrchestrator({ company, internals, telemetry, now = Date.n
     if (keys.size !== list.length) throw new HttpError(500, "plan-invalid", "مفاتيح خطوات مكررة");
     if (list.filter((s) => s.kind === "synthesis").length > limits.maxInferences) throw new HttpError(422, "plan-invalid", "الخطة تتجاوز حد الاستدلال");
     for (const step of list) {
-      if (!agentById(step.agent)) throw new HttpError(500, "plan-invalid", `وكيل غير معروف: ${step.agent}`);
+      if (!company.agentById(step.agent)) throw new HttpError(500, "plan-invalid", `وكيل غير معروف: ${step.agent}`);
       if (step.depth > limits.maxDepth) throw new HttpError(422, "plan-depth", "عمق التفويض يتجاوز الحد");
-      if (step.kind === "tool" && (!toolById(step.tool) || !agentById(step.agent).tools.includes(step.tool))) throw new HttpError(500, "plan-invalid", `الأداة ${step.tool} ليست ضمن أدوات ${step.agent}`);
+      if (step.kind === "tool" && (!toolById(step.tool) || !company.agentById(step.agent).tools.includes(step.tool))) throw new HttpError(500, "plan-invalid", `الأداة ${step.tool} ليست ضمن أدوات ${step.agent}`);
       for (const dep of step.dependsOn) if (!keys.has(dep)) throw new HttpError(500, "plan-invalid", `اعتماد مفقود: ${dep}`);
     }
     const order = new Map(list.map((s, i) => [s.key, i]));
@@ -231,7 +231,7 @@ export function createOrchestrator({ company, internals, telemetry, now = Date.n
     if (def.approval === "always" && approval?.status !== "approved") {
       if (approval?.status === "rejected") { setStep(step.id, { status: "skipped", finished_at: iso(), error_code: "rejected-by-owner", error_message: "رفض المالك هذه الخطوة" }); event(wf.id, "step-skipped", { stepId: step.id, agentId: step.agentId, reason: "rejected-by-owner" }); return; }
       if (!approval) {
-        const created = company.createApproval({ kind: "workflow.step", requestedBy: `agent:${step.agentId}`, title: `${agentById(step.agentId).name}: ${step.title}`, summary: `${def.descriptionAr || def.description} — ضمن «${wf.title}».`,
+        const created = company.createApproval({ kind: "workflow.step", requestedBy: `agent:${step.agentId}`, title: `${company.agentById(step.agentId).name}: ${step.title}`, summary: `${def.descriptionAr || def.description} — ضمن «${wf.title}».`,
           payload: { workflowId: wf.id, stepId: step.id, agentId: step.agentId, toolId: step.toolId, input: step.input }, risk: def.network && def.network !== "none" ? "data-egress" : "medium" });
         setStep(step.id, { status: "waiting-approval", approval_id: created.id });
         event(wf.id, "approval-requested", { stepId: step.id, agentId: step.agentId, approvalId: created.id, tool: step.toolId });
@@ -268,9 +268,9 @@ export function createOrchestrator({ company, internals, telemetry, now = Date.n
     const runId = childRun(wf, step, "synthesis");
     setStep(step.id, { status: "running", run_id: runId, started_at: iso(), attempts: step.attempts + 1 });
     event(wf.id, "step-started", { stepId: step.id, agentId: "ori", tool: "synthesis" });
-    const def = agentById("ori");
+    const def = company.agentById("ori");
     const config = company.agentConfig("ori");
-    const digests = Object.fromEntries(all.filter((s) => s.status === "succeeded" && s.kind === "tool").map((s, i) => [`E${i + 1}`, { step: s.title, agent: agentById(s.agentId).name, tool: s.toolId, summary: s.output?.summary, data: s.output?.digest }]));
+    const digests = Object.fromEntries(all.filter((s) => s.status === "succeeded" && s.kind === "tool").map((s, i) => [`E${i + 1}`, { step: s.title, agent: company.agentById(s.agentId).name, tool: s.toolId, summary: s.output?.summary, data: s.output?.digest }]));
     const { json, warnings } = internals.assembleContext({ objective: wf.title, focus: step.expected, evidence: digests, notVerified: failed, memory: internals.memoryContext("ori", wf.projectId, wf.title) }, { compact: true });
     const messages = [
       { role: "system", content: `${internals.systemPrompt(def, config, "project_assessment")}\nأنت تنسّق فريقًا: كل دليل مرفق نتيجة أداة حتمية نفّذها متخصص. اعتمد عليها فقط. اذكر معرّف الدليل بين قوسين مربعين مثل [E1] بعد كل ادعاء. اذكر صراحة ما لم يُتحقق منه.` },
@@ -333,9 +333,9 @@ export function createOrchestrator({ company, internals, telemetry, now = Date.n
     const lines = [`# ${wf.title}`, ""];
     if (synth?.status === "succeeded") lines.push(synth.output.text, "");
     else lines.push(`> لم تُكتب خلاصة ORI (${synth ? STEP_AR[synth.status] : "—"}${synth?.errorMessage ? `: ${synth.errorMessage}` : ""}). النتائج أدناه حتمية من أدوات المتخصصين.`, "");
-    lines.push("## الأدلة", ...evidence.map((e) => `- [${e.id}] ${agentById(e.agentId).name} · ${e.tool}: ${e.summary}${e.artifactIds.length ? ` (ملفات: ${e.artifactIds.join("، ")})` : ""}`));
+    lines.push("## الأدلة", ...evidence.map((e) => `- [${e.id}] ${company.agentById(e.agentId).name} · ${e.tool}: ${e.summary}${e.artifactIds.length ? ` (ملفات: ${e.artifactIds.join("، ")})` : ""}`));
     const gaps = all.filter((s) => s.kind === "tool" && s.status !== "succeeded");
-    if (gaps.length) lines.push("", "## ما لم يُتحقق منه", ...gaps.map((s) => `- ${agentById(s.agentId).name} · ${s.title}: ${STEP_AR[s.status]}${s.errorMessage ? ` — ${s.errorMessage}` : ""}`));
+    if (gaps.length) lines.push("", "## ما لم يُتحقق منه", ...gaps.map((s) => `- ${company.agentById(s.agentId).name} · ${s.title}: ${STEP_AR[s.status]}${s.errorMessage ? ` — ${s.errorMessage}` : ""}`));
     const fu = all.find((s) => s.kind === "followups");
     if (fu?.status === "succeeded") lines.push("", `## المتابعة`, `- ${fu.output.summary}`);
     return { markdown: lines.join("\n").slice(0, 30000), evidence };

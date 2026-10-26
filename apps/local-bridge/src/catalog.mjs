@@ -39,6 +39,7 @@ export const AGENTS = [
     summaryAr: "ينسّق مهام الشركة، يوزّع العمل على المتخصصين، يرتّب الأولويات، ويكتب الملخصات التنفيذية.",
     responsibilitiesAr: ["تنسيق مهام الشركة", "اختيار المتخصص المناسب لكل طلب", "ترتيب الأولويات", "متابعة تقدّم المشاريع", "تصعيد العمل المتعطّل", "ملخصات تنفيذية للمالك"],
     boundariesAr: ["سلطة التنسيق لا تعني صلاحيات مميّزة", "لا ينفّذ إجراءات حساسة دون موافقة المالك", "لا يغيّر إعدادات المزوّدين أو الراوتر"],
+    specializationsAr: ["تحليل المحفظة", "ترتيب الأولويات", "تنسيق سير العمل", "الكفاءة التشغيلية", "تنسيق الإصدار", "إدارة عبء فريق العمل", "إدارة الاجتماعات"],
     defaultMode: "standard", domain: "general",
     tools: ["project.read", "tasks.query", "tasks.create", "tasks.update", "activity.read", "quota.read"],
     capabilities: ["chat", "project_assessment"]
@@ -49,6 +50,7 @@ export const AGENTS = [
     summaryAr: "تدير العمل الإبداعي: مفاهيم الواجهات وتجربة الاستخدام، ملخصات التصميم، الهوية، ونصوص المواقع والمحتوى.",
     responsibilitiesAr: ["مفاهيم UI/UX", "ملخصات التصميم البصري", "الهوية والعلامة", "أفكار المحتوى ونصوص المواقع", "مراجعة إبداعية وملاحظات تصميم"],
     boundariesAr: ["لا توليد صور مدفوع دون ميزانية وموافقة", "لا نشر لأي محتوى خارج الشركة"],
+    specializationsAr: ["تناسق العلامة التجارية", "مراجعة تصميم المنتج", "تحليل نظام التصميم", "تصميم المواد التسويقية", "إدارة الأصول الإبداعية", "مراجعة جودة العروض التقديمية", "تخطيط المحتوى"],
     defaultMode: "creative", domain: "creative",
     tools: ["project.read", "project.docs", "tasks.query", "tasks.create"],
     capabilities: ["chat", "creative_brief"]
@@ -59,6 +61,7 @@ export const AGENTS = [
     summaryAr: "يراقب OmniRoute والحصص والتكلفة، يقارن المزوّدين، ويقدّم توصيات توجيه قابلة للتفسير مع فصل القياس عن التقدير.",
     responsibilitiesAr: ["مراقبة OmniRoute", "تقييم الحصص ونوافذها", "تحليل استخدام النماذج", "مقارنة التكلفة", "توصيات التوجيه والميزانية", "توقع الاستهلاك", "تحليل عبء الوكلاء"],
     boundariesAr: ["يوصي ولا يغيّر إعدادات المزوّدين بصمت", "لا ينفق خارج الحدود المعتمدة", "يفصل القياس الفعلي عن التقدير دائمًا"],
+    specializationsAr: ["موثوقية المزود", "تحليل اختيار النموذج", "تحسين الميزانية", "تشخيص موارد VPS", "القياس عن بعد", "مراجعة البنية المعمارية", "القياس المرجعي"],
     defaultMode: "analytical", domain: "analysis",
     tools: ["quota.read", "usage.read", "project.read", "project.docs", "git.status", "tasks.query", "activity.read"],
     capabilities: ["chat", "resource_report"]
@@ -69,6 +72,7 @@ export const AGENTS = [
     summaryAr: "تساعد في المهام الإدارية والتذكير وتنظيم العمل وكتابة قوائم المتابعة ومحاضر الاجتماعات ومسودات المراسلات الداخلية.",
     responsibilitiesAr: ["دعم المهام الإدارية", "تنظيم المهام والتذكير", "توثيق التسليم", "محاضر الاجتماعات", "قوائم تحقق تشغيلية", "مسودات مراسلات داخلية"],
     boundariesAr: ["لا ترسل رسائل خارج الشركة", "تنشئ مهامًا داخلية فقط ضمن صلاحياتها"],
+    specializationsAr: ["إعداد الاجتماعات", "محاضر الاجتماعات", "متابعة الاجتماعات", "حفظ السجلات", "مراقبة المواعيد النهائية", "تتبع الموافقات", "سير العمل الإداري"],
     defaultMode: "standard", domain: "admin",
     tools: ["tasks.query", "tasks.create", "tasks.update", "project.read", "project.docs", "activity.read"],
     capabilities: ["chat", "task_breakdown"]
@@ -79,6 +83,7 @@ export const AGENTS = [
     summaryAr: "يبحث في التقنيات والأطر والأدوات ويقارن البدائل ويكتشف الفرص، مع فصل الدليل المؤكد عن التفسير والتخمين.",
     responsibilitiesAr: ["بحث تقني", "تقييم الأطر والأدوات", "اكتشاف المستودعات", "أبحاث المنتج والسوق", "توصيات التكامل"],
     boundariesAr: ["لا طلبات شبكة غير مقيدة", "يذكر المصدر أو يصرّح بغيابه"],
+    specializationsAr: ["التوثيق الفني", "البحث المقارن", "صيانة قاعدة المعرفة", "حداثة المصدر", "إعادة بناء تاريخ المشروع", "إدارة الاقتباسات", "اكتشاف فجوات المعرفة"],
     defaultMode: "research", domain: "research",
     tools: ["project.read", "project.docs", "git.status"],
     capabilities: ["chat", "research_brief"]
@@ -89,6 +94,7 @@ export const AGENTS = [
     summaryAr: "يراجع المخاطر الأمنية وتعرّض البيانات الحساسة والصلاحيات وحدود التكامل، ويدعم تطبيق سياسات الموافقة.",
     responsibilitiesAr: ["فحوص أمنية", "كشف تعرّض البيانات الحساسة", "تقييم الصلاحيات", "تحليل المخاطر", "مراجعة النشر الآمن", "الإبلاغ عن نشاط مريب"],
     boundariesAr: ["لا صلاحيات مدير مطلقة", "الأمن الفعلي يُفرض في الخادم وليس بتعليمات النموذج", "قيوده لا تُلغى بأي وضع تشغيل"],
+    specializationsAr: ["مراجعة سلسلة التوريد", "مخاطر الإصدار", "أمن البنية التحتية", "ثغرات الاعتماديات", "مراجعة سياسة الموافقات", "مراجعة مسار التدقيق", "حوكمة التعامل مع البيانات"],
     defaultMode: "strict", domain: "security",
     tools: ["git.status", "project.read", "project.docs", "activity.read", "security.scan"],
     capabilities: ["chat", "security_review"]
@@ -97,6 +103,54 @@ export const AGENTS = [
 
 export const AGENT_IDS = AGENTS.map((agent) => agent.id);
 export const agentById = (id) => AGENTS.find((agent) => agent.id === id) || null;
+
+/** Agent templates: built-in agent archetypes for creating custom agents. Each template defines allowed tools,
+ * capabilities, default domain/mode, and default memory scope derived from the matching built-in agent. */
+export const AGENT_TEMPLATES = [
+  {
+    id: "coordinator", nameAr: "منسق", basedOn: "ori",
+    descriptionAr: "تنسيق المشاريع وتوزيع المهام وإدارة الأولويات والملخصات التنفيذية",
+    allowedTools: agentById("ori").tools,
+    capabilities: agentById("ori").capabilities,
+    defaultDomain: "general", defaultMode: "standard", defaultMemoryScope: "conversation"
+  },
+  {
+    id: "designer", nameAr: "مصمم", basedOn: "mia",
+    descriptionAr: "العمل الإبداعي والتصميم البصري والهوية والمحتوى",
+    allowedTools: agentById("mia").tools,
+    capabilities: agentById("mia").capabilities,
+    defaultDomain: "creative", defaultMode: "creative", defaultMemoryScope: "conversation"
+  },
+  {
+    id: "analyst", nameAr: "محلل", basedOn: "nex",
+    descriptionAr: "التحليل التشغيلي ومراقبة الموارد ومقارنة الأداء والتوصيات",
+    allowedTools: agentById("nex").tools,
+    capabilities: agentById("nex").capabilities,
+    defaultDomain: "analysis", defaultMode: "analytical", defaultMemoryScope: "conversation"
+  },
+  {
+    id: "operations", nameAr: "عمليات", basedOn: "luna",
+    descriptionAr: "الدعم الإداري وتنظيم المهام والتوثيق والمتابعة",
+    allowedTools: agentById("luna").tools,
+    capabilities: agentById("luna").capabilities,
+    defaultDomain: "admin", defaultMode: "standard", defaultMemoryScope: "conversation"
+  },
+  {
+    id: "researcher", nameAr: "باحث", basedOn: "zen",
+    descriptionAr: "البحث والاستكشاف التقني وإدارة المعرفة والتوثيق",
+    allowedTools: agentById("zen").tools,
+    capabilities: agentById("zen").capabilities,
+    defaultDomain: "research", defaultMode: "research", defaultMemoryScope: "conversation"
+  },
+  {
+    id: "security", nameAr: "أمن", basedOn: "rex",
+    descriptionAr: "المراجعة الأمنية وتقييم المخاطر والحوكمة وفحص الثغرات",
+    allowedTools: agentById("rex").tools,
+    capabilities: agentById("rex").capabilities,
+    defaultDomain: "security", defaultMode: "strict", defaultMemoryScope: "conversation"
+  }
+];
+export const templateById = (id) => AGENT_TEMPLATES.find((t) => t.id === id) || null;
 
 /** What each capability asks the model to produce and which read-only tools are gathered first. */
 export const CAPABILITIES = {
@@ -121,9 +175,9 @@ export const TOOLS = [
   { id: "git.status", ar: "حالة Git المنقّحة", description: "Sanitized branch, head, working-tree and ahead/behind state of the project's checkouts.", readOnly: true, approval: "none", timeoutMs: 12000, ratePerMin: 20,
     input: { projectId: { type: "string", max: 120, required: true } } },
   { id: "tasks.query", ar: "استعلام المهام", description: "Open tasks filtered by project and/or assignee.", readOnly: true, approval: "none", timeoutMs: 2000, ratePerMin: 60,
-    input: { projectId: { type: "string", max: 120, required: false }, assignee: { type: "string", max: 10, required: false } } },
+    input: { projectId: { type: "string", max: 120, required: false }, assignee: { type: "string", max: 24, required: false } } },
   { id: "tasks.create", ar: "إنشاء مهمة داخلية", description: "Creates an internal company task (never external).", readOnly: false, approval: "none", timeoutMs: 2000, ratePerMin: 20,
-    input: { title: { type: "string", max: 160, required: true }, projectId: { type: "string", max: 120, required: false }, priority: { type: "enum", values: ["high", "medium", "low"], required: false }, assignee: { type: "string", max: 10, required: false } } },
+    input: { title: { type: "string", max: 160, required: true }, projectId: { type: "string", max: 120, required: false }, priority: { type: "enum", values: ["high", "medium", "low"], required: false }, assignee: { type: "string", max: 24, required: false } } },
   { id: "tasks.update", ar: "تحديث حالة مهمة", description: "Changes the status of an internal task.", readOnly: false, approval: "none", timeoutMs: 2000, ratePerMin: 20,
     input: { taskId: { type: "string", max: 60, required: true }, status: { type: "enum", values: ["todo", "in_progress", "blocked", "review", "done"], required: true } } },
   { id: "usage.read", ar: "قراءة استهلاك OmniRoute", description: "Router-observed usage analytics summary (estimates labelled).", readOnly: true, approval: "none", timeoutMs: 15000, ratePerMin: 10, input: {} },
@@ -174,7 +228,7 @@ export const TOOLS = [
   { id: "design.brandGraphic", ar: "تصميم بصري بهوية الشركة", description: "Renders a branded announcement, milestone or agent-spotlight graphic from a reviewed template and stores it as an artifact.", readOnly: false, approval: "none", timeoutMs: 20000, ratePerMin: 10, maxConcurrent: 2,
     category: "creative", version: "5.0", sideEffect: "artifact", adapter: "sharp", output: "PNG/WebP artifact",
     input: { template: { type: "enum", values: ["announcement", "milestone", "agent-spotlight"], required: true }, title: { type: "string", max: 80, required: true }, subtitle: { type: "string", max: 140, required: false },
-      agentId: { type: "enum", values: ["ori", "mia", "nex", "luna", "zen", "rex"], required: false }, projectId: { type: "string", max: 120, required: false }, format: { type: "enum", values: ["png", "webp"], required: false } } },
+      agentId: { type: "string", max: 24, required: false }, projectId: { type: "string", max: 120, required: false }, format: { type: "enum", values: ["png", "webp"], required: false } } },
   { id: "image.optimize", ar: "معالجة صورة وتحسينها", description: "Re-encodes an owner image (artifact or conversation attachment): resize, convert, strip metadata. The original is kept.", readOnly: false, approval: "none", timeoutMs: 30000, ratePerMin: 10, maxConcurrent: 2,
     category: "creative", version: "5.0", sideEffect: "artifact", adapter: "sharp", output: "optimized image artifact with before/after sizes",
     input: { source: { type: "enum", values: ["artifact", "attachment"], required: true }, sourceId: { type: "string", max: 60, required: true }, conversationId: { type: "string", max: 60, required: false },
@@ -185,7 +239,7 @@ export const TOOLS = [
   // NEX — resource intelligence (local OpenTelemetry spans + the persisted ledgers)
   { id: "telemetry.agentStats", ar: "قياسات أداء الوكلاء", description: "Per-agent runs, success/failure, latency percentiles, tokens and known/estimated/unknown cost from persisted records.", readOnly: true, approval: "none", timeoutMs: 5000, ratePerMin: 30,
     category: "telemetry", version: "5.0", adapter: "sqlite ledger", output: "per-agent statistics with measurement basis",
-    input: { range: { type: "enum", values: ["24h", "7d", "30d"], required: false }, agentId: { type: "enum", values: ["ori", "mia", "nex", "luna", "zen", "rex"], required: false } } },
+    input: { range: { type: "enum", values: ["24h", "7d", "30d"], required: false }, agentId: { type: "string", max: 24, required: false } } },
   { id: "telemetry.providerCompare", ar: "مقارنة المزوّدين والنماذج", description: "Per provider/model attempts, success rate, fallbacks and latency observed by ABUD runs.", readOnly: true, approval: "none", timeoutMs: 5000, ratePerMin: 30,
     category: "telemetry", version: "5.0", adapter: "sqlite ledger", output: "provider/model comparison", input: { range: { type: "enum", values: ["24h", "7d", "30d"], required: false } } },
   { id: "telemetry.toolLatency", ar: "زمن الأدوات وموثوقيتها", description: "Per-tool executions, failures, denials and p50/p95 latency from the tool audit.", readOnly: true, approval: "none", timeoutMs: 5000, ratePerMin: 30,
@@ -195,7 +249,7 @@ export const TOOLS = [
   // LUNA — administration (ics, pdf-lib with shaped Arabic)
   { id: "calendar.exportTasks", ar: "تصدير مواعيد المهام للتقويم", description: "Builds an .ics calendar of open task deadlines (optionally one project or assignee) and stores it as an artifact.", readOnly: false, approval: "none", timeoutMs: 8000, ratePerMin: 10,
     category: "administration", version: "5.0", sideEffect: "artifact", adapter: "ics", output: "text/calendar artifact",
-    input: { projectId: { type: "string", max: 120, required: false }, assignee: { type: "string", max: 10, required: false } } },
+    input: { projectId: { type: "string", max: 120, required: false }, assignee: { type: "string", max: 24, required: false } } },
   { id: "report.executionPdf", ar: "تقرير تنفيذ PDF بالعربية", description: "Arabic PDF of company execution: task progress, deadlines, approvals awaiting follow-up, agent runs and deliverables.", readOnly: false, approval: "none", timeoutMs: 30000, ratePerMin: 6, maxConcurrent: 1,
     category: "administration", version: "5.0", sideEffect: "artifact", adapter: "pdf-lib + @pdf-lib/fontkit", output: "application/pdf artifact",
     input: { projectId: { type: "string", max: 120, required: false }, rangeDays: { type: "integer", min: 1, max: 90, required: false } } },

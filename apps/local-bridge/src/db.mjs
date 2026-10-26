@@ -585,6 +585,77 @@ export const MIGRATIONS = [
       CREATE INDEX tool_executions_started ON tool_executions(started_at);
       CREATE INDEX conversation_attachments_created ON conversation_attachments(created_at);
     `
+  },
+  {
+    // V6 Checkpoint 1: Dynamic Agent Registry. The six built-in agents become the initial roster; a registry holds
+    // agent profiles (identity, specializations, voice, model routing, permissions), and agent ids are validated against
+    // the active registry instead of a hard-coded CHECK. Templates derived from built-ins define allowed tool sets for
+    // new agents. Tables with six-id CHECK constraints are rebuilt to accept any id matching ^[a-z][a-z0-9_-]{1,23}$.
+    version: 12,
+    name: "v6-agent-registry",
+    foreignKeysOff: true,
+    sql: `
+      -- Rebuild agents table to relax id CHECK and add profile fields
+      CREATE TABLE agents_v12 (
+        id TEXT PRIMARY KEY CHECK (id GLOB '[a-z]*' AND length(id) BETWEEN 2 AND 24 AND id NOT GLOB '*[^a-z0-9_-]*'),
+        enabled INTEGER NOT NULL DEFAULT 1,
+        mode TEXT NOT NULL CHECK (mode IN ('standard','creative','analytical','research','strict','execution')),
+        instructions TEXT NOT NULL DEFAULT '',
+        policy_domain TEXT NOT NULL,
+        model_override TEXT,
+        tools TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        -- V6 profile fields
+        builtin INTEGER NOT NULL DEFAULT 0 CHECK (builtin IN (0,1)),
+        name TEXT NOT NULL,
+        title_ar TEXT NOT NULL,
+        role_ar TEXT NOT NULL,
+        department TEXT,
+        summary_ar TEXT NOT NULL,
+        specializations TEXT NOT NULL DEFAULT '[]',
+        identity_profile TEXT NOT NULL DEFAULT '{}',
+        voice_profile TEXT NOT NULL DEFAULT '{"status":"provisional","engine":null,"speaker":null}',
+        memory_scope TEXT NOT NULL DEFAULT 'conversation',
+        model_routing_profile TEXT NOT NULL DEFAULT '{}',
+        resource_limits TEXT NOT NULL DEFAULT '{}',
+        collaboration_permissions TEXT NOT NULL DEFAULT '{}',
+        approval_policy TEXT NOT NULL DEFAULT 'default',
+        availability TEXT NOT NULL DEFAULT 'active',
+        active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+        template_id TEXT,
+        profile_schema_version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO agents_v12 (id,enabled,mode,instructions,policy_domain,model_override,tools,updated_at,builtin,name,title_ar,role_ar,summary_ar,created_at)
+        SELECT id,enabled,mode,instructions,policy_domain,model_override,tools,updated_at,1,'','','','',updated_at FROM agents;
+      DROP TABLE agents;
+      ALTER TABLE agents_v12 RENAME TO agents;
+      CREATE INDEX agents_active ON agents(active, id);
+      CREATE INDEX agents_template ON agents(template_id);
+
+      -- Rebuild tasks table to relax assignee CHECK
+      CREATE TABLE tasks_v12 (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        assignee TEXT NOT NULL DEFAULT 'owner' CHECK (assignee = 'owner' OR assignee = 'none' OR (assignee GLOB '[a-z]*' AND assignee NOT GLOB '*[^a-z0-9_-]*' AND length(assignee) BETWEEN 2 AND 24)),
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('high','medium','low')),
+        status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('backlog','todo','in_progress','blocked','review','done','cancelled')),
+        due_date TEXT, start_date TEXT, estimate_hours REAL CHECK (estimate_hours IS NULL OR estimate_hours >= 0),
+        tags TEXT NOT NULL DEFAULT '[]', depends_on TEXT NOT NULL DEFAULT '[]', blocker TEXT,
+        source TEXT NOT NULL DEFAULT 'owner', external_ref TEXT UNIQUE,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT, archived_at TEXT
+      );
+      INSERT INTO tasks_v12 SELECT * FROM tasks;
+      DROP TABLE tasks;
+      ALTER TABLE tasks_v12 RENAME TO tasks;
+      CREATE INDEX tasks_status ON tasks(status);
+      CREATE INDEX tasks_project ON tasks(project_id);
+      CREATE INDEX tasks_assignee ON tasks(assignee);
+      CREATE INDEX tasks_due ON tasks(due_date);
+      CREATE INDEX tasks_archived ON tasks(archived_at);
+    `
   }
 ];
 

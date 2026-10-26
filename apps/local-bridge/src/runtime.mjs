@@ -234,7 +234,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
    * row, and a local span. The model never chooses a tool or its arguments; callers are the runtime, workflows, the
    * owner's tool console and the read-only MCP bridge. */
   async function invokeTool(agentId, toolId, input, ctx = {}) {
-    const def = agentById(agentId);
+    const def = company.agentById(agentId);
     if (!def) throw new HttpError(404, "not-found", "الوكيل غير موجود");
     const tool = toolById(toolId);
     const config = company.agentConfig(agentId);
@@ -353,7 +353,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
   }
   /** The registry as the owner sees it: metadata, grants per agent, owner switch and live dependency health. */
   async function capabilityRegistry({ refresh = false } = {}) {
-    const configs = Object.fromEntries(AGENTS.map((a) => [a.id, company.agentConfig(a.id)]));
+    const configs = Object.fromEntries(company.listAgents().map((a) => [a.id, company.agentConfig(a.id)]));
     const lastRuns = new Map(company.db.all("SELECT tool_id, MAX(started_at) AS at, COUNT(*) AS n, SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS ok FROM tool_executions GROUP BY tool_id").map((r) => [r.tool_id, r]));
     return Promise.all(TOOLS.map(async (tool) => {
       const state = capabilityRow(tool.id);
@@ -362,7 +362,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
       return {
         ...tool, enabled: state ? Boolean(state.enabled) : true, disabledReason: state?.disabled_reason ?? null, health,
         availability: state && !state.enabled ? "disabled" : health.state,
-        grants: AGENTS.filter((a) => a.tools.includes(tool.id)).map((a) => ({ agentId: a.id, granted: configs[a.id].tools.includes(tool.id) })),
+        grants: company.listAgents().filter((a) => a.tools.includes(tool.id)).map((a) => ({ agentId: a.id, granted: configs[a.id].tools.includes(tool.id) })),
         executions: { total: stats?.n ?? 0, succeeded: stats?.ok ?? 0, lastAt: stats?.at ?? null }
       };
     }));
@@ -384,6 +384,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
     const lines = [
       `أنت ${def.name}، موظف ذكاء اصطناعي في شركة ABUD FUN. لقبك: ${def.titleAr}. دورك: ${def.roleAr}.`,
       `مسؤولياتك: ${def.responsibilitiesAr.join("؛ ")}.`,
+      `تخصصاتك: ${(def.specializationsAr ?? []).join("؛ ")}.`,
       `حدودك: ${def.boundariesAr.join("؛ ")}.`,
       `وضع التشغيل: ${mode.ar} — ${mode.note}`,
       "اكتب بالعربية الفصحى المهنية. أبقِ أسماء الأدوات والمستودعات والمعرّفات التقنية كما هي.",
@@ -467,7 +468,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
 
   // ---------------------------------------------------------------- enqueue / cancel
   function enqueue(input, actor = { type: "owner", id: "owner" }) {
-    const def = agentById(input.agentId);
+    const def = company.agentById(input.agentId);
     if (!def) throw new HttpError(404, "not-found", "الوكيل غير موجود");
     const config = company.agentConfig(def.id);
     if (!config.enabled) throw new HttpError(409, "agent-disabled", `${def.name} معطّل حاليًا`);
@@ -514,7 +515,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
       setRun(run.id, { status: "cancelled", finished_at: new Date(now()).toISOString(), error_category: "cancelled", error_message: "cancelled before start" });
       if (run.conversationId) conversations?.settle(run.id, "cancelled");
       emit(run.id, { type: "done", run: company.getRun(run.id) });
-      company.log({ actorType: actor.type, actorId: actor.id, action: "agent.run.cancelled", targetType: "run", targetId: run.id, outcome: "info", summary: `إلغاء تشغيل ${agentById(run.agentId).name} قبل بدئه` });
+      company.log({ actorType: actor.type, actorId: actor.id, action: "agent.run.cancelled", targetType: "run", targetId: run.id, outcome: "info", summary: `إلغاء تشغيل ${company.agentById(run.agentId).name} قبل بدئه` });
     } else if (run.status === "running") {
       running.get(run.id)?.abort();
     } else throw new HttpError(409, "not-cancellable", "لا يمكن إلغاء تشغيل منتهٍ");
@@ -558,7 +559,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
 
   function finish(id, status, fields, { notify = true } = {}) {
     const run = runRaw(id);
-    const def = agentById(run.agent_id);
+    const def = company.agentById(run.agent_id);
     const routing = parseJson(run.routing, null);
     if (routing) fields = { ...fields, routing: JSON.stringify({ ...routing, progress: { phase: status === "succeeded" ? "completed" : status, at: new Date(now()).toISOString() } }) };
     company.db.tx(() => {
@@ -743,7 +744,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
   // ---------------------------------------------------------------- execution
   async function execute(runId, signal) {
     const run = runRaw(runId);
-    const def = agentById(run.agent_id);
+    const def = company.agentById(run.agent_id);
     const config = company.agentConfig(def.id);
     if (run.capability === "project_assessment") return executeWorkflow(run, def, config, signal);
     if (run.capability === "infra_assessment") return executeInfraWorkflow(run, def, config, signal);
@@ -848,7 +849,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
       let output = result.content.slice(0, MAX_OUTPUT_CHARS);
       if (warnings.length) output += `\n\n—\nملاحظة النظام: ${warnings.join("; ")}`;
       company.db.tx(() => {
-        recordUsage(run.id, "ori", result.provider, result.model, result.promptTokens, result.completionTokens, result.costUsd);
+        recordUsage(run.id, def.id, result.provider, result.model, result.promptTokens, result.completionTokens, result.costUsd);
         setRun(run.id, { output, effective_model: result.model, provider: result.provider, connection_id: result.connectionId, prompt_tokens: result.promptTokens, completion_tokens: result.completionTokens,
           reasoning_tokens: result.reasoningTokens, cost_usd: result.costUsd, cost_basis: result.costUsd == null ? "unknown" : "router-estimate", latency_ms: result.latencyMs });
       });
@@ -942,7 +943,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
       let output = result.content.slice(0, MAX_OUTPUT_CHARS);
       if (warnings.length) output += `\n\n—\nملاحظة النظام: ${warnings.join("; ")}`;
       company.db.tx(() => {
-        recordUsage(run.id, "ori", result.provider, result.model, result.promptTokens, result.completionTokens, result.costUsd);
+        recordUsage(run.id, def.id, result.provider, result.model, result.promptTokens, result.completionTokens, result.costUsd);
         setRun(run.id, { output, effective_model: result.model, provider: result.provider, connection_id: result.connectionId, prompt_tokens: result.promptTokens, completion_tokens: result.completionTokens,
           reasoning_tokens: result.reasoningTokens, cost_usd: result.costUsd, cost_basis: result.costUsd == null ? "unknown" : "router-estimate", latency_ms: result.latencyMs });
       });
@@ -1039,7 +1040,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
 
   function catalogView() {
     return {
-      agents: AGENTS, tools: TOOLS, capabilities: { ...Object.fromEntries(Object.entries(CAPABILITIES).map(([k, v]) => [k, { ar: v.ar, gather: v.gather }])) }, internalCapabilities: INTERNAL_CAPABILITIES,
+      agents: company.listAgents(), tools: TOOLS, capabilities: { ...Object.fromEntries(Object.entries(CAPABILITIES).map(([k, v]) => [k, { ar: v.ar, gather: v.gather }])) }, internalCapabilities: INTERNAL_CAPABILITIES,
       modes: MODES, domains: DOMAINS, classes: CLASS_INFO, comboStrategies: COMBO_STRATEGIES, routerWritable: ROUTER_WRITABLE_SETTINGS
     };
   }

@@ -53,13 +53,16 @@ function decodeAttachment(input) {
 
 export function createConversations({ company, runtime }) {
   const { db } = company;
+  // V6: Dynamic agent validation helper
+  const isActiveAgent = (id) => db.get("SELECT 1 FROM agents WHERE id = ? AND active = 1", id) != null;
+
   function get(id, { includeDeleted = false } = {}) {
     const found = db.get("SELECT * FROM conversations WHERE id = ?", String(id));
     if (!found || (!includeDeleted && found.state === "deleted")) fail(404, "not-found", "المحادثة غير موجودة");
     return row(found);
   }
   function list({ agentId = null, projectId = null, state = "active", limit = 50, before = null, q = null } = {}) {
-    if (agentId && !AGENT_IDS.includes(agentId)) fail(422, "validation", "الوكيل غير معروف");
+    if (agentId && !db.get("SELECT id FROM agents WHERE id = ?", agentId)) fail(422, "validation", "الوكيل غير معروف أو معطل");
     if (!["active", "archived"].includes(state)) fail(422, "validation", "حالة المحادثة غير صالحة");
     const where = ["state = ?"], params = [state];
     if (agentId) { where.push("agent_id = ?"); params.push(agentId); }
@@ -73,7 +76,7 @@ export function createConversations({ company, runtime }) {
     return db.all(`SELECT * FROM conversations WHERE ${where.join(" AND ")} ORDER BY updated_at DESC, id DESC LIMIT ?`, ...params, Math.min(Math.max(Number(limit) || 50, 1), 100)).map(row);
   }
   function create(input) {
-    if (!AGENT_IDS.includes(input.agentId)) fail(422, "validation", "اختر وكيلًا معروفًا");
+    if (!isActiveAgent(input.agentId)) fail(422, "validation", "اختر وكيلًا معروفًا ومفعّلًا");
     if (!company.agentConfig(input.agentId).enabled) fail(409, "agent-disabled", "الوكيل معطّل");
     const projectId = input.projectId ? company.getProject(input.projectId).id : null;
     const task = input.taskId ? company.getTask(input.taskId) : null;

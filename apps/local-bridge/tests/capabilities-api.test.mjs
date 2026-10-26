@@ -31,6 +31,24 @@ async function startBridge() {
   return { server, port, request, token, close: async () => { await new Promise((r) => server.close(r)); await rm(dir, { recursive: true, force: true }); } };
 }
 
+test("dynamic agent API is session guarded and supports templates, profiles and lifecycle", async () => {
+  const bridge = await startBridge();
+  try {
+    const { request, token } = bridge, base = "/local-api/company";
+    const body = { id: "analyst_2-test", templateId: "analyst", name: "Second analyst", titleAr: "Analyst", roleAr: "Analysis", summaryAr: "Custom analyst" };
+    assert.equal((await request(base + "/agents", { method: "POST", body })).status, 403);
+    assert.equal((await request(base + "/agent-templates")).json.templates.length, 6);
+    assert.equal((await request(base + "/agents", { method: "POST", token, body })).status, 201);
+    assert.ok((await request(base + "/agents")).json.agents.some(a => a.id === body.id));
+    assert.equal((await request(base + "/agents/" + body.id)).json.profile.templateId, "analyst");
+    assert.equal((await request(base + "/agents/" + body.id + "/profile", { method: "PATCH", token, body: { name: "Edited" } })).status, 200);
+    assert.equal((await request(base + "/agents/" + body.id + "/deactivate", { method: "POST", token, body: {} })).status, 201);
+    assert.equal((await request(base + "/agents/" + body.id)).json.name, "Edited");
+    assert.equal((await request(base + "/agents/ori", { method: "DELETE", token })).status, 409);
+    assert.equal((await request(base + "/agents/" + body.id, { method: "DELETE", token })).status, 200);
+  } finally { await bridge.close(); }
+});
+
 test("capability API: registry, session-guarded execution, owner switch, audit and artifact download headers", async () => {
   const bridge = await startBridge();
   try {
