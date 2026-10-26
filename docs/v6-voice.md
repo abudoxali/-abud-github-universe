@@ -27,7 +27,7 @@ Resume verification 2026-10-26: fetched faster-whisper's pinned LICENSE (MIT), H
 
 - Worktree-only execution; no daily bridge accessed.
 - `nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader`: RTX 4070, 12282 MiB total, 1453 MiB used (snapshot, NOT inference peak).
-- `uv --version`: 0.12.10. `py -3.11 --version` fails (no registered runtime). `uv python find 3.11` finds Astral CPython at `C:\Users\Abud\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe`.
+- `uv --version`: 0.12.10. `py -3.11 --version` fails (no registered runtime). `uv python find 3.11` finds Astral CPython at `%APPDATA%\uv\python\cpython-3.11-windows-x86_64-none\python.exe`.
 - Previous storage blocker resolved by orchestrator: `git check-ignore local/voice/models/probe` now succeeds. Runtime storage nevertheless moved OUTSIDE all checkouts to `VOICE_HOME`, default `%LOCALAPPDATA%\ABUD-FUN-OS\voice`, with `venv/`, `models/`, and `tmp/` subdirectories. Setup tries the Windows Python launcher then uv-managed Python 3.11. Worker audio remains in memory; temporary benchmark audio lives only in external tmp/.
 - Turbo vs medium evaluation: both downloaded into `VOICE_HOME/models` and empirically benchmarked on RTX 4070 (12282 MiB VRAM). Turbo is ~40% faster on warm transcription (0.585 s vs 0.991 s on 15.17 s audio, RTF 0.038 vs 0.065) with only a ~192 MiB VRAM difference (3911 MiB vs 3719 MiB peak, <32% of 12 GB GPU). Turbo selected as primary production model.
 
