@@ -27,9 +27,9 @@ if (-not (Test-Path $python)) {
     if ($LASTEXITCODE -ne 0) { throw 'Venv creation failed.' }
 }
 if (Get-Command uv -ErrorAction SilentlyContinue) {
-    uv pip install --python $python -r (Join-Path $PSScriptRoot 'requirements.txt')
+    uv pip install --python $python -r (Join-Path $PSScriptRoot 'requirements.txt') --extra-index-url https://download.pytorch.org/whl/cu124
 } else {
-    & $python -I -m pip install -r (Join-Path $PSScriptRoot 'requirements.txt')
+    & $python -I -m pip install -r (Join-Path $PSScriptRoot 'requirements.txt') --extra-index-url https://download.pytorch.org/whl/cu124
 }
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
 & $python -I (Join-Path $PSScriptRoot 'download_models.py')

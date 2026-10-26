@@ -11,9 +11,11 @@ Only STT is selected for installation. Preserve upstream notices when distributi
 | Medium converted weights | [API/card](https://huggingface.co/api/models/Systran/faster-whisper-medium), MIT, `08e178d48790749d25932bbc082711ddcfdfbc4f` | PASS; downloaded and empirically evaluated against turbo |
 | CTranslate2 | [MIT](https://github.com/OpenNMT/CTranslate2/blob/master/LICENSE) | PASS for code; NVIDIA CUDA/cuDNN binary terms are separate, not MIT |
 | whisper.cpp alternative | [MIT code](https://github.com/ggml-org/whisper.cpp/blob/231638a0717b7822784297e5980965ffcec05810/LICENSE), same upstream MIT Whisper weights | PASS for code/upstream weights; no converted GGML artifact selected |
-| Habibi EGY | [Code/card](https://github.com/SWivid/Habibi-TTS/tree/16252f67b9d54fc75670c091d7a1e9e9550bbe3d), MIT code. [Weight card](https://huggingface.co/SWivid/Habibi-TTS/blob/3ad11a152851245c002156526c5e1d0b12f2b9d5/README.md) explicitly licenses specialized EGY/ALG/IRQ/MAR/MSA Apache-2.0 despite repository-level NC metadata. | EGY explicit grant permits commercial use; only EGY may be considered next task. Unified/SAU/UAE are CC-BY-NC-SA-4.0: BLOCKED for commercial use. No TTS downloaded. |
-| F5-TTS | [MIT code](https://github.com/SWivid/F5-TTS/blob/45868abaabd74aabf03cd673d6dd00cc9d9c01ae/LICENSE) | Code PASS; this does not authorize arbitrary base weights |
-| Vocos | [MIT code](https://github.com/gemelo-ai/vocos/blob/eb39abfc42c1dee4854d9b10d44dd7d4fd3b0e53/LICENSE), [weight API](https://huggingface.co/api/models/charactr/vocos-mel-24khz), MIT revision `0feb3fdd929bcd6649e0e7c5a688cf7dd012ef21` | PASS for these artifacts |
+| Habibi EGY | [Code/card](https://github.com/SWivid/Habibi-TTS/tree/16252f67b9d54fc75670c091d7a1e9e9550bbe3d), MIT code. [Weight card](https://huggingface.co/SWivid/Habibi-TTS/blob/3ad11a152851245c002156526c5e1d0b12f2b9d5/README.md) explicitly licenses specialized EGY Apache-2.0 despite repository-level NC metadata. Revision `3ad11a152851245c002156526c5e1d0b12f2b9d5`. | PASS; selected and downloaded (`model_100000.safetensors`, 1.35 GB, SHA-256 `abfc7b4889e7c365a16b68f606eda210078e4a42e308c5461aba7dd9fe349ee1`). Unified/SAU/UAE weights remain strictly BLOCKED (CC-BY-NC-SA-4.0). |
+| F5-TTS | [MIT code](https://github.com/SWivid/F5-TTS/blob/45868abaabd74aabf03cd673d6dd00cc9d9c01ae/LICENSE), pinned version `1.1.9` without `torchcodec` dependency. | Code PASS; installed in venv with `torch==2.6.0+cu124` on driver 610.88. |
+| Vocos | [MIT code](https://github.com/gemelo-ai/vocos/blob/eb39abfc42c1dee4854d9b10d44dd7d4fd3b0e53/LICENSE), [weight API](https://huggingface.co/api/models/charactr/vocos-mel-24khz), MIT revision `0feb3fdd929bcd6649e0e7c5a688cf7dd012ef21` (`config.yaml` + `pytorch_model.bin`) | PASS; selected and downloaded. |
+| Reference speakers: Kokoro-82M synthetic voices | [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M/tree/f3ff3571791e39611d31c381e3a41a3af07b4987) Apache-2.0 weights; card states training only on permissive/non-copyrighted or synthetic audio and no custom voice clones | PASS; six references generated locally by `make_references.py`, never committed |
+| Reference Audio: IRQ.wav, ALG.wav | [Habibi-TTS Apache-2.0 repository](https://github.com/SWivid/Habibi-TTS/tree/16252f67b9d54fc75670c091d7a1e9e9550bbe3d/src/habibi_tts/assets) | PASS; sample dialect clips shipped with Apache-2.0 repo. |
 | hag-shalaby | [Card](https://huggingface.co/nomeda-lab/hag-shalaby-tts-0.2B-v0.1/blob/91ef27217bd8eed2e422d3982832ceed4063605b/README.md), [API](https://huggingface.co/api/models/nomeda-lab/hag-shalaby-tts-0.2B-v0.1), Apache-2.0 claimed, SILMA base; F5 architecture MIT | SILMA [base card](https://huggingface.co/silma-ai/silma-tts/blob/226dd7a65cadf51f9a6dbe3953fc89003b3844d5/README.md) confirms Apache-2.0 weights and MIT code. Deployment BLOCKED pending complete dependency/vocoder verification; card reserves third-party terms |
 | Chatterbox multilingual | [MIT code](https://github.com/resemble-ai/chatterbox/blob/5de7a54aa4e5e2baadb0182dde554908b48b85c2/LICENSE), [MIT weight API](https://huggingface.co/api/models/ResembleAI/chatterbox), revision `5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18` | Code/weight grants permit commercial use; deployment BLOCKED pending S3Gen and full transitive dependency audit |
 
@@ -77,6 +79,46 @@ Resume verification 2026-10-26: fetched faster-whisper's pinned LICENSE (MIT), H
 - Warm Real-Time Factor (RTF): **1.677** (CPU int8 is ~43x slower than CUDA float16)
 - Peak GPU VRAM: **1581 MiB** (no GPU memory used for inference; pure system RAM / CPU execution)
 - Accuracy: identical text transcription output to CUDA run.
+
+### Egyptian TTS — final decision and measurements (orchestrator review, 2026-10-26)
+
+**Engine:** F5-TTS 1.1.9 (MIT code) + Habibi-TTS **Specialized/EGY** `model_100000.safetensors` (Apache-2.0, pinned
+revision `3ad11a15…`) + Vocos mel-24khz (MIT). Unified/SAU/UAE weights (CC-BY-NC-SA-4.0) are never downloaded.
+
+**Reference speakers (rejected options first):**
+- Habibi's `assets/EGY.mp3` is an ElevenLabs voice-library voice and the `.wav` assets come from scraped dialect
+  datasets. Their presence in an MIT repository grants no right to build a synthetic identity from those voices,
+  so they are **not used** and the downloader no longer fetches them.
+- The earlier F5-TTS example clips were rejected too: `basic_ref_en.wav`, labelled "female" by an earlier pass, is a
+  **male** voice (pYIN median 98 Hz), so no female identity existed, and the ±semitone DSP variants were not distinct.
+- **Adopted:** six synthetic speakers from Kokoro-82M (Apache-2.0; trained only on permissive/synthetic audio, no
+  custom voice clones): ORI `am_michael`, MIA `af_bella`, NEX `bm_george`, LUNA `af_heart`, ZEN `am_puck`, REX
+  `am_onyx`. The English prompts and their exact transcripts are in `voices.json`; audio is generated into
+  `VOICE_HOME/references` by `make_references.py`. No recording of an identifiable person is used.
+
+**Duration fix:** F5 sizes output by UTF-8 byte ratio, which roughly doubled Arabic durations against an English
+prompt (earlier 42–48 WPM and up to 21% CER). Each chunk now gets an explicit duration from its letter count at 11
+letters/s, references and outputs are silence-trimmed, and the cache key carries a render version.
+
+**Measured by `evaluate_voices.py`** (RTX 4070, standard sentence «أهلاً، أنا <name>. النهارده هنراجع حالة المشاريع
+ونحدد أولويات الأسبوع.», pYIN median F0 on voiced frames, Whisper large-v3-turbo round trip):
+
+| Voice | Speaker | Duration | Pace | Median F0 | CER | Warm latency |
+|---|---|---|---|---|---|---|
+| ORI | am_michael | 5.15 s | 116 WPM | 118 Hz | 1.5% | (first call includes warm-up) |
+| MIA | af_bella | 4.28 s | 140 WPM | 196 Hz | 0.0% | 0.96 s |
+| NEX | bm_george | 4.86 s | 124 WPM | 151 Hz | 1.6% | 0.89 s |
+| LUNA | af_heart | 4.49 s | 134 WPM | 203 Hz | 0.0% | 0.92 s |
+| ZEN | am_puck | 4.50 s | 133 WPM | 96 Hz | 0.0% | 1.04 s |
+| REX | am_onyx | 4.81 s | 125 WPM | 93 Hz | 0.0% | 0.92 s |
+
+- Warm synthesis ≈ 0.9–1.0 s for ≈ 4.5 s of speech (RTF ≈ 0.2). A 9-word REX reply after warm-up: 0.97 s.
+- Cold: the first synthesis after load takes ≈ 24 s (CUDA kernel warm-up). `POST /warmup` performs it ahead of time
+  (measured 23.97 s), and the Bridge triggers it when the owner turns voice on.
+- VRAM: idle desktop 1,226 MiB → peak 4,589 MiB with STT and TTS both loaded → 1,231 MiB after the process exits.
+- Gender is consistent with F0 for all six. ZEN and REX are close in F0 (96 vs 93 Hz) and differ in timbre and pace
+  only. **Dialect authenticity and audible distinctness are OWNER LISTENING TEST PENDING**; all six profiles stay
+  `provisional` until then. The owner can replace any reference with a consenting recording later.
 
 ## Contract
 
