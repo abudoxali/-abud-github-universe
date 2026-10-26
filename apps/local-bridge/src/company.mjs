@@ -600,7 +600,7 @@ export function createCompany({ db, now = () => new Date() }) {
     requestedModel: row.requested_model, effectiveModel: row.effective_model, provider: row.provider, connectionId: row.connection_id ? row.connection_id.slice(0, 8) : null,
     routing: parseJson(row.routing, null), promptTokens: row.prompt_tokens, completionTokens: row.completion_tokens, reasoningTokens: row.reasoning_tokens,
     costUsd: row.cost_usd, costBasis: row.cost_basis, latencyMs: row.latency_ms, attempts: row.attempts, errorCategory: row.error_category, errorMessage: row.error_message,
-    output: row.output, toolCalls: parseJson(row.tool_calls, []), approvalId: row.approval_id, createdAt: row.created_at, startedAt: row.started_at, finishedAt: row.finished_at
+    output: row.output, toolSelection: parseJson(row.tool_selection, {}), actionsAr: parseJson(row.actions_ar, []), toolCalls: parseJson(row.tool_calls, []), approvalId: row.approval_id, createdAt: row.created_at, startedAt: row.started_at, finishedAt: row.finished_at
   });
   function listRuns({ agentId = null, status = null, workflowId = null, taskId = null, projectId = null, limit = 50 } = {}) {
     const where = [], params = [];

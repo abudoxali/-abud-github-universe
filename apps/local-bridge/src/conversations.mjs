@@ -23,7 +23,7 @@ const clean = (value, max, label) => {
   return result;
 };
 const row = (r) => r && ({ id: r.id, agentId: r.agent_id, projectId: r.project_id, taskId: r.task_id, title: r.title, state: r.state, createdAt: r.created_at, updatedAt: r.updated_at });
-const message = (r) => r && ({ id: r.id, conversationId: r.conversation_id, runId: r.run_id, role: r.role, content: r.content, state: r.state, source: r.source, metadata: parseJson(r.metadata, null), createdAt: r.created_at, updatedAt: r.updated_at });
+const message = (r) => r && ({ id: r.id, conversationId: r.conversation_id, runId: r.run_id, role: r.role, content: r.content, state: r.state, source: r.source, metadata: parseJson(r.metadata, null), actionsAr: parseJson(r.metadata, {})?.actionsAr ?? [], createdAt: r.created_at, updatedAt: r.updated_at });
 const attachment = (r) => r && ({ id: r.id, conversationId: r.conversation_id, messageId: r.message_id, filename: r.filename, mime: r.mime, sizeBytes: r.size_bytes, readableByAgent: r.extracted_text != null, createdAt: r.created_at });
 const TEXT_EXTENSIONS = new Set(["txt", "md", "js", "mjs", "ts", "json", "py", "css", "html", "gd", "sql"]);
 const BINARY_MIME = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
@@ -271,7 +271,8 @@ export function createConversations({ company, runtime }) {
     const mapped = { succeeded: "complete", failed: "failed", blocked: "blocked", cancelled: "cancelled" }[state];
     if (!mapped) return;
     db.run("UPDATE conversation_messages SET state = ?, content = ?, updated_at = ? WHERE run_id = ? AND role = 'assistant'", mapped, String(content).slice(0, 30000), nowIso(), runId);
-    const run = db.get("SELECT conversation_id FROM agent_runs WHERE id = ?", runId);
+    const run = db.get("SELECT conversation_id, actions_ar FROM agent_runs WHERE id = ?", runId);
+    db.run("UPDATE conversation_messages SET metadata = ? WHERE run_id = ? AND role = 'assistant'", JSON.stringify({ actionsAr: parseJson(run?.actions_ar, []) }), runId);
     if (run?.conversation_id) {
       const at = nowIso();
       db.run("INSERT INTO conversation_messages (id,conversation_id,run_id,role,content,state,source,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", newId("msg"), run.conversation_id, runId, "event", { succeeded: "اكتمل الرد", failed: "فشل الرد", blocked: "الرد ينتظر موافقة أو تعذر تنفيذه", cancelled: "أُلغي الرد" }[state], "complete", "runtime", JSON.stringify({ event: `run.${state}` }), at, at);

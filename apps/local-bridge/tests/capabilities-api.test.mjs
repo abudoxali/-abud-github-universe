@@ -49,6 +49,26 @@ test("dynamic agent API is session guarded and supports templates, profiles and 
   } finally { await bridge.close(); }
 });
 
+test("tool intelligence API protects policies and non-executing preview with owner session", async () => {
+  const bridge = await startBridge();
+  try {
+    const { request, token, server } = bridge, base = "/local-api/company";
+    assert.equal((await request(base + "/auto-policies")).status, 403);
+    assert.equal((await request(base + "/tools/select-preview?agentId=nex&request=usage.read")).status, 403);
+    const preview = await request(base + "/tools/select-preview?agentId=nex&request=usage.read", { token });
+    assert.equal(preview.status, 200);
+    assert.ok(preview.json.selected.some(t => t.toolId === "usage.read"));
+    assert.equal(server.company.db.get("SELECT COUNT(*) AS n FROM tool_executions").n, 0);
+    const body = { agentId: "luna", toolId: "tasks.create" };
+    assert.equal((await request(base + "/auto-policies", { method: "POST", body })).status, 403);
+    const created = await request(base + "/auto-policies", { method: "POST", token, body });
+    assert.equal(created.status, 201);
+    assert.equal((await request(base + "/auto-policies", { token })).json.policies.length, 1);
+    assert.equal((await request(base + "/auto-policies/" + created.json.id, { method: "DELETE", token })).status, 200);
+    assert.equal((await request(base + "/auto-policies", { token })).json.policies.length, 0);
+  } finally { await bridge.close(); }
+});
+
 test("capability API: registry, session-guarded execution, owner switch, audit and artifact download headers", async () => {
   const bridge = await startBridge();
   try {

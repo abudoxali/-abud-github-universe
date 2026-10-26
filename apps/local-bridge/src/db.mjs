@@ -656,6 +656,24 @@ export const MIGRATIONS = [
       CREATE INDEX tasks_due ON tasks(due_date);
       CREATE INDEX tasks_archived ON tasks(archived_at);
     `
+  },
+  {
+    version: 13,
+    name: "v6-tool-intelligence",
+    sql: `
+      ALTER TABLE agent_runs ADD COLUMN tool_selection TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE agent_runs ADD COLUMN actions_ar TEXT NOT NULL DEFAULT '[]';
+      CREATE TABLE auto_policies (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        tool_id TEXT NOT NULL,
+        scope TEXT NOT NULL CHECK(scope IN ('company','project')),
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        CHECK((scope = 'company' AND project_id IS NULL) OR (scope = 'project' AND project_id IS NOT NULL))
+      );
+      CREATE UNIQUE INDEX auto_policies_scope ON auto_policies(agent_id, tool_id, scope, COALESCE(project_id, ''));
+    `
   }
 ];
 

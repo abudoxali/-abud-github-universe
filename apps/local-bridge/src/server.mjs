@@ -408,6 +408,11 @@ export function createServer({
   route("POST", "/tasks/([^/]+)/restore", ({ params }) => company.setTaskArchived(params[0], false, owner));
   route("GET", "/tasks/([^/]+)", ({ params }) => ({ ...company.getTask(params[0]), runs: company.listRuns({ taskId: params[0], limit: 10 }) }));
   route("PATCH", "/tasks/([^/]+)", ({ params, body }) => company.updateTask(params[0], body, owner));
+  route("GET", "/auto-policies", () => ({ policies: runtime.autoPolicies.list() }));
+  route("POST", "/auto-policies", ({ body }) => runtime.autoPolicies.create(body, owner));
+  route("DELETE", "/auto-policies", ({ query, body }) => runtime.autoPolicies.remove(query.get("id") || body?.id, owner));
+  route("DELETE", "/auto-policies/([^/]+)", ({ params }) => runtime.autoPolicies.remove(params[0], owner));
+  route("GET", "/tools/select-preview", ({ query }) => runtime.toolSelectPreview({ agentId: query.get("agentId"), request: query.get("request") || "", projectId: query.get("projectId") || null }));
   route("GET", "/agent-templates", () => ({ templates: company.registry.listTemplates() }));
   route("GET", "/agent-templates/([^/]+)", ({ params }) => company.registry.getTemplate(params[0]));
   route("POST", "/agents", ({ body }) => company.registry.createFromTemplate(body));
@@ -602,8 +607,8 @@ export function createServer({
       const force = url.searchParams.get("refresh") === "1";
 
       if (isCompany) {
-        if (request.method !== "GET") {
-          // Writes need the per-process session token (readable only by same-origin pages) and a JSON body.
+        if (request.method !== "GET" || ["/local-api/company/auto-policies", "/local-api/company/tools/select-preview"].includes(url.pathname)) {
+          // Writes and owner tool diagnostics need the per-process session token (readable only by same-origin pages) and a JSON body.
           if (!sessionValid(request)) return send(response, 403, { error: "session-required", message: "انتهت الجلسة؛ أعد تحميل الصفحة" });
         }
         const events = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/conversations\/([^/]+)\/runs\/([^/]+)\/events$/);

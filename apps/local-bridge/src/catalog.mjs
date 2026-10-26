@@ -316,6 +316,50 @@ const DESCRIPTION_AR = {
   "security.osv": "يفحص ثغرات الاعتماديات من ملفات القفل. يرسل أسماء الحزم وإصداراتها فقط إلى api.osv.dev، لذلك يحتاج موافقتك في كل مرة."
 };
 
+/** Reviewed discovery phrases. Selection is advisory: these never grant execution permission. */
+const DISCOVERY = {
+  "project.read": ["project overview", "بيانات المشروع حالة المشروع"],
+  "project.docs": ["project documentation readme", "مستندات المشروع توثيق"],
+  "git.status": ["git status branch changes", "حالة git الفرع تغييرات"],
+  "tasks.query": ["list open tasks", "عرض المهام المفتوحة", "أولويات النهارده", "اولوياتي", "deadlines", "المواعيد النهائية"],
+  "tasks.create": ["create task", "إنشاء مهمة اعمل مهمة ضيف مهمة"],
+  "tasks.update": ["update task status", "تحديث حالة مهمة"],
+  "usage.read": ["usage consumption", "استهلاك الاستخدام", "usage", "consumption", "استهلاك", "الاستهلاك", "استهلاكنا"],
+  "quota.read": ["provider quota limits", "الحصص", "حصص المزودين", "quota", "حصص"],
+  "activity.read": ["activity history", "سجل النشاط"],
+  "security.scan": ["security exposure scan", "فحص تعرض البيانات", "امنيا", "امنيأ"],
+  "router.settings.propose": ["propose router settings", "اقتراح إعدادات الراوتر"],
+  "vps.listHosts": ["list servers hosts", "قائمة الخوادم"],
+  "vps.getHealth": ["server health", "صحة الخادم"],
+  "vps.getMetrics": ["server metrics cpu memory disk", "مقاييس الخادم المعالج الذاكرة القرص"],
+  "vps.listServices": ["list server services", "خدمات الخادم"],
+  "vps.getServiceStatus": ["service status", "حالة خدمة"],
+  "vps.getDeploymentInfo": ["deployment release", "معلومات النشر الإصدار"],
+  "vps.getRecentEvents": ["server incidents events", "حوادث أحداث الخادم"],
+  "vps.getRedactedLogs": ["redacted server logs", "سجلات الخادم المنقحة"],
+  "vps.runSafeDiagnostic": ["safe diagnostic", "فحص تشخيصي آمن"],
+  "vps.createActionProposal": ["propose server operation", "اقتراح إجراء الخادم"],
+  "vps.getActionResult": ["server action result", "نتيجة إجراء الخادم"],
+  "company.overview": ["company overview snapshot", "نظرة عامة حالة الشركة", "اولويات النهارده", "حالة مشاريعي"],
+  "approvals.list": ["pending approvals", "الموافقات المعلقة"],
+  "design.statusCard": ["design project status card", "تصميم بطاقة حالة مشروع"],
+  "design.brandGraphic": ["design branded announcement graphic", "تصميم إعلان بهوية الشركة"],
+  "image.optimize": ["optimize resize convert image", "تحسين صورة تغيير الحجم"],
+  "design.saveCanvas": ["save canvas design", "حفظ تصميم لوحة القوالب"],
+  "telemetry.agentStats": ["agent performance statistics", "قياسات أداء الوكلاء"],
+  "telemetry.providerCompare": ["compare providers models", "مقارنة المزودين والنماذج", "حالة النماذج"],
+  "telemetry.toolLatency": ["tool latency reliability", "زمن الأدوات موثوقية"],
+  "telemetry.traces": ["execution traces spans", "تتبع التنفيذ"],
+  "calendar.exportTasks": ["export calendar deadlines ics", "تصدير مواعيد المهام للتقويم", "deadlines", "المواعيد النهائية", "مواعيدي"],
+  "report.executionPdf": ["execution report pdf", "تقرير تنفيذ pdf"],
+  "approvals.followupTasks": ["follow up approvals", "متابعة الموافقات"],
+  "web.extract": ["extract web page", "استخلاص صفحة ويب"],
+  "knowledge.search": ["search knowledge", "بحث المعرفة", "research", "ابحث", "بحث", "دور على مصادر"],
+  "knowledge.freshness": ["knowledge source freshness", "حداثة مصادر المعرفة"],
+  "security.gitleaks": ["gitleaks secrets scan", "فحص الأسرار"],
+  "security.osv": ["osv dependency vulnerabilities", "ثغرات الاعتماديات" ]
+};
+
 /** Category, version, adapter and side-effect metadata for the V4.1 tools, derived so their reviewed entries stay intact. */
 for (const tool of TOOLS) {
   tool.descriptionAr ??= DESCRIPTION_AR[tool.id] ?? null;
@@ -326,6 +370,26 @@ for (const tool of TOOLS) {
   tool.network ??= tool.id.startsWith("vps.") ? "ssh (registered host)" : ["usage.read", "quota.read"].includes(tool.id) ? "loopback (OmniRoute)" : "none";
   tool.output ??= "JSON";
   tool.maxConcurrent ??= 4;
+  tool.vpsTier = tool.tier ?? null;
+  tool.tier = tool.approval !== "none" || tool.sideEffect === "proposal" || tool.sideEffect === "external-read" ? "C" : tool.readOnly ? "A" : "B";
+  tool.summarizeAr = (result) => {
+    if (result == null || result.ok === false || result.error || result.available === false || ["error", "unavailable", "failed", "denied"].includes(result.status)) return `لم تتوفر نتيجة موثوقة لأداة «${tool.ar}».`;
+    if (Array.isArray(result)) return `«${tool.ar}»: ${result.length} عناصر في النتيجة.`;
+    const counts = Object.entries(result).filter(([, value]) => Array.isArray(value) || typeof value === "number").slice(0, 6)
+      .map(([key, value]) => `${({ tasks: "المهام", projects: "المشاريع", approvals: "الموافقات", blocked: "المتعطلة", overdue: "المتأخرة", pendingApprovals: "الموافقات المعلقة", activeRuns: "التشغيلات الجارية", findings: "النتائج", sources: "المصادر", items: "العناصر", count: "العدد", total: "الإجمالي" })[key] || "عدد العناصر"}: ${Array.isArray(value) ? value.length : value}`);
+    return counts.length ? `«${tool.ar}»: ${counts.join("، ")}.` : `وردت نتيجة «${tool.ar}»؛ التفاصيل متاحة في سجل الأداة.`;
+  };
+  tool.intents = DISCOVERY[tool.id];
+  tool.categories = [tool.category];
+  tool.sideEffects = [tool.sideEffect];
+  tool.dataSources = [tool.adapter];
+  tool.latencyClass = tool.timeoutMs <= 5000 ? "fast" : tool.timeoutMs <= 30000 ? "medium" : "slow";
+  tool.costClass = tool.network === "none" ? "local" : "external";
+  tool.needs = Object.entries(tool.input).filter(([, rule]) => rule.required).map(([key]) => key);
+  tool.discovery = {
+    keywords: DISCOVERY[tool.id],
+    requiredInputs: Object.entries(tool.input).filter(([, rule]) => rule.required).map(([key]) => key)
+  };
 }
 
 /** Infrastructure tools per agent: every agent can observe; diagnostics, logs and proposals follow each role. */

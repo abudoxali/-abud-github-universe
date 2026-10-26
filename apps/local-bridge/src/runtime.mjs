@@ -13,6 +13,8 @@ import { createArtifacts } from "./artifacts.mjs";
 import { createCapabilities } from "./capabilities.mjs";
 import { createTelemetry } from "./telemetry.mjs";
 import { createOrchestrator } from "./orchestrator.mjs";
+import { selectTools } from "./tool-selector.mjs";
+import { createAutoPolicies } from "./auto-policies.mjs";
 
 const RETRYABLE = new Set(["rate-limited", "provider-unavailable", "connect-timeout", "headers-timeout", "first-output-timeout", "stalled", "timeout", "quota-exhausted", "unsupported-model", "empty-output", "offline-model"]);
 const CONNECTION_COOLDOWN_MS = 60_000;
@@ -73,6 +75,7 @@ const VPS_HANDLER_IDS = ["listHosts", "getHealth", "getMetrics", "listServices",
 export function createRuntime({ company, routerClient, getOverview, getUsage, workspace, vps = null, now = Date.now, log = () => {}, artifacts = null, telemetry = null, capabilityOptions = {} }) {
   artifacts ??= createArtifacts({ company });
   telemetry ??= createTelemetry({ db: company.db, now });
+  const autoPolicies = createAutoPolicies({ company });
   const running = new Map(); // runId -> AbortController
   const jobs = new Set();
   const listeners = new Map(); // ephemeral stream observers; durable state stays in SQLite
@@ -284,6 +287,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
     if (rate.size > 2000) for (const k of rate.keys()) if (!k.endsWith(`:${minute}`)) rate.delete(k);
     if (count > tool.ratePerMin) deny("tool-rate-limited", "تجاوز حد الاستدعاء في الدقيقة", 429);
     const health = await toolHealth(toolId);
+    if (ctx.signal?.aborted) deny("cancelled", "أُلغي تنفيذ الأداة", 499);
     if (health.state !== "available") deny("capability-unavailable", health.reason || "القدرة غير متاحة الآن", 503);
     const inFlight = activeTools.get(toolId) ?? 0;
     if (inFlight >= (tool.maxConcurrent ?? 4)) deny("tool-busy", "الأداة تعمل بالحد الأقصى من التنفيذات المتزامنة؛ أعد المحاولة بعد قليل", 429);
@@ -705,12 +709,39 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
       new Date(now()).toISOString(), runId, agentId, run?.project_id ?? null, provider, model, promptTokens ?? 0, completionTokens ?? 0, costUsd, costUsd == null ? "unknown" : "router-estimate", "application-measured");
   }
 
-  async function gather(def, capability, projectId, toolCalls, request = "", runId = null, runSpan = null) {
-    const ctx = { toolCalls, extra: { projectId, runId } };
+  async function toolSelectPreview({ agentId, request = "", projectId = null, inputs = {} }) {
+    const def = company.agentById(agentId);
+    if (!def) throw new HttpError(404, "not-found", "الوكيل غير موجود");
+    if (projectId) company.getProject(projectId);
+    const config = company.agentConfig(agentId);
+    const availability = {};
+    await Promise.all(config.tools.map(async (id) => {
+      const state = capabilityRow(id);
+      const health = state && !state.enabled ? null : await toolHealth(id);
+      availability[id] = { available: (!state || Boolean(state.enabled)) && health?.state === "available" };
+    }));
+    return selectTools({ agent: { ...def, ...config }, grants: config.tools, projectId, request, context: { ...(projectId ? { projectId } : {}), q: request.slice(0, 300) }, inputs, availability });
+  }
+
+  async function gather(def, capability, projectId, toolCalls, request = "", runId = null, runSpan = null, signal = null) {
+    const ctx = { toolCalls, signal, extra: { projectId, runId } };
+    const saved = runId ? parseJson(runRaw(runId)?.tool_selection, null) : null;
+    if (saved?.gatherComplete === true && saved.results && CAPABILITIES[capability]?.output === "free") {
+      toolCalls.push(...(saved.toolCalls ?? []));
+      return saved.results;
+    }
     const gathered = {};
     const list = [...(CAPABILITIES[capability]?.gather ?? [])];
     if (capability === "chat" && vps && INFRA_REQUEST.test(request)) list.push("vps.getHealth", "vps.getDeploymentInfo", "vps.getRecentEvents");
-    for (const toolId of list) {
+    const selection = CAPABILITIES[capability]?.output === "free" ? await toolSelectPreview({ agentId: def.id, request, projectId }) : null;
+    const actionsAr = [];
+    if (selection && runId) {
+      setRun(runId, { tool_selection: JSON.stringify(selection), actions_ar: "[]" });
+      company.log({ actorType: "agent", actorId: def.id, action: "agent.tools.selected", targetType: "run", targetId: runId, outcome: "info", summary: `اختيار ${selection.selected.length} أداة للطلب`, metadata: selection });
+    }
+    for (const toolId of [...new Set(list)]) {
+      if (signal?.aborted) break;
+      if (selection?.selected.some((pick) => pick.toolId === toolId)) continue;
       const tool = toolById(toolId);
       if (!company.agentConfig(def.id).tools.includes(toolId)) continue;
       if (tool.input.projectId?.required && !projectId) continue;
@@ -723,6 +754,30 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
       try { gathered[toolId] = await invokeTool(def.id, toolId, input, { ...ctx, span: runSpan }); }
       catch (error) { gathered[toolId] = { error: error?.code || "tool-failed", message: error?.messageAr ?? null }; }
     }
+    for (const pick of selection?.selected ?? []) {
+      if (signal?.aborted) break;
+      const tool = toolById(pick.toolId);
+      const tier = tool.tier;
+      const auto = tier === "A" || (tier === "B" && autoPolicies.allows({ agentId: def.id, toolId: pick.toolId, projectId: pick.input.projectId ?? null }));
+      let action;
+      if (!auto) {
+        const approval = company.createApproval({ kind: "agent.tool_proposal", requestedBy: `agent:${def.id}`, title: `${def.name}: ${tool.ar}`, summary: pick.reasonAr || "اقتراح أداة يحتاج موافقة المالك", risk: tier === "C" ? "high" : "internal-write",
+          payload: { runId, agentId: def.id, toolId: pick.toolId, input: pick.input, projectId, tier } });
+        action = `اقترحت ${tool.ar} بانتظار موافقة المالك (${approval.id})`;
+        gathered[pick.toolId] = { proposed: true, approvalId: approval.id, reasonAr: pick.reasonAr };
+      } else {
+        try {
+          gathered[pick.toolId] = await invokeTool(def.id, pick.toolId, pick.input, { ...ctx, span: runSpan });
+          action = tool.summarizeAr ? tool.summarizeAr(gathered[pick.toolId]) : gathered[pick.toolId]?.available === false ? `لم تتوفر بيانات ${tool.ar}` : `نفّذت ${tool.ar}${tier === "B" ? " وفق سياسة المالك" : ""}`;
+        } catch (error) {
+          gathered[pick.toolId] = { error: error?.code || "tool-failed", message: error?.messageAr ?? null };
+          action = `تعذّر تنفيذ ${tool.ar}: ${error?.messageAr || error?.code || "tool-failed"}`;
+        }
+      }
+      actionsAr.push(action);
+      if (runId) setRun(runId, { actions_ar: JSON.stringify(actionsAr) });
+    }
+    if (selection && runId && !signal?.aborted) setRun(runId, { tool_selection: JSON.stringify({ ...selection, gatherComplete: true, results: gathered, toolCalls }) });
     return gathered;
   }
 
@@ -756,8 +811,8 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
     try {
       if (!config.enabled) return finish(runId, "blocked", { error_category: "agent-disabled", error_message: "الوكيل معطّل" });
       const policy = company.getPolicy(config.policyDomain);
-      const gathered = await gather(def, run.capability, run.project_id, toolCalls, run.request, runId, runSpans.get(runId));
-      if (run.conversation_id) conversations?.recordTools(runId, gathered);
+      const gathered = await gather(def, run.capability, run.project_id, toolCalls, run.request, runId, runSpans.get(runId), signal);
+      if (run.conversation_id && !parseJson(run.tool_selection, null)?.gatherComplete) conversations?.recordTools(runId, gathered);
       const infra = Object.keys(gathered).some((k) => k.startsWith("vps."));
       const task = run.task_id ? company.getTask(run.task_id) : null;
       const { json, warnings } = assembleContext({
@@ -991,6 +1046,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
   async function decideApproval(id, decision, actor = { type: "owner", id: "owner" }) {
     // No self-approval: an agent (or any non-owner caller) can never decide an approval, including its own request.
     if (actor?.type !== "owner") throw new HttpError(403, "owner-only", "القرار في طلبات الموافقة للمالك فقط");
+    if (!["approve", "reject"].includes(decision)) throw new HttpError(422, "validation", "قرار غير صالح");
     const approval = company.getApproval(id);
     if (approval.status !== "pending") throw new HttpError(409, "already-decided", "تم البت في هذا الطلب مسبقًا");
     if (decision === "reject") {
@@ -1004,6 +1060,26 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
     company.log({ actorType: actor.type, actorId: actor.id, action: "approval.approved", targetType: "approval", targetId: id, summary: `موافقة: ${approval.title}` });
     if (approval.payload?.workflowId) orchestrator.onApprovalDecided(updated, "approve");
     else if (approval.kind === "agent.paid_inference") resumeApproved(updated);
+    if (approval.kind === "agent.tool_proposal") {
+      const { agentId, toolId, input, projectId, runId } = approval.payload;
+      const toolCalls = [];
+      try {
+        const result = await invokeTool(agentId, toolId, input, { actor, approved: true, approvalId: id, toolCalls, extra: { projectId, runId } });
+        updated = company.setApprovalStatus(id, "applied", { applied: true, result: { executionId: toolCalls.at(-1)?.executionId, result } });
+      } catch (error) {
+        updated = company.setApprovalStatus(id, "failed", { result: { executionId: toolCalls.at(-1)?.executionId, code: error?.code || "tool-failed" } });
+      }
+      if (runId && runRaw(runId)) {
+        const actions = parseJson(runRaw(runId).actions_ar, []);
+        actions.push(`${updated.status === "applied" ? "نفّذت" : "تعذّر تنفيذ"} ${toolById(toolId)?.ar ?? toolId} بعد موافقة المالك (${id})`);
+        setRun(runId, { actions_ar: JSON.stringify(actions) });
+        // Approval may arrive after inference has settled; keep the visible audit in sync
+        // without settling the message again or duplicating terminal events.
+        for (const message of company.db.all("SELECT id, metadata FROM conversation_messages WHERE run_id = ? AND role = 'assistant'", runId)) {
+          company.db.run("UPDATE conversation_messages SET metadata = ?, updated_at = ? WHERE id = ?", JSON.stringify({ ...parseJson(message.metadata, {}), actionsAr: actions }), new Date(now()).toISOString(), message.id);
+        }
+      }
+    }
     if (approval.kind === "router.settings") updated = await applyRouterChange(updated, actor);
     return updated;
   }
@@ -1053,7 +1129,7 @@ export function createRuntime({ company, routerClient, getOverview, getUsage, wo
   }
 
   return {
-    enqueue, cancel, pump, recoverInterrupted, invokeTool, routePreview, proposeRouterChange, decideApproval, rollbackRouterChange, catalogView, subscribe,
+    autoPolicies, toolSelectPreview, enqueue, cancel, pump, recoverInterrupted, invokeTool, routePreview, proposeRouterChange, decideApproval, rollbackRouterChange, catalogView, subscribe,
     executeCapability, getExecution, listExecutions, capabilityRegistry, setCapabilityEnabled, artifacts, telemetry, capabilities, readProjectDoc: (rel, doc) => readDoc(rel, doc), orchestrator,
     setConversations(service) { conversations = service; },
     setKnowledge(service) { knowledge = service; },
