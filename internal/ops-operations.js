@@ -9,7 +9,6 @@
   if (!O || !C) return;
   const { h, fill, fmt, badge, notice, bdi, icon, panel, panelX, empty, button, field, select, toast, act, mutate } = O;
   const R = window.AbudRobots;
-  const AGENTS = ["ori", "mia", "nex", "luna", "zen", "rex"];
   const WF_AR = { queued: ["info", "في الطابور"], running: ["accent", "قيد التنفيذ"], "waiting-approval": ["warn", "بانتظار موافقتك"], succeeded: ["ok", "اكتمل"], partial: ["warn", "اكتمل جزئيًا"], failed: ["bad", "فشل"], cancelled: ["muted", "أُلغي"] };
   const STEP_AR = { pending: ["muted", "بانتظار دوره"], running: ["accent", "يعمل الآن"], succeeded: ["ok", "اكتمل"], failed: ["bad", "فشل"], skipped: ["muted", "تُخطّي"], cancelled: ["muted", "أُلغي"], "waiting-approval": ["warn", "بانتظار موافقتك"] };
   const EVENT_AR = { created: "أنشأ ORI الخطة", delegated: "فوّض ORI خطوة", started: "بدأ التنفيذ", resumed: "استؤنف التنفيذ", "step-started": "بدأت خطوة", "step-succeeded": "اكتملت خطوة", "step-failed": "فشلت خطوة", "step-skipped": "تُخطّيت خطوة",
@@ -37,7 +36,7 @@
     return "idle";
   }
   function robot(key, agentId, state, size) {
-    if (!R) return C.avatar(agentId, "lg", { state });
+    if (!R?.AGENTS?.[agentId]) return C.avatar(agentId, "lg", { state });
     const node = R.mount(key, { agentId, variant: "standard", animationState: state, size, interactive: true });
     node.__robot?.set?.({ animationState: state });
     return node;

@@ -1335,6 +1335,17 @@ details.ops-panel:not([open]) { padding-block: 14px; }
 .op-member .rb-robot { inline-size: var(--rb-size, 96px); block-size: var(--rb-size, 96px); }
 @media (max-width: 560px) { .op-lead .rb-robot { inline-size: 120px; block-size: 120px; } .op-member .rb-robot { inline-size: 72px; block-size: 72px; } }
 
+/* ------------------------------------------------------------------ V6 workforce: role shortcuts and readable tool outcomes */
+.ag-quick-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ag-quick-actions .btn { white-space: normal; text-align: start; max-inline-size: 100%; }
+.co-action-summary { border-inline-start: 3px solid var(--os-accent-line); padding-inline-start: 12px; overflow-wrap: anywhere; }
+.co-action-summary ul { margin-block: 6px; padding-inline-start: 18px; }
+.co-chat-technical { margin-block-start: 8px; }
+.co-chat-technical > summary { cursor: pointer; color: var(--os-text-3); }
+.co-chat-technical .ops-actions { margin-block-start: 8px; }
+.ag-stage > .co-avatar { margin: auto; }
+.ag-card.is-inactive { opacity: .6; }
+
 /* ------------------------------------------------------------------ V5 integration: chat export/context, memory conflicts, agent threads */
 .co-chat-export { position: relative; }
 .co-chat-export > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }

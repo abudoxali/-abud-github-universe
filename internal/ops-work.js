@@ -29,10 +29,10 @@
     if (!searchInput) searchInput = h("input", { class: "ops-input pj-search", type: "search", placeholder: "ابحث في المهام…", "aria-label": "بحث في المهام", oninput: (e) => { ui.query = e.target.value; renderBody(); } });
     const tab = O.state.tab || "today";
     fill(head,
-      C.stableQuickAdd("work", { projectId: ui.project || "", assignee: ui.assignee || "owner", dueDate: tab === "today" ? todayIso() : "" }),
+      C.stableQuickAdd("work", { projectId: ui.project || "", assignee: ui.assignee && (ui.assignee === "owner" || ui.assignee === "none" || C.activeAgents().some((a) => a.id === ui.assignee)) ? ui.assignee : "owner", dueDate: tab === "today" ? todayIso() : "" }),
       h("div", { class: "wk-filters" }, searchInput,
         select("fproject", [["", "كل المشاريع"], ...C.projectOptions(false)], ui.project, { "aria-label": "تصفية بالمشروع", onchange: (e) => { ui.project = e.target.value; persist(); renderAll(); } }),
-        select("fassignee", [["", "كل المسؤولين"], ...C.assigneeOptions()], ui.assignee, { "aria-label": "تصفية بالمسؤول", onchange: (e) => { ui.assignee = e.target.value; persist(); renderAll(); } }),
+        select("fassignee", [["", "كل المسؤولين"], ...C.assigneeOptions({ activeOnly: false })], ui.assignee, { "aria-label": "تصفية بالمسؤول", onchange: (e) => { ui.assignee = e.target.value; persist(); renderAll(); } }),
         ui.project || ui.assignee ? button("مسح التصفية", () => { ui.project = ""; ui.assignee = ""; persist(); renderAll(); }, { icon: "close" }) : null));
   }
 
@@ -153,7 +153,7 @@
         h("span", { class: "co-day-num" }, String(d)),
         items.slice(0, 3).map((t) => h("button", { type: "button", class: `co-day-task co-prio-${t.priority}`, onclick: () => C.openTask(t.id), title: t.title }, t.title)),
         items.length > 3 ? h("small", { class: "ops-dim" }, `+${items.length - 3} أخرى`) : null,
-        h("button", { type: "button", class: "co-day-add", "aria-label": `إضافة مهمة في ${dayLabel}`, onclick: () => C.openQuickTask({ dueDate: iso, projectId: ui.project || "", assignee: ui.assignee || "owner" }) }, "+")));
+        h("button", { type: "button", class: "co-day-add", "aria-label": `إضافة مهمة في ${dayLabel}`, onclick: () => C.openQuickTask({ dueDate: iso, projectId: ui.project || "", assignee: ui.assignee && (ui.assignee === "owner" || ui.assignee === "none" || C.activeAgents().some((a) => a.id === ui.assignee)) ? ui.assignee : "owner" }) }, "+")));
     }
     const weekdays = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
     const undated = tasks.filter((t) => !t.dueDate).length;
@@ -168,7 +168,7 @@
   function renderAll() { renderHead(); renderBody(); }
 
   O.registerView({
-    id: "work", order: 30, icon: "work", ar: "العمل", subtitle: "مهام الشركة وجداولها في مخزن واحد دائم — للمالك وللوكلاء الستة.",
+    id: "work", order: 30, icon: "work", ar: "العمل", subtitle: "مهام الشركة وجداولها في مخزن واحد دائم — للمالك ولفريق الوكلاء.",
     tabs: [["today", "اليوم"], ["board", "اللوحة"], ["calendar", "التقويم"], ["upcoming", "القادمة"], ["project", "حسب المشروع"], ["agent", "حسب الوكيل"], ["done", "المنجزة"]],
     defaultTab: store.read("abud-os-work-tab", "today"),
     onShow(tab) { store.write("abud-os-work-tab", tab); C.co.tasks(); C.co.projects(); C.co.catalog(); if (tab === "done") O.api.co("archivedTasks", "/tasks?archived=only", { ttl: 15_000 }); renderAll(); },

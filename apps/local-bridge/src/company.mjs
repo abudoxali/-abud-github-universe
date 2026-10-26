@@ -92,7 +92,7 @@ export function createCompany({ db, now = () => new Date() }) {
     const base = AGENTS.find(a => a.id === id) ?? AGENTS.find(a => a.id === templateById(row.template_id)?.basedOn);
     return { ...base, id, name: row.name, titleAr: row.title_ar, roleAr: row.role_ar, summaryAr: row.summary_ar, specializationsAr: parseJson(row.specializations, []), ...parseJson(row.identity_profile, {}), tools: base?.tools ?? [], active: row.active === 1 };
   };
-  const listAgents = ({ activeOnly = true } = {}) => db.all('SELECT id FROM agents ' + (activeOnly ? 'WHERE active = 1' : '') + ' ORDER BY builtin DESC, id').map(r => agentById(r.id));
+  const listAgents = ({ activeOnly = true } = {}) => db.all(`SELECT id FROM agents ${activeOnly ? "WHERE active = 1" : ""} ORDER BY builtin DESC, COALESCE(json_extract(identity_profile, '$.order'), 99), id`).map(r => agentById(r.id));
 
   // V6: Dynamic agent ID validation (queries active agents from registry instead of hard-coded list)
   const getActiveAgentIds = () => db.all("SELECT id FROM agents WHERE active = 1").map((r) => r.id);

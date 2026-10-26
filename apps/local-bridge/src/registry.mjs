@@ -61,7 +61,7 @@ export function createRegistry({ db, company }) {
     const rows = db.all(`SELECT id, builtin, name, title_ar, role_ar, department, summary_ar, specializations,
                           identity_profile, voice_profile, memory_scope, model_routing_profile, template_id,
                           availability, active, enabled, mode, policy_domain, tools, created_at, updated_at
-                        FROM agents ${where} ORDER BY builtin DESC, id`);
+                        FROM agents ${where} ORDER BY builtin DESC, COALESCE(json_extract(identity_profile, '$.order'), 99), id`);
     return rows.map((row) => ({
       id: row.id,
       builtin: row.builtin === 1,

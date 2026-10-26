@@ -42,7 +42,7 @@
           button("مهمة جديدة", () => C.openQuickTask({ dueDate: todayIso() }), { kind: "primary", icon: "plus" }),
           linkButton("إسناد لوكيل", href("agents", "request"), { icon: "agents" }),
           s?.approvalsPending ? linkButton(`مراجعة الموافقات (${s.approvalsPending})`, href("resources", "routing"), { icon: "shield" }) : linkButton("عرض المشاريع", href("projects"), { icon: "projects" }))),
-      s ? h("nav", { class: "hq-crew", "aria-label": "الوكلاء الستة وحالتهم" }, [...s.agents].reverse().map((a) =>
+      s ? h("nav", { class: "hq-crew", "aria-label": "فريق الوكلاء وحالتهم" }, [...s.agents].reverse().map((a) =>
         h("a", { href: href("agents", a.id), class: `hq-crew-item os-crew-${a.availability}`, style: `--agent:${a.color}`, title: `${a.name} · ${L.availability[a.availability] || a.availability}`, "aria-label": `${a.name}: ${L.availability[a.availability] || a.availability}` },
           C.avatar(a.id, "lg", { state: a.availability, interactive: true })))) : null);
   }

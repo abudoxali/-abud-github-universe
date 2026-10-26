@@ -356,9 +356,9 @@
         button("ربط بهذا المشروع", async (e) => { if (!sel.value) { sel.focus(); return; } if (await act(e.currentTarget, () => mutate("POST", "/checkouts/link", { rel: sel.value, projectId: p.id }), "تم الربط")) invalidate("projects", detailKey(p.id)); }, { kind: "primary", icon: "link" })))];
     }
     if (tab === "agents") {
-      return [panel("الوكلاء المسندون", "يحدد من يعمل على هذا المشروع؛ لا يمنح صلاحيات إضافية.", h("div", { class: "co-agent-toggles" }, C.agentsDef().map((a) => {
+      return [panel("الوكلاء المسندون", "يحدد من يعمل على هذا المشروع؛ لا يمنح صلاحيات إضافية.", h("div", { class: "co-agent-toggles" }, C.activeAgents().map((a) => {
         const on = p.agents.includes(a.id);
-        return h("button", { type: "button", class: `co-agent-toggle${on ? " co-on" : ""}`, style: `--agent:${a.color}`, "aria-pressed": String(on), onclick: (e) => save({ agents: on ? p.agents.filter((x) => x !== a.id) : [...p.agents, a.id] }, on ? `أُزيل ${a.name}` : `أُسند ${a.name}`, e.currentTarget) }, C.avatar(a.id, "md"), h("strong", null, bdi(a.name)), h("small", null, a.titleAr));
+        return h("button", { type: "button", class: `co-agent-toggle${on ? " co-on" : ""}`, style: `--agent:${a.color}`, "aria-pressed": String(on), onclick: (e) => save({ agents: (on ? p.agents.filter((x) => x !== a.id) : [...p.agents, a.id]).filter((id) => C.activeAgents().some((agent) => agent.id === id)) }, on ? `أُزيل ${a.name}` : `أُسند ${a.name}`, e.currentTarget) }, C.avatar(a.id, "md"), h("strong", null, bdi(a.name)), h("small", null, a.titleAr));
       }))),
       panel("تشغيلات الوكلاء على المشروع", "الأحدث أولًا؛ النتيجة الكاملة في مساحة الوكيل.", p.runs.length ? h("ul", { class: "co-history" }, p.runs.map((r) => h("li", null, h("time", null, fmt.when(r.createdAt)), C.avatar(r.agentId), label("runStatus", r.status), h("span", null, r.request.slice(0, 90)), h("a", { class: "ops-link", href: href("agents", r.agentId, "runs") }, "النتيجة")))) : empty("لا تشغيلات بعد."))];
     }

@@ -15,6 +15,7 @@
   const sData = O.section("sysData", "system", "data");
   const sSecurity = O.section("sysSecurity", "system", "security");
   const sSettings = O.section("coSettings", "system", "settings");
+  const sRegistry = O.section("sysRegistry", "system", "registry");
   // Read-only developer-tool discovery (Codex / Antigravity / Claude Code) belongs with the integrations.
   const devTools = document.getElementById("agentSystem");
   if (devTools) sIntegrations.after(devTools);
@@ -254,21 +255,95 @@
       panel("الوكلاء والموارد", "إعدادات كل وكيل في مساحته، والميزانيات وسياسات التوجيه في «الموارد الذكية».", h("div", { class: "co-inline" }, linkButton("الوكلاء", href("agents"), { icon: "agents" }), linkButton("التوجيه والميزانيات", href("resources", "routing"), { icon: "resources" }))));
   }
 
+  // ---------------------------------------------------------------- agent registry (owner writes use the shared session guard)
+  let registryTemplate = null, templateRequest = 0;
+  const registryLoad = (force = false) => {
+    api.co("agentRegistry", "/agent-registry", { force, ttl: 30_000 });
+    api.co("agentTemplates", "/agent-templates", { force, ttl: 300_000 });
+  };
+  async function chooseTemplate(id) {
+    const request = ++templateRequest;
+    registryTemplate = null;
+    renderRegistry(true);
+    if (!id) return;
+    const result = await act(null, async () => {
+      const response = await fetch(`/local-api/company/agent-templates/${encodeURIComponent(id)}`, { cache: "no-store", headers: { Accept: "application/json" } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "تعذر تحميل القالب");
+      return data;
+    }, null);
+    if (request !== templateRequest) return;
+    registryTemplate = result;
+    renderRegistry(true);
+  }
+  async function registryAction(event, agent, operation) {
+    const trigger = event.currentTarget;
+    const removing = operation === "remove";
+    const verb = removing ? "حذف" : operation === "activate" ? "تفعيل" : "تعطيل";
+    if (!await O.confirmDialog({ title: `${verb} ${agent.name}`, body: removing ? "حذف نهائي لوكيل مخصص فقط. سيرفض الخادم الحذف إذا كانت له تشغيلات أو سجلات مرتبطة. لا تُحذف السجلات التاريخية." : `هل تريد ${verb} هذا الوكيل المخصص؟ التعطيل يخفيه من القوة العاملة النشطة ولا يحذف سجله.`, confirm: verb, tone: removing || operation === "deactivate" ? "danger" : "primary" })) return;
+    const result = await act(trigger, () => mutate(removing ? "DELETE" : "POST", `/agents/${encodeURIComponent(agent.id)}${removing ? "" : `/${operation}`}`, {}), `تم ${verb} الوكيل`);
+    if (result) refreshRegistry();
+  }
+  function refreshRegistry() {
+    registryLoad(true);
+    invalidate("catalog", "agents", "activity", "summary");
+  }
+  function renderRegistry(force = false) {
+    if (force !== true && O.editing(sRegistry, renderRegistry)) return;
+    const agents = co("agentRegistry")?.agents;
+    const templates = co("agentTemplates")?.templates;
+    const listing = agents ? panelX({ title: "سجل الوكلاء", hint: "الوكلاء المدمجون محميون من التعطيل والحذف. التغييرات محلية وتُسجل باسم المالك." },
+      h("ul", { class: "ops-list" }, agents.map((agent) => h("li", null,
+        h("strong", null, agent.name), bdi(agent.id), badge(agent.builtin ? "info" : "muted", agent.builtin ? "مدمج" : "مخصص"), badge(agent.active ? "ok" : "warn", agent.active ? "نشط" : "معطل"),
+        h("span", { class: "ops-dim" }, [agent.titleAr, agent.department, agent.roleAr, agent.templateId ? `القالب: ${(templates || []).find((t) => t.id === agent.templateId)?.nameAr || agent.templateId}` : "قالب مدمج"].filter(Boolean).join(" · ")),
+        !agent.builtin ? h("div", { class: "co-inline" }, button(agent.active ? "تعطيل" : "تفعيل", (event) => registryAction(event, agent, agent.active ? "deactivate" : "activate")), button("حذف", (event) => registryAction(event, agent, "remove"), { kind: "danger" })) : null))))
+      : O.resourceStatus(O.peek("co:agentRegistry"), "سجل الوكلاء") || O.skeleton(3);
+    const picker = select("templateId", [["", "اختر قالبًا"], ...(templates || []).map((t) => [t.id, t.nameAr])], registryTemplate?.id || "", { onchange: (event) => chooseTemplate(event.target.value), "aria-label": "قالب الوكيل" });
+    const template = registryTemplate;
+    let form = null;
+    if (template) {
+      const input = (name, options = {}) => h("input", { class: "ops-input", name, ...options });
+      form = h("form", { class: "co-form-grid", onsubmit: async (event) => {
+        event.preventDefault();
+        const values = O.formValues(form);
+        const specializations = values.specializations.split(/[,،\n]/).map((v) => v.trim()).filter(Boolean);
+        if (specializations.length > 40 || specializations.some((v) => v.length > 200)) { toast("التخصصات: بحد أقصى 40 تخصصًا و200 حرف لكل تخصص.", "bad"); return; }
+        const tools = [...form.querySelectorAll("input[name=tool]:checked")].map((el) => el.value);
+        if (!await O.confirmDialog({ title: "إنشاء وكيل مخصص", body: `إنشاء ${values.name} من ${template.nameAr} مع ${tools.length} أداة ضمن صلاحيات القالب فقط؟`, confirm: "إنشاء" })) return;
+        const result = await act(form.querySelector("[type=submit]"), () => mutate("POST", "/agents", { templateId: template.id, id: values.id, name: values.name, titleAr: values.titleAr, roleAr: values.roleAr, department: values.department, summaryAr: values.summaryAr, specializations, mode: values.mode, instructions: values.instructions, tools }), "أُنشئ الوكيل المخصص");
+        if (result) { registryTemplate = null; ++templateRequest; refreshRegistry(); renderRegistry(); }
+      } },
+      h("p", { class: "ops-dim" }, template.descriptionAr),
+      h("div", { class: "co-form-row" }, field("المعرف", input("id", { required: true, dir: "ltr", pattern: "[a-z][a-z0-9_-]{1,23}", minlength: 2, maxlength: 24 }), "2–24 حرفًا؛ يبدأ بحرف إنجليزي صغير."), field("الاسم", input("name", { required: true, maxlength: 2000 }))),
+      h("div", { class: "co-form-row" }, field("المسمى", input("titleAr", { required: true, maxlength: 2000 })), field("الدور", input("roleAr", { required: true, maxlength: 2000 }))),
+      h("div", { class: "co-form-row" }, field("القسم", input("department", { maxlength: 200 })), field("النمط", select("mode", ["standard", "creative", "analytical", "research", "strict", "execution"].map((mode) => [mode, mode]), template.defaultMode))),
+      field("الملخص", h("textarea", { class: "ops-input", name: "summaryAr", required: true, maxlength: 2000, rows: 3 })),
+      field("التخصصات", h("textarea", { class: "ops-input", name: "specializations", rows: 2 }), "افصل بفاصلة أو سطر جديد؛ 40 تخصصًا كحد أقصى."),
+      field("التعليمات", h("textarea", { class: "ops-input", name: "instructions", maxlength: 4000, rows: 3 })),
+      h("fieldset", null, h("legend", null, "الأدوات المسموحة من القالب"), h("p", { class: "ops-dim" }, "اختر مجموعة فرعية فقط؛ لا يضيف الإنشاء أدوات خارج القالب."), template.allowedTools.map((tool) => h("label", { class: "co-check-field" }, input("tool", { type: "checkbox", value: tool, checked: true }), bdi(tool)))),
+      h("div", { class: "co-form-actions" }, h("button", { type: "submit", class: "btn btn-primary" }, "إنشاء الوكيل")));
+    }
+    fill(sRegistry, listing, panelX({ title: "إنشاء من قالب", hint: "إنشاء وكيل مخصص دون تعديل الوكلاء المدمجين أو توسيع صلاحيات القالب." }, templates ? picker : O.resourceStatus(O.peek("co:agentTemplates"), "قوالب الوكلاء") || O.skeleton(2), form));
+  }
+  O.on("co:agentRegistry", renderRegistry);
+  O.on("co:agentTemplates", renderRegistry);
+
   // ---------------------------------------------------------------- registration
   O.registerView({
     id: "system", order: 60, icon: "system", ar: "النظام", subtitle: "الخدمات المحلية والتكاملات والنشاط والبيانات والأمان والإعدادات.",
-    tabs: [["overview", "نظرة عامة"], ["servers", "السيرفرات"], ["integrations", "التكاملات"], ["activity", "النشاط"], ["data", "البيانات والنسخ"], ["security", "الأمان"], ["settings", "الإعدادات"]],
+    tabs: [["overview", "نظرة عامة"], ["servers", "السيرفرات"], ["integrations", "التكاملات"], ["activity", "النشاط"], ["data", "البيانات والنسخ"], ["security", "الأمان"], ["registry", "سجل الوكلاء"], ["settings", "الإعدادات"]],
     defaultTab: "overview",
     onShow(tab) {
       api.infra(); api.settings(); C?.co.settings(); C?.co.notifications();
       window.AbudServers?.show(tab);
+      if (tab === "registry") { registryLoad(); renderRegistry(); }
       if (tab === "overview" || tab === "integrations") { api.agents(); api.overview(); }
       if (tab === "integrations") api.account();
       if (tab === "activity") { C?.co.activity(); C?.co.catalog(); C?.co.projects(); }
     },
     badge() { const n = (co("notifications")?.notifications || []).filter((x) => !x.acknowledged_at && x.level === "critical").length; return n ? { n, tone: "bad", title: `${n} تنبيه حرج` } : null; }
   });
-  O.setActions("system", () => [button("تحديث", () => { api.infra(true); api.settings(true); C?.co.activity(true); C?.co.notifications(true); C?.co.settings(true); window.AbudServers?.refresh(); }, { icon: "refresh" })]);
+  O.setActions("system", () => [button("تحديث", () => { api.infra(true); api.settings(true); C?.co.activity(true); C?.co.notifications(true); C?.co.settings(true); window.AbudServers?.refresh(); if (O.state.tab === "registry") registryLoad(true); }, { icon: "refresh" })]);
   const rerender = () => { renderOverview(); renderIntegrations(); renderData(); renderSecurity(); renderSettings(); };
   ["infra", "settings", "agents", "overview", "account"].forEach((key) => O.on(key, () => { if (O.state.view === "system") rerender(); }));
   O.on("co:settings", () => { renderData(); renderSettings(); renderOverview(); });

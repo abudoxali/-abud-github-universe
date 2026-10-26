@@ -110,11 +110,12 @@
   // ------------------------------------------------------------------ tool console (owner runs one capability as a granted agent)
   function inputControl(tool, key, rule, agentId) {
     const name = key;
+    if (key === "agentId") return select(name, [...(rule.required ? [] : [["", "— افتراضي —"]]), ...C.agentOptions()], agentId || "", { "aria-label": FIELD_AR[key] || key, required: rule.required ? true : null });
     if (rule.type === "enum") return select(name, [...(rule.required ? [] : [["", "— افتراضي —"]]), ...rule.values.map((v) => [v, key === "agentId" ? agentName(v) : VALUE_AR[v] || v])], rule.required ? rule.values[0] : "", { "aria-label": FIELD_AR[key] || key });
     if (rule.type === "boolean") return h("input", { type: "checkbox", name, "aria-label": FIELD_AR[key] || key });
     if (rule.type === "integer") return h("input", { class: "ops-input", type: "number", name, min: rule.min, max: rule.max, step: 1, dir: "ltr", placeholder: `${rule.min}–${rule.max}`, "aria-label": FIELD_AR[key] || key });
     if (key === "projectId") return select(name, [...(rule.required ? [] : [["", "بدون مشروع (الشركة)"]]), ...C.projectOptions(false)], "", { "aria-label": "المشروع", required: rule.required ? true : null });
-    if (key === "assignee") return select(name, [["", "الكل"], ["owner", "المالك"], ...["ori", "mia", "nex", "luna", "zen", "rex"].map((id) => [id, agentName(id)])], "", { "aria-label": "المسند إليه" });
+    if (key === "assignee") return select(name, [["", "الكل"], ["owner", "المالك"], ...C.agentOptions()], "", { "aria-label": "المسند إليه" });
     if (key === "sourceId" && tool.id === "image.optimize") {
       const sel = select(name, [["", "جارٍ تحميل الصور…"]], "", { "aria-label": "الصورة المصدر", required: true });
       get("/artifacts?limit=60").then((d) => fill(sel, [h("option", { value: "" }, "اختر صورة"), ...d.artifacts.filter((a) => a.mime.startsWith("image/")).map((a) => h("option", { value: a.id }, `${a.title} · ${fmt.when(a.createdAt)}`))])).catch(() => {});
@@ -135,7 +136,7 @@
     return input;
   }
   function openConsole(tool, presetAgent = null) {
-    const granted = tool.grants.filter((g) => g.granted).map((g) => g.agentId);
+    const granted = tool.grants.filter((g) => g.granted && C.activeAgents().some((a) => a.id === g.agentId)).map((g) => g.agentId);
     const d = O.drawer(`تشغيل: ${tool.ar}`, { wide: true });
     if (!granted.length) { fill(d.body, notice("warn", "لا يوجد وكيل يملك هذه الأداة", "الأداة مسحوبة من كل الوكلاء. أعدها من «الأدوات والصلاحيات» في مساحة الوكيل.")); return; }
     const agentSel = select("agentId__runner", granted.map((id) => [id, agentName(id)]), presetAgent && granted.includes(presetAgent) ? presetAgent : granted[0], { "aria-label": "الوكيل المنفّذ" });
@@ -309,7 +310,7 @@
     if (ui.section === "files") { fill(root, ...head, artifactGallery(root)); return; }
     if (ui.section === "audit") { fill(root, ...head, auditPanel(root)); return; }
     const search = h("input", { class: "ops-input", type: "search", value: ui.query, placeholder: "ابحث باسم القدرة أو وصفها…", "aria-label": "بحث القدرات", oninput: (e) => { ui.query = e.currentTarget.value; applyFilter(root); } });
-    const agentSel = select("agentFilter", [["", "كل الوكلاء"], ...["ori", "mia", "nex", "luna", "zen", "rex"].map((id) => [id, agentName(id)])], ui.agent, { "aria-label": "تصفية حسب الوكيل", onchange: (e) => { ui.agent = e.currentTarget.value; applyFilter(root); } });
+    const agentSel = select("agentFilter", [["", "كل الوكلاء"], ...C.agentOptions()], ui.agent, { "aria-label": "تصفية حسب الوكيل", onchange: (e) => { ui.agent = e.currentTarget.value; applyFilter(root); } });
     const groups = CATEGORY_ORDER.map((cat) => [cat, reg.filter((t) => t.category === cat)]).filter(([, list]) => list.length);
     fill(root, ...head,
       h("div", { class: "co-memory-toolbar" }, search, agentSel, h("span", { class: "cap-count ops-dim", "aria-live": "polite" })),
@@ -328,7 +329,7 @@
         return h("article", { class: `cap-card cap-${t.availability}` }, h("header", { class: "cap-card-head" }, h("div", null, h("h3", null, t.ar), bdi(t.id, "co-tech-soft"))),
           h("p", { class: "cap-desc" }, t.descriptionAr || t.description), toolMeta(t), !g.granted ? h("p", { class: "ops-dim" }, "سحبها المالك من هذا الوكيل.") : t.availability === "unavailable" ? h("p", { class: "ops-bad-text" }, t.health?.reason) : null,
           h("footer", { class: "cap-card-foot" }, h("small", { class: "ops-dim" }, t.executions.total ? `${t.executions.total} تنفيذ` : "لم تُستخدم بعد"),
-            g.granted && t.availability === "available" ? button("تشغيل", () => openConsole(t, def.id), { kind: "primary", icon: "play" }) : null));
+            g.granted && def.active !== false && def.active !== 0 && t.availability === "available" ? button("تشغيل", () => openConsole(t, def.id), { kind: "primary", icon: "play" }) : null));
       })) : empty("لا قدرات متخصصة مسجلة لهذا الوكيل."));
     };
     if (ui.registry) draw(); else loadRegistry().then(draw);
@@ -341,7 +342,7 @@
     const stage = h("div", { class: "cap-studio-stage" }, h("canvas", { width: W, height: Hh, "aria-label": "لوحة تصميم MIA" }));
     const status = h("p", { class: "ops-dim", role: "status" }, "جارٍ تحميل محرر القوالب…");
     const templates = select("template", [["", "قالب محفوظ…"]], "", { "aria-label": "القوالب المحفوظة" });
-    const agentArt = select("art", [["", "صورة وكيل معتمدة…"], ...["ori", "mia", "nex", "luna", "zen", "rex"].map((id) => [id, agentName(id)])], "", { "aria-label": "إضافة صورة وكيل" });
+    const agentArt = select("art", [["", "صورة وكيل معتمدة…"], ...C.activeAgents().filter((a) => window.AbudRobots?.AGENTS?.[a.id] && a.art?.card).map((a) => [a.id, a.name])], "", { "aria-label": "إضافة صورة وكيل" });
     const toolbar = h("div", { class: "cap-studio-tools", role: "toolbar", "aria-label": "أدوات التصميم" });
     let canvas = null;
     const loadTemplates = () => get("/templates").then((d) => { fill(templates, [h("option", { value: "" }, d.templates.length ? "قالب محفوظ…" : "لا قوالب بعد"), ...d.templates.map((t) => h("option", { value: t.id }, t.name))]); templates.__list = d.templates; }).catch(() => {});

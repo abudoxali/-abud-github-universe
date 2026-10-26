@@ -52,6 +52,25 @@ test("bridge refuses rebinding hosts, cross-site requests and every non-GET meth
   } finally { await bridge.close(); }
 });
 
+test("registry admin reads include inactive profiles and catalog preserves their identities", async () => {
+  const bridge = await startBridge({});
+  try {
+    bridge.server.company.registry.createFromTemplate({ templateId: "analyst", id: "archived-analyst", name: "Archived analyst", titleAr: "محلل", roleAr: "تحليل", summaryAr: "اختبار سجل الوكلاء", tools: [] });
+    bridge.server.company.registry.deactivate("archived-analyst");
+    const response = await raw(bridge.port, "/local-api/company/agent-registry");
+    assert.equal(response.status, 200);
+    const profile = JSON.parse(response.body).agents.find((agent) => agent.id === "archived-analyst");
+    assert.equal(profile.active, false);
+    assert.equal(profile.builtin, false);
+    assert.deepEqual(profile.tools, []);
+    const catalog = JSON.parse((await raw(bridge.port, "/local-api/company/catalog")).body);
+    assert.ok(catalog.allAgents.some((agent) => agent.id === profile.id));
+    assert.ok(!catalog.agents.some((agent) => agent.id === profile.id));
+    assert.equal((await raw(bridge.port, "/local-api/company/agent-registry", { "Sec-Fetch-Site": "cross-site" })).status, 403);
+    assert.equal((await raw(bridge.port, "/local-api/company/agents/archived-analyst/activate", { "Content-Type": "application/json" }, "POST")).status, 403);
+  } finally { await bridge.close(); }
+});
+
 test("internal UI assets are served only from the allowlisted internal directory", async () => {
   const bridge = await startBridge({});
   try {

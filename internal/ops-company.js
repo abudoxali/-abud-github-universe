@@ -12,15 +12,22 @@
     summary: (force) => O.api.co("summary", "/summary", { force, ttl: 15_000 }),
     tasks: (force) => O.api.co("tasks", "/tasks", { force, ttl: 15_000 }),
     projects: (force) => O.api.co("projects", "/projects", { force, ttl: 20_000 }),
-    catalog: () => O.api.co("catalog", "/catalog", { ttl: 600_000 }),
+    catalog: (force) => O.api.co("catalog", "/catalog", { force, ttl: 10_000 }),
     activity: (force) => O.api.co("activity", "/activity?limit=80", { force, ttl: 15_000 }),
     notifications: (force) => O.api.co("notifications", "/notifications", { force, ttl: 15_000 }),
     settings: (force) => O.api.co("settings", "/settings", { force, ttl: 60_000 }),
     agents: (force) => O.api.co("agents", "/agents", { force, ttl: 10_000 })
   };
   const data = (key) => O.peek(`co:${key}`)?.data;
-  const agentsDef = () => data("catalog")?.agents || [];
+  // The catalog retains inactive definitions for historical references; assignments use only the active roster.
+  const agentsDef = ({ activeOnly = false } = {}) => {
+    const catalog = data("catalog");
+    const list = catalog?.allAgents || catalog?.agents || [];
+    return activeOnly ? list.filter((a) => a.active !== false && a.active !== 0) : list;
+  };
+  const activeAgents = () => agentsDef({ activeOnly: true });
   const agentDef = (id) => agentsDef().find((a) => a.id === id);
+  const agentOptions = ({ activeOnly = true } = {}) => agentsDef({ activeOnly }).map((a) => [a.id, `${a.name} — ${a.titleAr || a.roleAr || "وكيل"}${a.active === false || a.active === 0 ? " (غير نشط)" : ""}`]);
   const projectsList = () => data("projects")?.projects || [];
   const projectName = (id) => projectsList().find((p) => p.id === id)?.name || null;
   const refreshAfterTaskChange = () => invalidate("tasks", "archivedTasks", "summary", "activity", "projects", "agents", "agent:", "notifications", "project:");
@@ -67,9 +74,10 @@
     }
     if (id === "none" || id == null) return h("span", { class: `co-avatar co-avatar-${size} co-avatar-none${extraClass}`, title: L.none, "aria-label": L.none }, "—");
     const def = agentDef(id);
-    if (!def) return h("span", { class: `co-avatar co-avatar-${size}${extraClass}` }, "—");
+    const inactive = def?.active === false || def?.active === 0;
+    if (!def) return h("span", { class: `co-avatar co-avatar-${size} co-avatar-generic ops-dim${extraClass}`, title: String(id), "aria-label": String(id) }, icon("user", 18));
 
-    const state = opts.state || null;
+    const state = inactive ? "disabled" : opts.state || null;
     const pip = (opts.showPip !== false && state) ? pipType(state) : null;
     const isWorking = pip === "working";
     const statusText = state ? ` (${pipLabel(state)})` : "";
@@ -79,14 +87,16 @@
     const hasPipClass = pip ? " has-pip" : "";
 
     const el = h("span", {
-      class: `co-avatar co-avatar-${size} co-avatar-agent${interactiveClass}${workingClass}${hasPipClass}${extraClass}`,
+      class: `co-avatar co-avatar-${size} co-avatar-agent${inactive ? " is-inactive ops-dim" : ""}${interactiveClass}${workingClass}${hasPipClass}${extraClass}`,
       title: titleText,
       "aria-label": titleText,
       style: `--agent:${def.color}`,
       "data-agent": def.id,
       "data-agent-state": state || "idle"
     },
-      window.AbudRobots?.portrait(def.id, { expression: opts.expression || (isWorking ? "focus" : null) }) || h("img", { src: def.art.face || def.art.card, alt: "", loading: "lazy", decoding: "async" }));
+      window.AbudRobots?.AGENTS?.[def.id]
+        ? window.AbudRobots.portrait(def.id, { expression: opts.expression || (isWorking ? "focus" : null) })
+        : h("span", { class: "co-avatar-generic", "aria-hidden": "true" }, String(def.name || def.id).slice(0, 2).toUpperCase()));
 
     if (pip) {
       el.append(h("span", {
@@ -98,7 +108,7 @@
     return el;
   }
   const assigneeName = (id) => (id === "owner" ? L.owner : id === "none" ? L.none : agentDef(id)?.name || id);
-  const assigneeOptions = () => [["owner", L.owner], ["none", L.none], ...agentsDef().map((a) => [a.id, `${a.name} — ${a.titleAr}`])];
+  const assigneeOptions = (opts) => [["owner", L.owner], ["none", L.none], ...agentOptions(opts)];
   const projectOptions = (withNone = true) => [...(withNone ? [["", "بدون مشروع"]] : []), ...projectsList().map((p) => [p.id, p.name])];
   const openProject = (id) => O.go("projects", "p", id);
 
@@ -156,11 +166,16 @@
         }, { icon: "refresh" })));
       return;
     }
+    const currentAgent = agentDef(task.assignee);
+    const inactiveAssignee = currentAgent && (currentAgent.active === false || currentAgent.active === 0);
+    const taskAssignees = assigneeOptions();
+    if (inactiveAssignee) taskAssignees.push([task.assignee, `${currentAgent.name} (غير نشط — إسناد محفوظ)`]);
     const form = h("form", { class: "co-form-grid", onsubmit: async (event) => {
       event.preventDefault();
       const v = formValues(form);
       const patch = { title: v.title, description: v.description || null, projectId: v.projectId || null, assignee: v.assignee, priority: v.priority, status: v.status, blocker: v.blocker || null,
         dueDate: v.dueDate || null, startDate: v.startDate || null, estimateHours: v.estimateHours === "" ? null : Number(v.estimateHours), tags: v.tags ? v.tags.split(/[،,]/).map((t) => t.trim()).filter(Boolean) : [] };
+      if (inactiveAssignee && patch.assignee === task.assignee) delete patch.assignee; // preserve history without reassigning a disabled agent
       const saved = await act(form.querySelector("[type=submit]"), () => mutate("PATCH", `/tasks/${encodeURIComponent(id)}`, patch), "حُفظت المهمة");
       if (saved) { refreshAfterTaskChange(); d.close(); }
     } },
@@ -168,7 +183,7 @@
     field("الوصف", h("textarea", { class: "ops-input", name: "description", rows: 4, maxlength: 4000 }, task.description || "")),
     h("div", { class: "co-form-row" },
       field("المشروع", select("projectId", projectOptions(), task.projectId ?? "")),
-      field("المسؤول", select("assignee", assigneeOptions(), task.assignee))),
+      field("المسؤول", select("assignee", taskAssignees, task.assignee))),
     h("div", { class: "co-form-row" },
       field("الأولوية", select("priority", Object.entries(L.priority), task.priority)),
       field("الحالة", select("status", Object.entries(L.taskStatus), task.status))),
@@ -183,7 +198,7 @@
         if (!(await O.confirmDialog({ title: "أرشفة المهمة؟", body: `ستختفي «${task.title}» من العمل النشط وتبقى قابلة للاستعادة من تبويب المنجزة.`, confirm: "أرشفة" }))) return;
         if (await act(event.currentTarget, () => mutate("POST", `/tasks/${encodeURIComponent(id)}/archive`, {}), "أُرشفت المهمة")) { refreshAfterTaskChange(); d.close(); }
       }, { icon: "download" }),
-      agentDef(task.assignee) ? button(`اطلب من ${agentDef(task.assignee).name} العمل عليها`, async (event) => {
+      currentAgent && !inactiveAssignee ? button(`اطلب من ${agentDef(task.assignee).name} العمل عليها`, async (event) => {
         const def = agentDef(task.assignee);
         const run = await act(event.currentTarget, () => mutate("POST", "/runs", { agentId: def.id, capability: def.capabilities.includes("task_breakdown") ? "task_breakdown" : "chat",
           request: `${task.title}${task.description ? `\n\n${task.description}` : ""}`, taskId: task.id, projectId: task.projectId || undefined, priority: task.priority, idempotencyKey: `task-${task.id}-${Date.now()}` }), `أُرسلت إلى ${def.name}`);
@@ -227,7 +242,7 @@
    * rebuilt when it is idle and its project/agent options have changed. */
   const stableForms = new Map();
   function stableQuickAdd(key, preset = {}) {
-    const signature = `${projectsList().length}:${agentsDef().length}:${JSON.stringify(preset)}`;
+    const signature = `${projectsList().length}:${JSON.stringify(agentOptions())}:${JSON.stringify(preset)}`;
     const cached = stableForms.get(key);
     if (cached && (cached.signature === signature || cached.form.contains(document.activeElement) || cached.form.title.value)) return cached.form;
     const form = quickTaskForm({ preset });
@@ -287,7 +302,7 @@
   }
 
   window.AbudCompany = {
-    co, data, agentsDef, agentDef, projectsList, projectName, refreshAfterTaskChange, avatar, assigneeName, assigneeOptions, projectOptions,
+    co, data, agentsDef, activeAgents, agentOptions, agentDef, projectsList, projectName, refreshAfterTaskChange, avatar, assigneeName, assigneeOptions, projectOptions,
     patchTask, statusSelect, taskRow, taskList, dueChip, openTask, openProject, openQuickTask, openNewProject, quickTaskForm, stableQuickAdd, describeEvent,
     notificationList, activityList, isoText, panel, empty, button, field, select, formValues
   };

@@ -1,4 +1,4 @@
-/* ABUD FUN Company OS V2 — الوكلاء (AI Workforce): the six AI employees, their workspaces, requests and runs.
+/* ABUD FUN Company OS V6 — الوكلاء (AI Workforce): the dynamic roster, workspaces, requests and runs.
  * Availability, "working" and results come only from the bridge (live route evaluation + persisted runs): "جاهز" means an
  * eligible model exists now; "يعمل الآن" means a persisted queued/running run exists. The characters are code-built robots
  * (robot-engine.js); their animation state is derived from that same verified state, and success/error reactions fire only
@@ -13,7 +13,46 @@
   const root = O.section("coWorkforce", "agents");
   // V5 surfaces appear only when the running bridge implements them, so an older bridge serving these files stays usable.
   const V5 = window.AbudInternalHealth?.capabilities || {};
-  const AGENT_IDS = ["ori", "mia", "nex", "luna", "zen", "rex"];
+  const BUILTIN_IDS = ["ori", "mia", "nex", "luna", "zen", "rex"];
+  const roster = () => agentsRes() || catalog()?.agents || [];
+  const activeAgents = () => roster().filter((a) => a.active !== false && a.enabled !== false && !a.removedAt && a.config?.enabled !== false);
+  const agentIds = () => C.agentsDef().map((a) => a.id);
+  const QUICK_ACTIONS = {
+    ori: ["راجع الشركة", "خطط للأسبوع", "وزّع العمل", "راجع الأولويات"],
+    mia: ["راجعي التصميم", "جهّزي عرض", "راجعي اتساق الهوية"],
+    nex: ["راجع استهلاك الذكاء الاصطناعي", "حلّل التكاليف", "افحص صحة النماذج", "راجع الأداء"],
+    luna: ["نظّمي المهام", "جهّزي اجتماع", "اعملي تقرير", "راجعي المواعيد النهائية"],
+    zen: ["ابحث في موضوع", "راجع المعرفة", "حلّل التوثيق"],
+    rex: ["افحص المستودع", "راجع الأمان", "راجع المخاطر", "راجع الموافقات المعلّقة"]
+  };
+  const TEMPLATE_ACTIONS = {
+    coordinator: QUICK_ACTIONS.ori, designer: QUICK_ACTIONS.mia, analyst: QUICK_ACTIONS.nex,
+    operations: QUICK_ACTIONS.luna, researcher: QUICK_ACTIONS.zen, security: QUICK_ACTIONS.rex,
+    default: ["راجع العمل ضمن تخصصك", "اقترح أولويات العمل"]
+  };
+  async function quickAction(def, text, trigger) {
+    const created = await act(trigger, () => mutate("POST", "/conversations", { agentId: def.id, title: text }), null);
+    if (!created) return;
+    ui.pick = def.id;
+    O.go("agents", "chat", created.id);
+    if (text === "جهّزي اجتماع" || text === "ابحث في موضوع") {
+      await loadChats(created.id);
+      const input = root.querySelector(".co-chat-compose textarea");
+      if (input) { input.value = text === "جهّزي اجتماع" ? "جهّزي مسودة طلب اجتماع (لا تنشئي اجتماعًا فعليًا): " : "ابحث في الموضوع التالي: "; input.focus(); }
+    } else await sendChatMessage(created, `${text}. استخدم البيانات والأدوات المصرّح بها، ووضّح ما يحتاج موافقتي دون تنفيذه.`);
+  }
+  function quickActions(def) {
+    if (!V5.conversations || !activeAgents().some((a) => a.id === def.id)) return null;
+    const actions = (Object.hasOwn(QUICK_ACTIONS, def.id) ? QUICK_ACTIONS[def.id] : null) || (Object.hasOwn(TEMPLATE_ACTIONS, def.templateId) ? TEMPLATE_ACTIONS[def.templateId] : TEMPLATE_ACTIONS.default);
+    return panel("إجراءات سريعة", "يفتح كل إجراء محادثة محفوظة مع الوكيل. البحث والاجتماع يبدأان بمسودة لتكمل تفاصيلها.",
+      h("div", { class: "ag-quick-actions" }, actions.map((text) => button(text === "جهّزي اجتماع" ? `${text} (مسودة طلب)` : text,
+        (event) => quickAction(def, text, event.currentTarget), { kind: "secondary" }))));
+  }
+  function actionSummary(actions) {
+    if (!actions?.length) return null;
+    return h("div", { class: "co-action-summary" }, h("ul", null, actions.map((text) => h("li", null, text))),
+      actions.some((text) => text.includes("بانتظار موافقة")) ? h("a", { class: "ops-chip", href: href("resources", "routing") }, "يحتاج موافقتك") : null);
+  }
   const ui = { agent: null, sub: "overview", runFilter: "", pick: "ori", polling: null, forms: new Map(), previewState: "idle", previewForm: "standard", chatThreads: [], chatCurrent: null, chatAttachments: [], chatState: "active", chatQuery: "", chatStream: null, chatPartial: "", chatError: "", memoryNotes: [], memoryState: "active", memoryQuery: "", memoryError: "", memoryConflicts: [], memSeg: "memory", drafts: {}, chatContext: null, agentThreads: new Map(), knowledgeDocs: [], knowledgeHits: [], knowledgeQuery: "", knowledgeProject: "", knowledgeError: "" };
   const agentsRes = () => O.peek("co:agents")?.data?.agents;
   const catalog = () => O.peek("co:catalog")?.data;
@@ -39,6 +78,7 @@
   }
   /** One live robot per key: periodic re-renders reuse the same instance, so its animation never restarts. */
   function robot(key, agentId, opts = {}) {
+    if (!BUILTIN_IDS.includes(agentId)) return C.avatar(agentId, "lg");
     if (!R) return h("img", { class: "rb-fallback", src: C.agentDef(agentId)?.art?.card || "", alt: "" });
     return R.mount(key, { agentId, ...opts });
   }
@@ -165,10 +205,10 @@
     const isWorking = a.availability === "working" || (a.activeRuns && a.activeRuns > 0);
     return h("article", { class: `ag-card co-avail-${a.availability}${isWorking ? " is-working" : ""}`, style: `--agent:${a.color}`, "data-agent": a.id },
       h("div", { class: "ag-stage-wrap" },
-        h("a", { class: "ag-stage", href: href("agents", a.id), "aria-label": `مساحة عمل ${a.name}` },
+        h("a", { class: "ag-stage", href: href("agents", "workspace", a.id), "aria-label": `مساحة عمل ${a.name}` },
           robot(`card:${a.id}`, a.id, { variant: "standard", animationState: robotState(a), size: 230, interactive: true }),
           isWorking ? h("span", { class: "ag-live-indicator", "aria-label": "يعمل الآن" }, h("span", { class: "ag-pulse-ring" }), "يعمل الآن") : null),
-        h("button", {
+        BUILTIN_IDS.includes(a.id) ? h("button", {
           type: "button",
           class: "ag-stage-greet",
           title: `تحية وتفاعل من ${a.name}`,
@@ -178,7 +218,7 @@
             e.stopPropagation();
             document.querySelector(`svg.rb-robot[data-agent="${a.id}"]`)?.__robot?.react("greeting");
           }
-        }, icon("sparkle", 14), h("span", null, "حيِّه"))),
+        }, icon("sparkle", 14), h("span", null, "حيِّه")) : null),
       h("div", { class: "ag-info" },
         h("div", { class: "ag-name" }, h("h3", null, bdi(a.name), h("span", null, `0${a.order}`)), label("availability", a.availability)),
         h("p", { class: "ag-role" }, `${a.titleAr} · ${a.roleAr}`),
@@ -188,7 +228,7 @@
           h("div", null, h("dt", null, "النموذج الآن"), h("dd", null, a.route.chosen ? bdi(a.route.chosen.split("/").pop(), "co-tech-soft") : h("span", { class: "ops-dim" }, "لا يوجد"))),
           h("div", null, h("dt", null, "آخر تشغيل"), h("dd", null, last ? `${L.runStatus[last.status]} · ${fmt.relative(last.finishedAt || last.createdAt)}` : "—"))),
         h("div", { class: "ag-actions" },
-          linkButton("مساحة العمل", href("agents", a.id), { kind: "primary" }),
+          linkButton("مساحة العمل", href("agents", "workspace", a.id), { kind: "primary" }),
           V5.conversations ? linkButton("محادثة", href("agents", "chat", a.id), { icon: "agents" }) : null,
           linkButton("طلب جديد", href("agents", "request", a.id), { icon: "play" }))));
   }
@@ -202,10 +242,10 @@
     fill(root,
       h("section", { class: "ag-hero ag-hero-compact", "aria-labelledby": "agHeroTitle" },
         h("div", null,
-          h("h2", { id: "agHeroTitle" }, "ستة موظفين، هوية واحدة"),
+          h("h2", { id: "agHeroTitle" }, "فريق متجدد، هوية واحدة"),
           h("p", null, "كل وكيل له دور ثابت وصلاحيات تُفرض في الخادم. يمر كل طلب عبر OmniRoute وفق سياسة التوجيه والميزانية."),
           h("div", { class: "ag-hero-stats" },
-            h("div", { class: "ag-hero-stat" }, h("strong", null, `${ready}/6`), h("span", null, "جاهزون الآن")),
+            h("div", { class: "ag-hero-stat" }, h("strong", null, `${ready}/${agents.length}`), h("span", null, "جاهزون الآن")),
             h("div", { class: "ag-hero-stat" }, h("strong", null, String(working)), h("span", null, "يعملون الآن")),
             h("div", { class: "ag-hero-stat" }, h("strong", null, String(runs24)), h("span", null, "تشغيلات آخر 24 ساعة"))),
           ),
@@ -218,8 +258,8 @@
   // ---------------------------------------------------------------- request composer (choose agent → project → describe → review → send)
   function composer(preset = {}, hooks = {}) {
     const cat = catalog();
-    const agents = cat?.agents || [];
-    let agentId = preset.agentId && agents.some((a) => a.id === preset.agentId) ? preset.agentId : ui.pick;
+    const agents = activeAgents();
+    let agentId = [preset.agentId, ui.pick, agents[0]?.id].find((id) => agents.some((a) => a.id === id));
     const capSel = h("select", { class: "ops-input", name: "capability", "aria-label": "نوع المهمة" });
     const projectSel = select("projectId", [["", "بدون مشروع"], ...C.projectOptions(false)], preset.projectId || "", { "aria-label": "المشروع" });
     const request = h("textarea", { class: "ops-input", name: "request", rows: 4, maxlength: 4000, placeholder: "اكتب طلبك بالعربية… مثال: لخّص حالة المشاريع المتعطّلة واقترح أولويات الأسبوع.", "aria-label": "نص الطلب" });
@@ -282,7 +322,7 @@
     const liveOf = (id) => (agentsRes() || []).find((x) => x.id === id);
     const drawPreview = (id) => {
       current = id;
-      const def = catalog()?.agents?.find((x) => x.id === id);
+      const def = C.agentDef(id);
       if (!def) return;
       const live = liveOf(id);
       preview.style.setProperty("--agent", def.color);
@@ -305,7 +345,7 @@
     if (!runs) { fill(root, O.resourceStatus(O.peek("co:runs"), "التشغيلات") || O.skeleton(4)); return; }
     const top = runs.filter((r) => !r.parentRunId && (!ui.runFilter || r.agentId === ui.runFilter || r.status === ui.runFilter));
     fill(root, panelX({ title: "سجل التشغيلات", hint: "آخر 40 تشغيلًا (خطوات سير العمل تظهر داخل تشغيلها الرئيسي).",
-      actions: select("runFilter", [["", "كل التشغيلات"], ...AGENT_IDS.map((id) => [id, C.agentDef(id)?.name || id.toUpperCase()]), ...Object.entries(L.runStatus).map(([k, v]) => [k, `الحالة: ${v}`])], ui.runFilter, { "aria-label": "تصفية التشغيلات", onchange: (e) => { ui.runFilter = e.target.value; renderRuns(); } }) },
+      actions: select("runFilter", [["", "كل التشغيلات"], ...agentIds().map((id) => [id, C.agentDef(id)?.name || id.toUpperCase()]), ...Object.entries(L.runStatus).map(([k, v]) => [k, `الحالة: ${v}`])], ui.runFilter, { "aria-label": "تصفية التشغيلات", onchange: (e) => { ui.runFilter = e.target.value; renderRuns(); } }) },
     top.length ? runList(top) : empty("لا تشغيلات مطابقة.")));
   }
 
@@ -379,7 +419,7 @@
     if (O.state.view !== "agents" || O.state.tab !== "chat") return;
     O.setHead("agents", null);
     const current = ui.chatCurrent;
-    const agents = catalog()?.agents || [];
+    const agents = activeAgents();
     const agentSel = select("agentId", agents.map((a) => [a.id, a.name]), ui.pick, { "aria-label": "الوكيل" });
     const projectSel = select("projectId", [["", "بدون مشروع"], ...C.projectOptions(false)], "", { "aria-label": "المشروع" });
     const taskSel = select("taskId", [["", "بدون مهمة"]], "", { "aria-label": "المهمة" });
@@ -402,14 +442,15 @@
       m.role === "tool" ? h("details", null, h("summary", null, `نتيجة أداة · ${m.source}`), h("pre", { dir: "auto" }, m.content)) : h("span", null, m.content), h("time", null, fmt.when(m.createdAt))) : h("article", { class: `co-chat-message co-chat-${m.role}`, "data-chat-run": m.runId || "" },
       h("div", { class: "co-chat-meta" }, C.avatar(m.role === "assistant" ? current.agentId : "owner", "sm"), h("strong", null, m.role === "owner" ? "أنت" : C.agentDef(current.agentId)?.name || current.agentId.toUpperCase()), h("time", null, fmt.when(m.createdAt)), m.state !== "complete" ? badge(m.state === "pending" ? "info" : "warn", m.state === "pending" ? "جارٍ الرد" : L.runStatus[m.state] || m.state) : null),
       h("div", { class: "co-chat-text", dir: "auto" }, m.state === "pending" ? (ui.chatPartial || "ينتظر رد الوكيل…") : m.content || (m.state === "failed" ? "تعذّر إكمال الرد. افتح سجل التشغيل لمعرفة السبب." : "")),
+      m.role === "assistant" ? actionSummary(m.actionsAr) : null,
       m.attachments?.length ? h("ul", { class: "co-chat-files" }, m.attachments.map((file) => h("li", null, h("a", { href: `/local-api/company/conversations/${current.id}/attachments/${file.id}`, download: file.filename }, file.filename), h("small", null, file.readableByAgent ? "نص متاح للوكيل" : "محفوظ للمالك؛ لا يقرأه النموذج النصي")))) : null,
-      m.role === "assistant" && m.runId ? h("div", { class: "ops-actions" },
+      m.role === "assistant" && m.runId ? h("details", { class: "co-chat-technical" }, h("summary", null, "تفاصيل الأدوات والتشغيل"), h("div", { class: "ops-actions" },
         h("button", { type: "button", class: "btn btn-secondary", onclick: () => openRun(m.runId) }, "تفاصيل التشغيل"),
         ["failed", "cancelled"].includes(m.state) ? h("button", { type: "button", class: "btn btn-secondary", onclick: async () => {
           const ownerMessage = current.messages.find((x) => x.runId === m.runId && x.role === "owner");
           if (ownerMessage?.attachments?.length) { const input = root.querySelector(".co-chat-compose textarea"); if (input) { input.value = ownerMessage.content; input.focus(); } toast("أعد رفع المرفقات قبل الإرسال", "info"); }
           else if (ownerMessage) await sendChatMessage(current, ownerMessage.content, `retry-${m.runId}`);
-        } }, current.messages.find((x) => x.runId === m.runId && x.role === "owner")?.attachments?.length ? "أعد رفع المرفقات" : "إعادة المحاولة") : null) : null)) : empty("ابدأ المحادثة برسالتك الأولى."));
+        } }, current.messages.find((x) => x.runId === m.runId && x.role === "owner")?.attachments?.length ? "أعد رفع المرفقات" : "إعادة المحاولة") : null)) : null)) : empty("ابدأ المحادثة برسالتك الأولى."));
     const fileInput = h("input", { type: "file", multiple: true, accept: ".txt,.md,.js,.mjs,.ts,.json,.py,.css,.html,.gd,.sql,.pdf,.png,.jpg,.jpeg,.webp", "aria-label": "إرفاق ملفات", onchange: async (event) => {
       const files = [...event.currentTarget.files].slice(0, Math.max(0, 3 - ui.chatAttachments.length));
       for (const file of files) {
@@ -479,7 +520,7 @@
     const scopeSel = select("scope", [["company", "الشركة"], ["project", "مشروع"], ["agent", "وكيل"]], scope, { "aria-label": "نطاق الذاكرة" });
     const refSel = select("scopeRef", [], ref, { "aria-label": "صاحب النطاق" });
     const updateRef = () => {
-      const options = scopeSel.value === "company" ? [["", "الشركة كلها"]] : scopeSel.value === "project" ? C.projectOptions(false) : AGENT_IDS.map((id) => [id, C.agentDef(id)?.name || id.toUpperCase()]);
+      const options = scopeSel.value === "company" ? [["", "الشركة كلها"]] : scopeSel.value === "project" ? C.projectOptions(false) : activeAgents().map((a) => [a.id, a.name]);
       fill(refSel, options.map(([value, label]) => h("option", { value, selected: value === ref ? true : null }, label)));
     };
     scopeSel.addEventListener("change", () => { ref = ""; updateRef(); }); updateRef();
@@ -618,12 +659,12 @@
 
   // ---------------------------------------------------------------- agent workspace
   const SUBS = [["overview", "نظرة عامة"], ["chat", "المحادثات"], ["tasks", "المهام"], ["runs", "سجل التشغيل"], ["tools", "الأدوات والصلاحيات"], ["files", "الملفات"], ["usage", "الاستخدام"], ["studio", "استوديو التصميم", "mia"], ["routing", "النموذج والتوجيه"], ["memory", "الذاكرة والسياق"], ["settings", "الإعدادات"], ["art", "الشخصية والحركة"]];
-  const subsFor = (id) => SUBS.filter(([s, , only]) => (!only || only === id) && (V5.toolEngine || !["files", "studio"].includes(s)) && (V5.conversations || s !== "chat") && (V5.workflows || s !== "usage"));
+  const subsFor = (id) => SUBS.filter(([s, , only]) => (s !== "art" || BUILTIN_IDS.includes(id)) && (!only || only === id) && (V5.toolEngine || !["files", "studio"].includes(s)) && (V5.conversations || s !== "chat") && (V5.workflows || s !== "usage"));
   function renderAgent(id) {
     if (O.editing(root, () => render())) return;
     const res = O.peek(`co:agent:${id}`);
     const a = res?.data;
-    const def = catalog()?.agents?.find((x) => x.id === id);
+    const def = C.agentDef(id);
     if (!def) { O.setHead("agents", null); fill(root, catalog() ? notice("bad", "وكيل غير معروف", "لا يوجد وكيل بهذا المعرّف.") : O.skeleton(4)); return; }
     O.setHead("agents", { tab: "workspace", title: `${def.name} — ${def.titleAr}`, subtitle: def.roleAr, back: [href("agents"), "الفريق"], hideTabs: true });
     const sub = subsFor(id).some(([s]) => s === ui.sub) ? ui.sub : "overview";
@@ -635,8 +676,8 @@
     fill(root,
       h("section", { class: "ag-ws-hero", style: `--agent:${def.color}` },
         h("div", { class: "ag-ws-stage" }, stage,
-          h("div", { class: "ag-form-toggle", role: "group", "aria-label": "هيئة الشخصية" }, ["standard", "expressive"].map((v) =>
-            h("button", { type: "button", class: "ag-form-btn", "aria-pressed": String(v === form), onclick: () => { ui.forms.set(id, v); render(); } }, FORM_AR[v])))),
+          BUILTIN_IDS.includes(id) ? h("div", { class: "ag-form-toggle", role: "group", "aria-label": "هيئة الشخصية" }, ["standard", "expressive"].map((v) =>
+            h("button", { type: "button", class: "ag-form-btn", "aria-pressed": String(v === form), onclick: () => { ui.forms.set(id, v); render(); } }, FORM_AR[v]))) : null),
         h("div", { class: "ag-ws-copy" },
           h("h2", null, bdi(def.name), h("small", null, `${def.titleAr} · 0${def.order}`)),
           h("p", null, def.summaryAr),
@@ -646,7 +687,7 @@
             a?.route?.chosen ? h("span", { class: "ops-chip" }, "النموذج الآن: ", bdi(a.route.chosen)) : null,
 ),
           h("div", { class: "ag-actions" }, V5.conversations ? linkButton(`محادثة مع ${def.name}`, href("agents", "chat", def.id), { kind: "primary", icon: "agents" }) : null, linkButton("طلب متخصص", href("agents", "request", def.id), { icon: "play" }), button("تحديث", () => loadAgent(id, true), { icon: "refresh" })))),
-      h("nav", { class: "os-tabs", "aria-label": `أقسام مساحة ${def.name}` }, subsFor(id).map(([s, text]) => h("a", { class: `os-tab${s === sub ? " os-tab-current" : ""}`, href: href("agents", id, s), "aria-current": s === sub ? "page" : null }, text))),
+      h("nav", { class: "os-tabs", "aria-label": `أقسام مساحة ${def.name}` }, subsFor(id).map(([s, text]) => h("a", { class: `os-tab${s === sub ? " os-tab-current" : ""}`, href: href("agents", "workspace", id, s), "aria-current": s === sub ? "page" : null }, text))),
       a ? tabContent(sub, a, def) : (O.resourceStatus(res, def.name) || O.skeleton(4)));
   }
   function saveAgent(id, patch, msg = "حُفظت إعدادات الوكيل", trigger = null) {
@@ -658,6 +699,7 @@
     if (tab === "overview") {
       const active = a.runs.filter((r) => ["queued", "running"].includes(r.status));
       return [
+        quickActions(def),
         active.length ? notice("info", "تشغيل جارٍ", `${active.length} تشغيل في الطابور أو قيد التنفيذ. الصفحة تتحدّث تلقائيًا كل 3 ثوانٍ أثناء التشغيل.`) : null,
         a.availability === "no-eligible-model" ? notice("warn", "لا نموذج مؤهل الآن", "كل مرشحي سياسة التوجيه مستبعدون (حصة نافدة أو فئة غير مسموحة أو لا اتصال). راجع «النموذج والتوجيه».") : null,
         a.availability === "router-offline" ? notice("bad", "OmniRoute غير متصل", "لا يمكن تنفيذ أي استدلال حتى يعود الاتصال.") : null,
@@ -820,11 +862,12 @@
   }
 
   O.registerView({
-    id: "agents", order: 40, icon: "agents", ar: "الوكلاء", subtitle: "ستة موظفين ذكاء اصطناعي بأدوار ثابتة، يعملون عبر OmniRoute وتحت صلاحيات يفرضها الخادم.",
+    id: "agents", order: 40, icon: "agents", ar: "الوكلاء", subtitle: "فريق وكلاء بأدوار متخصصة، يعمل عبر OmniRoute وتحت صلاحيات يفرضها الخادم.",
     tabs: [["team", "الفريق"], ...(V5.workflows ? [["operations", "غرفة العمليات"]] : []), ...(V5.conversations ? [["chat", "المحادثات"]] : []), ...(V5.toolEngine ? [["tools", "الأدوات والمهارات"]] : []), ...(V5.knowledge ? [["memory", "الذاكرة والمعرفة"]] : []), ["runs", "سجل التشغيل"], ["request", "طلب متخصص", { hidden: true }], ["workspace", "مساحة الوكيل", { hidden: true }]],
     defaultTab: "team",
     resolve(rest) {
-      if (AGENT_IDS.includes(rest[0])) return { tab: "workspace", rest };
+      if (rest[0] === "workspace") return { tab: "workspace", rest: rest.slice(1) };
+      if (BUILTIN_IDS.includes(rest[0]) || (rest[0] && !["team", "request", "runs", "chat", "memory", "knowledge", "operations", "tools"].includes(rest[0]))) return { tab: "workspace", rest };
       // «المعرفة» is part of «الذاكرة والمعرفة»; its old route still lands there.
       if (V5.knowledge && rest[0] === "knowledge") return { tab: "memory", rest: ["knowledge"] };
       const available = ["team", "request", "runs", ...(V5.workflows ? ["operations"] : []), ...(V5.conversations ? ["chat"] : []), ...(V5.toolEngine ? ["tools"] : []), ...(V5.knowledge ? ["memory"] : [])];
@@ -840,7 +883,7 @@
       if (tab === "chat") {
         C.co.tasks();
         const target = rest[0];
-        if (AGENT_IDS.includes(target)) { ui.pick = target; ui.chatCurrent = null; loadChats(null, { background: true }); }
+        if (agentIds().includes(target) || (target && !target.startsWith("conv_"))) { ui.pick = target; ui.chatCurrent = null; loadChats(null, { background: true }); }
         else loadChats(target || null, { background: true });
       } else if (ui.chatStream) { ui.chatStream.source.close(); ui.chatStream = null; }
       if (tab === "operations") window.AbudOperations?.reload(); else window.AbudOperations?.stop();
@@ -855,6 +898,16 @@
   O.on("co:runs", () => { if (O.state.tab !== "request") render(); });
   O.on("co:catalog", render);
   O.on("co:projects", () => { if (O.state.view === "agents" && O.state.tab !== "request") render(); });
-  for (const id of AGENT_IDS) O.on(`co:agent:${id}`, () => { if (ui.agent === id) render(); });
+  const watchedAgents = new Set();
+  function watchAgentResources() {
+    for (const id of [...BUILTIN_IDS, ...agentIds()]) {
+      if (watchedAgents.has(id)) continue;
+      watchedAgents.add(id);
+      O.on(`co:agent:${id}`, () => { if (ui.agent === id) render(); });
+    }
+  }
+  O.on("co:catalog", watchAgentResources);
+  O.on("co:agents", watchAgentResources);
+  watchAgentResources();
   window.AbudWorkforce = { openRun, renderMarkdown };
 })();

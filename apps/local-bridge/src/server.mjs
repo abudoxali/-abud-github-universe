@@ -392,7 +392,7 @@ export function createServer({
   const route = (method, pattern, handler) => routes.push({ method, pattern: new RegExp(`^/local-api/company${pattern}$`), handler });
 
   route("GET", "/summary", () => summary());
-  route("GET", "/catalog", () => runtime.catalogView());
+  route("GET", "/catalog", () => ({ ...runtime.catalogView(), allAgents: company.listAgents({ activeOnly: false }) }));
   route("GET", "/projects", () => ({ projects: company.listProjects() }));
   route("GET", "/projects/([^/]+)/github", ({ params }) => github.read(company.getProject(params[0]).github));
   route("POST", "/projects", ({ body }) => company.createProject(body, owner));
@@ -413,6 +413,7 @@ export function createServer({
   route("DELETE", "/auto-policies", ({ query, body }) => runtime.autoPolicies.remove(query.get("id") || body?.id, owner));
   route("DELETE", "/auto-policies/([^/]+)", ({ params }) => runtime.autoPolicies.remove(params[0], owner));
   route("GET", "/tools/select-preview", ({ query }) => runtime.toolSelectPreview({ agentId: query.get("agentId"), request: query.get("request") || "", projectId: query.get("projectId") || null }));
+  route("GET", "/agent-registry", () => ({ agents: company.registry.list({ activeOnly: false }) }));
   route("GET", "/agent-templates", () => ({ templates: company.registry.listTemplates() }));
   route("GET", "/agent-templates/([^/]+)", ({ params }) => company.registry.getTemplate(params[0]));
   route("POST", "/agents", ({ body }) => company.registry.createFromTemplate(body));

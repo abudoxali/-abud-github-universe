@@ -653,8 +653,8 @@
     const q = query.trim().toLowerCase();
     if (!q) return [];
     const groups = [];
-    const agents = (peek("co:catalog")?.data?.agents || []).filter((a) => `${a.name} ${a.titleAr} ${a.roleAr}`.toLowerCase().includes(q))
-      .map((a) => ({ text: `${a.name} — ${a.titleAr}`, meta: "وكيل", href: href("agents", a.id), color: a.color }));
+    const agents = (window.AbudCompany?.agentsDef() || []).filter((a) => `${a.name} ${a.titleAr} ${a.roleAr}`.toLowerCase().includes(q))
+      .map((a) => ({ text: `${a.name} — ${a.titleAr}`, meta: a.active === false || a.active === 0 ? "وكيل غير نشط" : "وكيل", href: href("agents", a.id), color: a.color }));
     const projects = (peek("co:projects")?.data?.projects || []).filter((p) => `${p.name} ${p.github || ""}`.toLowerCase().includes(q))
       .slice(0, SEARCH_LIMIT).map((p) => ({ text: p.name, meta: p.github || "مشروع", href: href("projects", "p", p.id) }));
     const tasks = (peek("co:tasks")?.data?.tasks || []).filter((t) => t.title.toLowerCase().includes(q)).slice(0, SEARCH_LIMIT)
@@ -727,7 +727,7 @@
     const createMenu = h("div", { class: "os-menu", role: "menu", hidden: true },
       menuItem("work", "مهمة جديدة", "عنوان فقط، والباقي اختياري", () => window.AbudCompany?.openQuickTask()),
       menuItem("projects", "مشروع جديد", "بهوية GitHub ثابتة عند توفرها", () => window.AbudCompany?.openNewProject()),
-      menuItem("agents", "طلب لوكيل", "إسناد عمل لأحد الوكلاء الستة", () => go("agents", "request")));
+      menuItem("agents", "طلب لوكيل", "إسناد عمل لأحد الوكلاء النشطين", () => go("agents", "request")));
     const createBtn = h("button", { type: "button", class: "btn btn-primary os-create", "aria-haspopup": "menu" }, icon("plus", 18), h("span", null, "إنشاء"));
 
     shell.bellCount = h("span", { class: "os-bell-count", hidden: true });
