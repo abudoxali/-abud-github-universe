@@ -774,6 +774,84 @@ export const MIGRATIONS = [
       CREATE INDEX agent_skills_agent_status ON agent_skills(agent_id, status, updated_at DESC);
       CREATE INDEX agent_skills_status ON agent_skills(status);
     `
+  },
+  {
+    version: 15,
+    name: "v6-meetings",
+    sql: `
+      CREATE TABLE meetings (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        agenda TEXT NOT NULL DEFAULT '[]' CHECK (CASE WHEN json_valid(agenda) THEN json_type(agenda) = 'array' ELSE 0 END),
+        mode TEXT NOT NULL DEFAULT 'text' CHECK (mode IN ('text','voice','hybrid')),
+        chair_agent TEXT NOT NULL DEFAULT 'ori' REFERENCES agents(id) ON DELETE RESTRICT,
+        status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','active','paused','ending','ended')),
+        scheduled_at TEXT,
+        started_at TEXT,
+        ended_at TEXT,
+        budget TEXT NOT NULL DEFAULT '{"maxRounds":10,"maxTurns":30,"maxTokens":100000}' CHECK (CASE WHEN json_valid(budget) THEN json_type(budget) = 'object' ELSE 0 END),
+        usage TEXT NOT NULL DEFAULT '{"rounds":0,"turns":0,"tokens":0}' CHECK (CASE WHEN json_valid(usage) THEN json_type(usage) = 'object' ELSE 0 END),
+        summary TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX meetings_status ON meetings(status, updated_at DESC);
+      CREATE INDEX meetings_project ON meetings(project_id, updated_at DESC);
+
+      CREATE TABLE meeting_participants (
+        meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('chair','member')),
+        joined_at TEXT NOT NULL,
+        left_at TEXT,
+        turns INTEGER NOT NULL DEFAULT 0 CHECK (typeof(turns) = 'integer' AND turns >= 0),
+        tokens INTEGER NOT NULL DEFAULT 0 CHECK (typeof(tokens) = 'integer' AND tokens >= 0),
+        PRIMARY KEY (meeting_id, agent_id)
+      );
+      CREATE INDEX meeting_participants_agent ON meeting_participants(agent_id, meeting_id);
+
+      CREATE TABLE meeting_turns (
+        id TEXT PRIMARY KEY,
+        meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL CHECK (seq >= 1),
+        speaker TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'statement' CHECK (kind IN ('statement','question','answer','summary','system')),
+        content TEXT NOT NULL,
+        run_id TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+        addressed_to TEXT,
+        audio_ref TEXT,
+        status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('queued','in-flight','completed','failed','interrupted')),
+        prompt TEXT,
+        client_message_id TEXT,
+        token_count INTEGER NOT NULL DEFAULT 0 CHECK (token_count >= 0),
+        latency_ms INTEGER NOT NULL DEFAULT 0 CHECK (latency_ms >= 0),
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX meeting_turns_client_msg ON meeting_turns(meeting_id, client_message_id) WHERE client_message_id IS NOT NULL;
+      CREATE UNIQUE INDEX meeting_turns_seq ON meeting_turns(meeting_id, seq);
+      CREATE INDEX meeting_turns_run ON meeting_turns(run_id);
+
+      CREATE TABLE meeting_outcomes (
+        id TEXT PRIMARY KEY,
+        meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('decision','action_item','open_question','disagreement','follow_up')),
+        content TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed','confirmed','rejected')),
+        decided_at TEXT,
+        responsible_agent TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        due_date TEXT,
+        task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        memory_id TEXT REFERENCES memory_notes(id) ON DELETE SET NULL,
+        evidence TEXT NOT NULL DEFAULT '[]' CHECK (CASE WHEN json_valid(evidence) THEN json_type(evidence) = 'array' ELSE 0 END),
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX meeting_outcomes_meeting ON meeting_outcomes(meeting_id, type);
+      CREATE INDEX meeting_outcomes_task ON meeting_outcomes(task_id);
+
+      ALTER TABLE agent_runs ADD COLUMN meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL;
+      CREATE INDEX agent_runs_meeting ON agent_runs(meeting_id, created_at);
+    `
   }
 ];
 
@@ -834,7 +912,7 @@ export function openDatabase(path) {
   return wrap(db, path);
 }
 
-const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets", "conversations", "knowledge_documents", "tool_executions", "artifacts", "workflows", "learning_proposals", "agent_skills"];
+const RESTORE_TABLES = ["projects", "tasks", "agent_runs", "activity_events", "notifications", "usage_events", "memory_notes", "budgets", "conversations", "knowledge_documents", "tool_executions", "artifacts", "workflows", "learning_proposals", "agent_skills", "meetings", "meeting_participants", "meeting_turns", "meeting_outcomes"];
 const backupHealth = new Map();
 
 function wrap(db, path) {

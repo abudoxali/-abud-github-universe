@@ -600,7 +600,7 @@ export function createCompany({ db, now = () => new Date() }) {
 
   // ---------------- runs + usage
   const runRow = (row) => row && ({
-    id: row.id, agentId: row.agent_id, taskId: row.task_id, projectId: row.project_id, conversationId: row.conversation_id, workflowId: row.workflow_id, parentRunId: row.parent_run_id,
+    id: row.id, agentId: row.agent_id, taskId: row.task_id, projectId: row.project_id, conversationId: row.conversation_id, meetingId: row.meeting_id ?? null, workflowId: row.workflow_id, parentRunId: row.parent_run_id,
     capability: row.capability, domain: row.domain, mode: row.mode, priority: row.priority, request: row.request, status: row.status,
     requestedModel: row.requested_model, effectiveModel: row.effective_model, provider: row.provider, connectionId: row.connection_id ? row.connection_id.slice(0, 8) : null,
     routing: parseJson(row.routing, null), promptTokens: row.prompt_tokens, completionTokens: row.completion_tokens, reasoningTokens: row.reasoning_tokens,

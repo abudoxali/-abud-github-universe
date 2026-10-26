@@ -19,6 +19,7 @@ import { createRuntime } from "./runtime.mjs";
 import { createConversations } from "./conversations.mjs";
 import { createKnowledge } from "./knowledge.mjs";
 import { createLearning } from "./learning.mjs";
+import { createMeetings } from "./meetings.mjs";
 import { createArtifacts, createTemplates } from "./artifacts.mjs";
 import { createTelemetry } from "./telemetry.mjs";
 import { MCP_TOOLS } from "./mcp-server.mjs";
@@ -243,11 +244,15 @@ export function createServer({
   runtime.setLearning(learning);
   const conversations = createConversations({ company, runtime, learning });
   runtime.setConversations(conversations);
+  const meetings = createMeetings({ company, runtime });
+  runtime.setMeetings(meetings);
   runtime.setKnowledge(knowledge);
   vps.setEnqueue((input, actor) => runtime.enqueue(input, actor));
   const operations = createOperations({ company, getOverview: (force) => overview(force), log });
   const interrupted = runtime.recoverInterrupted();
   if (interrupted) log(`marked ${interrupted} interrupted run(s) as failed`);
+  const pausedMeetings = meetings.recover();
+  if (pausedMeetings) log(`paused ${pausedMeetings} meeting(s) interrupted by a restart`);
   if (background) { operations.start(); setImmediate(() => runtime.pump()); vpsReady.then(() => vps.start()); }
   const pruneTelemetry = () => { try { telemetry.prune(company.settings().telemetryRetentionDays); conversations.purgeAttachments(); } catch (_) { /* best effort */ } };
   const telemetryTimer = background ? setInterval(pruneTelemetry, 6 * 3_600_000) : null;
@@ -443,6 +448,12 @@ export function createServer({
   route("POST", "/runs/([^/]+)/cancel", ({ params }) => runtime.cancel(params[0], owner));
   route("GET", "/conversations", ({ query }) => ({ conversations: conversations.list({ agentId: query.get("agentId"), projectId: query.get("projectId"), state: query.get("state") || "active", before: query.get("before"), limit: query.get("limit"), q: query.get("q") }) }));
   route("POST", "/conversations", ({ body }) => conversations.create(body));
+  route("GET", "/meetings", ({ query }) => ({ meetings: meetings.list({ projectId: query.get("projectId"), status: query.get("status"), limit: query.get("limit") }) }));
+  route("POST", "/meetings", ({ body }) => meetings.create(body));
+  route("GET", "/meetings/([^/]+)", ({ params, query }) => meetings.get(params[0], { sinceSeq: query.get("since") }));
+  route("POST", "/meetings/([^/]+)/(start|resume|pause|interrupt|end)", ({ params }) => meetings[params[1]](params[0]));
+  route("POST", "/meetings/([^/]+)/messages", ({ params, body }) => meetings.say(params[0], body));
+  route("POST", "/meetings/([^/]+)/outcomes/([^/]+)/(confirm|reject)", ({ params }) => meetings.decide(params[0], params[1], params[2], { type: "owner", id: "owner" }));
   route("GET", "/conversations/([^/]+)", ({ params }) => ({ ...conversations.get(params[0]), messages: conversations.messages(params[0]) }));
   route("PATCH", "/conversations/([^/]+)", ({ params, body }) => conversations.update(params[0], body));
   route("DELETE", "/conversations/([^/]+)", ({ params }) => conversations.update(params[0], { state: "deleted" }));
@@ -664,6 +675,13 @@ export function createServer({
           const file = conversations.getAttachment(decodeURIComponent(download[1]), decodeURIComponent(download[2]));
           response.writeHead(200, { "Content-Type": file.mime, "Content-Length": file.size_bytes, "Content-Disposition": `attachment; filename="attachment"; filename*=UTF-8''${encodeURIComponent(file.filename)}`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cross-Origin-Resource-Policy": "same-origin" });
           response.end(file.data);
+          return;
+        }
+        const meetingExport = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/meetings\/([^/]+)\/export$/);
+        if (meetingExport) {
+          const file = meetings.exportMarkdown(decodeURIComponent(meetingExport[1]));
+          response.writeHead(200, { "Content-Type": file.mime, "Content-Disposition": `attachment; filename="meeting"; filename*=UTF-8''${encodeURIComponent(file.filename)}`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+          response.end(file.body);
           return;
         }
         const exportMatch = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/conversations\/([^/]+)\/export$/);
