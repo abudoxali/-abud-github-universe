@@ -1,14 +1,44 @@
 # ABUD FUN Company OS — STATUS
 
-## V6 — Cognitive Workforce & Voice Operations — complete, owner acceptance pending (2026-10-26)
+## V6 — Cognitive Workforce & Voice Operations — LIVE on the daily install since 2026-10-26 06:05 UTC (owner-authorized cutover)
 
-**Classification: V6 RELEASE CANDIDATE (local, not cut over).** All five checkpoints and every item in the mission's
-feature list are implemented and pass automated tests, plus a live check against the real OmniRoute on synthetic data.
-The remaining items need the owner and are listed under *Owner steps*.
-Branch `v6/cognitive-workforce` in the worktree `.claude/worktrees/v6`, based on V5 `a7b38d5` (tag
-`v5-local-stable`). Local commits from `b3f23a9` onward (the last one adds routines, folder scopes and the performance tab), about +9,000 lines. **Nothing was pushed,
-merged or cut over.** The daily Bridge (:4172) still runs V5 from the main checkout, and `local/company.db` was not
-modified.
+**Classification: V6 STABLE LOCAL RELEASE — cut over; the owner's listening test of the voices and a real Windows sign-in
+are the only checks still pending.** All five checkpoints and every item in the mission's feature list are implemented,
+tested, and now running on the owner's daily Bridge. Developed on `v6/cognitive-workforce` (worktree
+`.claude/worktrees/v6`), based on V5 `a7b38d5` (tag `v5-local-stable`), about +9,000 lines. **Nothing was pushed and
+`main` was not touched.**
+
+### Cutover to the daily install (2026-10-26, owner said «انقل النسخة اليومية لـ V6 دلوقتي»)
+1. **Fresh backup first:** `local/backups/company-pre-v6-cutover-2026-10-26T06-04-39Z.db` (VACUUM INTO of the live DB):
+   integrity ok, 0 FK violations, schema 11, every table's row count identical to the live DB at that moment.
+2. **Merge:** `git merge --ff-only v6/cognitive-workforce` into the daily checkout's branch `codex/v5-agent-intelligence`
+   (fast-forward from `a7b38d5` to `93cf536`; no merge commit, no conflicts). `main` still at `0cfafc5`; nothing pushed.
+   Before restarting, `npm test` in the daily checkout itself: **230/230**, `npm run check` ok.
+3. **Restart:** `ABUD-OS.ps1 restart` → clean stop 06:05:39Z, V6 healthy 06:05:45Z (launcher log: `started … PID 24488`).
+   The Bridge migrated the store 11 → 16 itself after taking its own verified pre-migration copy
+   (`company-2026-10-26T06-05-45-677Z-6115da06d9a0.db`) and raised the notification «تمت ترقية قاعدة البيانات إلى الإصدار 16».
+4. **After-state checks (read from the live store and Bridge):**
+   - integrity ok, 0 FK violations, schema 16 (`v6-routines`), **no table lost a row**. Differences from before: +2 activity
+     events (migration, restart), +1 notification, +5 schema_migrations, +3 vps_metrics and +4 vps_observations (the VPS monitor
+     kept running), plus the new V6 tables. Six built-in agents intact (`builtin=1`, active), 19 tasks (all `owner`), the V5
+     acceptance conversation, 3 approvals (1 approved, 2 rejected), 40 projects, 6 artifacts, memory and knowledge unchanged.
+   - apiVersion 6; capabilities registry/meetings/learning/voice/routines/context/performance all true; one Bridge process and one
+     listener on :4172; the sign-in supervisor (alive 15+ hours) adopted the restart (`supervisorRestarts: 1`, `ownerStoppedAt`
+     older than the new session so crash recovery stays armed); bridge error log empty.
+   - All six employees report `available` (live route evaluation). The seven routines exist and are **off**. The local voice engine
+     is `ready` (TTS on CUDA). The folder scope shows the existing workspace root «GitHub» with no refusal.
+   - Every new UI file is served by the daily Bridge (HTTP 200). `ABUD-OS.ps1` differs from V5 by one comment line only.
+5. **Live smoke on the real install:** one request «NEX، راجع استهلاكنا وحالة النماذج (فحص تشغيل بعد نقل V6)» was routed to NEX by
+   name and `succeeded` on `gemini/gemini-3-flash-preview` (the owner's routing policy). Tools `telemetry.providerCompare` and
+   `usage.read` were selected automatically, 4,810 tokens, cost recorded as unknown (not $0). It left one conversation in the history.
+6. **The owner's own meeting:** a meeting titled «1» (voice, chair ORI, active) was created from the owner's session at 06:08:24Z,
+   after the cutover, while the owner was trying V6. It was left untouched, and no test of mine was run against the voice engine
+   while it was in use.
+7. **Rollback:** stop the Bridge, restore `company-pre-v6-cutover-2026-10-26T06-04-39Z.db` over `local/company.db` (V5 code does not
+   open a schema-16 store), `git switch --detach v5-local-stable`, `ABUD-OS.ps1 start`. Take a fresh backup first if V6 has created
+   data worth keeping.
+8. **Not verified:** a real Windows sign-out/sign-in (the supervisor and launcher are unchanged and alive, so it is expected to
+   work), and the owner's listening test of the six voices.
 
 ### Data safety
 - Pre-V6 backup: `local/backups/company-pre-v6-2026-10-26T00-56-40Z.db` (VACUUM INTO, integrity ok, 0 FK violations).
@@ -37,7 +67,7 @@ modified.
 | 5 | Context boundaries (§13): protected locations never authorizable, personal folders need explicit confirmation, owner-managed scopes, access history, measured outbound inference, data-flow map | TESTED WITH FIXTURES + browser | `context.test.mjs` (6), `tests/v6-ops.mjs` |
 | 5 | الأداء tab per agent from the persisted accounting report; meeting quick actions open the Meeting Center preselected | TESTED WITH FIXTURES (browser) | `tests/v6-ops.mjs` |
 | 5 | Live run against the real local OmniRoute on a temporary DB and synthetic repositories | LIVE VERIFIED (synthetic data) | `tests/v6-live.mjs` 6/6, see below |
-| 5 | The same flows on the owner's daily install | OWNER ACCEPTANCE PENDING | requires cutover |
+| 5 | The same flows on the owner's daily install | LIVE VERIFIED (one NEX request, migration, health) | cutover section above |
 | 5 | Windows sign-in autostart with V6 | OWNER ACCEPTANCE PENDING | launcher accepts apiVersion 6; not run |
 
 ### Tests (fresh, 2026-10-26)
@@ -104,8 +134,8 @@ unfinished state is preserved at `refs/backup/v6-workers-wip`.
 ### Owner steps (cannot be done from a session)
 1. Listen to the six voices and approve or replace them. Samples: `%LOCALAPPDATA%\ABUD-FUN-OS\voice\tmp\samples\`.
 2. Speak the Egyptian test sentences into a conversation (🎙 تحدّث) and check the transcripts.
-3. Approve the cutover: back up the DB again, merge the V6 branch into the daily checkout, restart through
-   `ABUD-OS.ps1 restart`, then confirm a sign-in autostart.
+3. Sign out and back in to Windows once and confirm the Bridge comes up on its own (`ABUD-OS.ps1 status`).
+4. Decide which routines to switch on in العمل ← الروتين (all are off).
 
 ### Remaining limitations (genuine)
 - Hands-free continuous listening is intentionally not implemented. Push-to-talk only.
