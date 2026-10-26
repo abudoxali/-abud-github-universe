@@ -20,6 +20,7 @@ import { createConversations } from "./conversations.mjs";
 import { createKnowledge } from "./knowledge.mjs";
 import { createLearning } from "./learning.mjs";
 import { createMeetings } from "./meetings.mjs";
+import { createVoice } from "./voice.mjs";
 import { createArtifacts, createTemplates } from "./artifacts.mjs";
 import { createTelemetry } from "./telemetry.mjs";
 import { MCP_TOOLS } from "./mcp-server.mjs";
@@ -147,6 +148,7 @@ export function createServer({
   routerClient = createRouterClient({ env }),
   githubReader = createGitHubReader(),
   agentOptions = {},
+  voiceOptions = {},
   capabilityOptions = {},
   background = false,
   instance = null,
@@ -246,6 +248,7 @@ export function createServer({
   runtime.setConversations(conversations);
   const meetings = createMeetings({ company, runtime });
   runtime.setMeetings(meetings);
+  const voice = createVoice({ env, log, ...voiceOptions });
   runtime.setKnowledge(knowledge);
   vps.setEnqueue((input, actor) => runtime.enqueue(input, actor));
   const operations = createOperations({ company, getOverview: (force) => overview(force), log });
@@ -448,6 +451,12 @@ export function createServer({
   route("POST", "/runs/([^/]+)/cancel", ({ params }) => runtime.cancel(params[0], owner));
   route("GET", "/conversations", ({ query }) => ({ conversations: conversations.list({ agentId: query.get("agentId"), projectId: query.get("projectId"), state: query.get("state") || "active", before: query.get("before"), limit: query.get("limit"), q: query.get("q") }) }));
   route("POST", "/conversations", ({ body }) => conversations.create(body));
+  route("GET", "/voice/status", () => voice.status());
+  route("POST", "/voice/start", async () => (await voice.ensure(), voice.status()));
+  route("POST", "/voice/warmup", () => voice.warmup());
+  route("POST", "/voice/unload", () => voice.unload());
+  route("POST", "/voice/stop", () => voice.stop());
+  route("POST", "/voice/stt", ({ body }) => voice.transcribe(body));
   route("GET", "/meetings", ({ query }) => ({ meetings: meetings.list({ projectId: query.get("projectId"), status: query.get("status"), limit: query.get("limit") }) }));
   route("POST", "/meetings", ({ body }) => meetings.create(body));
   route("GET", "/meetings/([^/]+)", ({ params, query }) => meetings.get(params[0], { sinceSeq: query.get("since") }));
@@ -677,6 +686,15 @@ export function createServer({
           response.end(file.data);
           return;
         }
+        if (request.method === "POST" && url.pathname === "/local-api/company/voice/tts") {
+          // The agent's configured identity picks the voice server-side; the client only names the agent.
+          const body = await readJson(request);
+          const agent = company.agentById(String(body.agentId || "")) || (() => { throw new HttpError(404, "not-found", "الوكيل غير موجود"); })();
+          const audio = await voice.speak({ voice: agent.id, text: body.text });
+          response.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": audio.length, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+          response.end(audio);
+          return;
+        }
         const meetingExport = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/meetings\/([^/]+)\/export$/);
         if (meetingExport) {
           const file = meetings.exportMarkdown(decodeURIComponent(meetingExport[1]));
@@ -707,7 +725,8 @@ export function createServer({
         // Larger bodies only where the payload is a file: attachments, an exported canvas image, a template.
         const bodyLimit = /^\/local-api\/company\/conversations\/[^/]+\/attachments$/.test(url.pathname) ? 1_500_000
           : url.pathname === "/local-api/company/capabilities/design.saveCanvas/execute" ? 6_500_000
-          : /^\/local-api\/company\/templates(?:\/[^/]+)?$/.test(url.pathname) ? 600_000 : MAX_JSON_BODY;
+          : /^\/local-api\/company\/templates(?:\/[^/]+)?$/.test(url.pathname) ? 600_000
+          : url.pathname === "/local-api/company/voice/stt" ? Math.ceil(voice.maxAudioBytes * 4 / 3) + 4096 : MAX_JSON_BODY;
         const body = ["POST", "PATCH"].includes(request.method) ? await readJson(request, bodyLimit) : null;
         const result = await match.handler({ params, body: body ?? {}, query: url.searchParams });
         return send(response, request.method === "POST" && !/\/(decide|rollback|cancel|ack|sync|snapshot|backup|verify|browser|approve|reject|execute|probe|diagnostics|logs|action|retry|resolve|evaluate|activate)$/.test(url.pathname) ? 201 : 200, result);
@@ -781,7 +800,7 @@ export function createServer({
       return send(response, 500, { error: "local-bridge-failed", message: "خطأ داخلي في الـ Bridge" });
     }
   });
-  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); operations.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
+  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); voice.stop(); operations.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
   server.company = company;
   server.vps = vps;
   server.vpsReady = vpsReady;
