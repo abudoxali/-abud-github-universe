@@ -130,6 +130,20 @@ test("Scenario G: six-agent meeting is sequential, routes by address, interrupts
   } finally { await env.close(); }
 });
 
+test("a simple live meeting hearing check receives one concise reply", async () => {
+  const env = await setup();
+  try {
+    const meeting = env.meetings.create({ title: "مكالمة الفريق", participants: ["ori", "nex", "luna"], mode: "voice" });
+    env.meetings.start(meeting.id);
+    const before = env.stub.chats.length;
+    await env.meetings.say(meeting.id, { content: "سمعني؟" });
+    const view = await env.idle(meeting.id);
+    const replies = view.turns.filter((turn) => turn.kind === "answer");
+    assert.deepEqual(replies.map((turn) => [turn.speaker, turn.content]), [["ori", "أيوه، سامعك. اتفضل."]]);
+    assert.equal(env.stub.chats.length, before);
+  } finally { await env.close(); }
+});
+
 test("addressing a non-participant is refused; a registry-only 7th agent participates when addressed", async () => {
   const env = await setup();
   try {

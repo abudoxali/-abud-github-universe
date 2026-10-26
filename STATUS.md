@@ -1,5 +1,14 @@
 # ABUD FUN Company OS — STATUS
 
+## Current voice update — 2026-10-26
+
+- Replaced the former MediaRecorder/Whisper/F5 voice worker with browser streaming recognition and a persistent local KemeTone Egyptian voice. The old worker, supervisor, endpoints, tests, and setup files were removed from the checkout. The historic V6 notes below describe the earlier release and are no longer the current voice implementation.
+- Short checks such as «سمعني؟» now get one direct answer from the meeting chair without a router call or specialist turn. Ordinary short conversation uses a compact prompt; longer work requests retain the normal evidence and permission paths.
+- The daily Bridge was restarted and returned HTTP 200 on health, 404 for the retired voice endpoint, and 200 for local Egyptian TTS. The local worker took about 22 seconds to warm and around 0.4 seconds to synthesize a later short reply through HTTP. The browser begins warming in the background and can use its `ar-EG` voice before the model is ready.
+- Verified: 230/230 Bridge tests, 14/14 meeting browser checks, and a synthetic live microphone event produced one concise answer and one local audio request. A real microphone/listening test and end-to-end latency measurement with the owner's voice remain open.
+- Follow-up (same day, after a Codex usage limit): the light-chat shortcut skipped tool selection for any short message, which broke two `runtime-tool-selection` tests (228/230). It now stays light only when no granted tool matches the request, so short task requests keep their audited tool path; 230/230 again. `tests/live-voice.mjs` now waits for the background `/live-audio/warm` response (the dev Bridge needs `ABUD_LIVE_VOICE_HOME` to exercise local TTS) and passes. The daily Bridge was restarted again with no running/queued runs and no active meeting; health 200, retired voice endpoint 404, no browser console errors.
+- Measured via OmniRoute for context: a short Arabic reply took about 5 s on `agy/gemini-3.8-flash-high` and about 37 s on `auto/glm`; recent app chat runs on `gemini/gemini-3.1-flash-lite` took 1.4–10 s (one 21 s outlier). Remaining latency in a live call is therefore dominated by the model the routing policy picks, not by the voice pipeline.
+
 ## V6 — Cognitive Workforce & Voice Operations — LIVE on the daily install since 2026-10-26 06:05 UTC (owner-authorized cutover)
 
 **Classification: V6 STABLE LOCAL RELEASE — cut over; the owner's listening test of the voices and a real Windows sign-in
@@ -7,6 +16,18 @@ are the only checks still pending.** All five checkpoints and every item in the 
 tested, and now running on the owner's daily Bridge. Developed on `v6/cognitive-workforce` (worktree
 `.claude/worktrees/v6`), based on V5 `a7b38d5` (tag `v5-local-stable`), about +9,000 lines. **Nothing was pushed and
 `main` was not touched.**
+
+### Agent Intelligence Pack — local implementation update (2026-10-26)
+- Reviewed `ABUD_FUN_AGENT_INTELLIGENCE_PACK_v1.md` from the owner's Downloads folder as an implementation specification, not an authority source for runtime permissions or current facts.
+- Reused the V6 registry, scoped memory/learning, project knowledge retrieval, usage accounting, routing policies, and server-enforced permissions. Added `src/intelligence-pack.mjs` and `scripts/import-agent-intelligence.mjs` to extract only owner/company profile, working style, communications, and engineering guidance into existing scoped memory. The full source stays in Downloads; implementation specs, dynamic infrastructure snapshots, and unverified provider details are excluded. Profile facts are retrieved by relevance; standing preferences and procedures remain available to agents.
+- Added a shared agent system-prompt layer for owner communication style, live-source/freshness expectations, evidence-vs-inference distinctions, reuse of the current project registry, cost discipline, honest verification reporting, and high-impact approval boundaries. Real per-agent responsibilities remain sourced from `catalog.mjs`; imported context does not grant tools.
+- Imported six source-attributed records into the private local store after creating and verifying `local/backups/company-2026-10-26T07-34-36-845Z-b10684df1670.db`. No schema migration or production action was performed.
+- Verification: `node --test tests/intelligence-pack.test.mjs tests/runtime.test.mjs tests/runtime-tool-selection.test.mjs tests/agents-policy.test.mjs` from `apps/local-bridge` — **35/35 passed**; `npm run check` and `git diff --check` passed. The live store reports six imported records, and an owner-profile query returned the relevant record. The daily Bridge restarted with zero running/queued runs and no active meetings; health reports `ok`, API v6, and the side browser reloaded.
+
+### Interactive project map — local UX refresh (2026-10-26)
+- Reworked `index.html`, `app.js`, `project-map.js`, `project-map.css`, and `decisions.js`: clearer Arabic/English view controls, responsive project groups, keyboard and search affordances, auto-fit on open/resize, category filters that zoom to the chosen group, and a project inspector shown only after selection. Removed decorative category lines that suggested repository dependencies; curated relationship lines keep their correct scale.
+- The mobile map becomes a scrollable group directory; desktop map remains pannable and zoomable. Existing List and Board views remain available.
+- Verified in the local browser: group filter focuses its cluster, selecting a node opens its inspector without the global project drawer, and mobile layout uses static readable cards. `node tests/smoke.mjs`, JavaScript syntax checks, and `git diff --check` passed. `node tests/ops.mjs` passed project checks but timed out at the later router-offline HQ assertion (line 303), outside the map path.
 
 ### Cutover to the daily install (2026-10-26, owner said «انقل النسخة اليومية لـ V6 دلوقتي»)
 1. **Fresh backup first:** `local/backups/company-pre-v6-cutover-2026-10-26T06-04-39Z.db` (VACUUM INTO of the live DB):

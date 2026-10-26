@@ -40,7 +40,7 @@
       heroDesc: "مرجع تفاعلي لمشاريع GitHub العامة فقط: اللي شغّال، اللي خلص، اللي محتاج قرار، وإيه الخطوة الصح بعد كده. المشاريع الخاصة مستبعدة.",
       exploreMap: "استكشف الخريطة ↗", browseRepo: "تصفح المستودعات ←",
       focusTitle: "احنا مركزين على إيه دلوقتي؟", focusSub: "مش كل نشاط على GitHub معناه تقدم. هنا الأولوية حسب القيمة الفعلية.",
-      mapTitle: "خريطة المشاريع التفاعلية", mapSub: "حرّك الخريطة، كبّر، وافتح أي Repo لمعرفة موقعه والخطوة التالية.",
+      mapTitle: "خريطة المشاريع التفاعلية", mapSub: "اختار مجموعة أو مشروعًا لتشوف تفاصيله والخطوة التالية بوضوح.",
       mapMode: "SITEMAP MODE", fit: "احتواء", reset: "إعادة", mapHint: "اسحب للتحريك · استخدم +/− للتكبير · اضغط على أي مشروع للتفاصيل",
       registryTitle: "كل الـRepositories", registrySub: "بحث وتصنيف وتفاصيل لكل مشروع — مع روابط GitHub المباشرة.",
       search: "ابحث باسم المشروع، حالته، أو وظيفته...", clear: "مسح الفلاتر",
@@ -81,7 +81,7 @@
       heroDesc: "A living map of my public GitHub repositories, showing what is active, what has shipped, and what deserves attention. Private repositories are excluded.",
       exploreMap: "Explore the map ↗", browseRepo: "Browse repositories →",
       focusTitle: "What deserves attention right now?", focusSub: "GitHub activity is not product progress. Priorities are based on real outcomes.",
-      mapTitle: "Interactive project sitemap", mapSub: "Pan, zoom and open any repository to see its purpose and next action.",
+      mapTitle: "Interactive project map", mapSub: "Choose a group or project to see its details and next step.",
       mapMode: "SITEMAP MODE", fit: "Fit", reset: "Reset", mapHint: "Drag to pan · Use +/− to zoom · Select any project for details",
       registryTitle: "All repositories", registrySub: "Searchable, categorized inventory with direct GitHub access.",
       search: "Search by name, status or project purpose...", clear: "Clear filters",
@@ -248,18 +248,10 @@
   }
 
   const graphLayout = {
-    active: [30, 30], showcase: [823, 30], live: [1616, 30],
-    revive: [30, 593], personal: [1616, 593],
-    freeze: [30, 1150], archive: [823, 1150], cleanup: [1616, 1150]
+    active: [30, 160], showcase: [535, 160], live: [1040, 160], revive: [1545, 160],
+    personal: [30, 565], freeze: [535, 565], archive: [1040, 565], cleanup: [1545, 565]
   };
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  function graphCurve(fromX, fromY, toX, toY) {
-    const dx = toX - fromX, dy = toY - fromY;
-    const horizontal = Math.abs(dx) > Math.abs(dy);
-    return horizontal
-      ? `M${fromX},${fromY} C${fromX + dx * .57},${fromY} ${toX - dx * .57},${toY} ${toX},${toY}`
-      : `M${fromX},${fromY} C${fromX},${fromY + dy * .52} ${toX},${toY - dy * .52} ${toX},${toY}`;
-  }
+  const graphWorld = { width: 2060, height: 950 };
   function renderGraph() {
     const match = new Set(filtered().map(r => r.name));
     const clusters = $("#graphClusters");
@@ -281,31 +273,10 @@
           <div class="cluster-subtitle">${html(T(cat.ar, cat.en))}</div></div>
           <span class="cluster-count">${active.length} / ${all.length}</span></div>
         <div class="cluster-list">${active.map(r =>
-        `<button class="graph-repo" data-open="${html(r.name)}" type="button" title="${html(r.name)}">
+        `<button class="graph-repo" data-map-select="${html(r.name)}" data-open="${html(r.name)}" type="button" title="${html(r.name)}">
           <span>${html(r.name)}</span><i>↗</i></button>`
       ).join("")}</div>`;
       clusters.appendChild(cluster);
-
-      const path = document.createElementNS(SVG_NS, "path");
-      const sx = 1130, sy = 810, tx = x + 307, ty = y + 62;
-      path.setAttribute("d", graphCurve(sx, sy, tx, ty));
-      path.setAttribute("stroke", cat.color);
-      path.setAttribute("stroke-opacity", ".53");
-      path.setAttribute("stroke-width", "3");
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke-dasharray", "9 10");
-      path.dataset.mapCategory = cat.id;
-      path.classList.add("map-edge");
-      svg.appendChild(path);
-
-      const marker = document.createElementNS(SVG_NS, "circle");
-      marker.setAttribute("cx", tx);
-      marker.setAttribute("cy", ty);
-      marker.setAttribute("r", "5");
-      marker.setAttribute("fill", cat.color);
-      marker.dataset.mapCategory = cat.id;
-      marker.classList.add("map-edge");
-      svg.appendChild(marker);
     }
     $("#graphTotal").textContent = filtered().length + " REPOS";
     $("#graphSummary").textContent = filtered().length + " NODES / 8 GROUPS";
@@ -369,13 +340,27 @@
 
   function resetGraph(fit = true) {
     const viewport = $("#mapViewport");
-    const world = { width: 2260, height: Math.max(1640, $("#mapWorld").offsetHeight || 0) };
+    const world = graphWorld;
     const boundW = viewport.clientWidth, boundH = viewport.clientHeight;
     const fitScale = Math.min((boundW - 24) / world.width, (boundH - 24) / world.height);
-    state.map.scale = fit ? Math.max(.18, Math.min(1.5, fitScale)) : Math.min(1.45, Math.max(.38, boundW / 2100));
+    state.map.scale = fit ? Math.max(.18, Math.min(1, fitScale)) : Math.min(1.25, Math.max(.38, boundW / 1900));
     state.map.tx = (boundW - world.width * state.map.scale) / 2;
     state.map.ty = (boundH - world.height * state.map.scale) / 2;
+    state.map.autoFit = fit;
     state.map.initialized = true;
+    drawGraphPosition();
+  }
+  function focusGraphCategory(id) {
+    if (id === "all") { resetGraph(true); return; }
+    const cluster = $(`.graph-cluster[data-map-category="${CSS.escape(id)}"]`), viewport = $("#mapViewport");
+    if (!cluster || !viewport) return;
+    const width = cluster.offsetWidth, height = cluster.offsetHeight;
+    const left = parseFloat(cluster.style.left) || cluster.offsetLeft;
+    const top = parseFloat(cluster.style.top) || cluster.offsetTop;
+    state.map.scale = Math.max(.18, Math.min(1.35, (viewport.clientWidth - 40) / width, (viewport.clientHeight - 40) / height));
+    state.map.tx = (viewport.clientWidth - width * state.map.scale) / 2 - left * state.map.scale;
+    state.map.ty = (viewport.clientHeight - height * state.map.scale) / 2 - top * state.map.scale;
+    state.map.autoFit = false;
     drawGraphPosition();
   }
   function drawGraphPosition() {
@@ -388,6 +373,7 @@
     const prior = state.map.scale;
     const next = Math.max(.18, Math.min(1.85, prior * delta));
     if (next === prior) return;
+    state.map.autoFit = false;
     const worldX = (x - state.map.tx) / prior;
     const worldY = (y - state.map.ty) / prior;
     state.map.scale = next;
@@ -408,6 +394,7 @@
     }, { passive: false });
     v.addEventListener("pointerdown", (event) => {
       if (event.target.closest("button") || (event.pointerType === "mouse" && event.button !== 0)) return;
+      state.map.autoFit = false;
       state.map.dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, tx: state.map.tx, ty: state.map.ty };
       v.setPointerCapture(event.pointerId);
       v.classList.add("dragging");
@@ -436,11 +423,17 @@
       else if (event.key === "ArrowUp") state.map.ty -= 30;
       else if (event.key === "ArrowDown") state.map.ty += 30;
       else return;
-      if (event.key.startsWith("Arrow")) drawGraphPosition();
+      if (event.key.startsWith("Arrow")) { state.map.autoFit = false; drawGraphPosition(); }
       event.preventDefault();
     });
-    new ResizeObserver(() => { if (state.map.initialized) resetGraph(false) }).observe(v);
-    requestAnimationFrame(() => resetGraph(false));
+    new ResizeObserver(() => { if (state.map.initialized && state.map.autoFit) resetGraph(true); }).observe(v);
+    window.addEventListener("abud:map-view", (event) => {
+      if (event.detail?.view !== "graph") return;
+      if (event.detail.filter && event.detail.filter !== "all") requestAnimationFrame(() => focusGraphCategory(event.detail.filter));
+      else if (state.map.autoFit) requestAnimationFrame(() => resetGraph(true));
+    });
+    window.addEventListener("abud:map-filter", (event) => requestAnimationFrame(() => focusGraphCategory(event.detail?.category || "all")));
+    requestAnimationFrame(() => resetGraph(true));
   }
 
   function closeMobile() {
@@ -450,6 +443,7 @@
   function bindUI() {
     document.addEventListener("click", (event) => {
       const open = event.target.closest("[data-open]");
+      if (open?.closest("#map") && !open.closest("#mapInspector")) return;
       if (open) { openProject(open.dataset.open); return; }
       const filter = event.target.closest("[data-filter]");
       if (filter) { applyFilter(filter.dataset.filter); return; }

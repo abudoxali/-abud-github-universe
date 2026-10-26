@@ -8,12 +8,18 @@
   const C = window.AbudCompany;
   if (!O || !C) return;
   const { h, fill, fmt, notice, panel, empty, button, select, toast, act, mutate, href } = O;
-  const ui = { list: null, current: null, error: null, poll: null, spokenSeq: new Map(), root: null, draft: "", prefill: null };
+  const ui = { list: null, current: null, error: null, poll: null, stream: null, spokenSeq: new Map(), root: null, draft: "", prefill: null };
   const STATUS_AR = { scheduled: "مجدول", active: "جارٍ", paused: "متوقف مؤقتًا", ending: "يستخرج النتائج", ended: "انتهى" };
   const MODE_AR = { text: "نصي", voice: "صوتي", hybrid: "نصي وصوتي" };
   const TYPE_AR = { decision: "قرار مقترح", action_item: "مهمة مقترحة", open_question: "سؤال مفتوح", disagreement: "خلاف مسجّل", follow_up: "متابعة" };
   const agents = () => (O.peek("co:agents")?.data?.agents || C.agentsDef()).filter((a) => a.active !== false && a.enabled !== false);
   const api = (path) => fetch(`/local-api/company${path}`, { cache: "no-store", headers: { Accept: "application/json" } }).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d?.message || "تعذر التحميل"); return d; });
+  async function sendLiveTurn(id, text) {
+    try {
+      const r = await mutate("POST", `/meetings/${id}/messages`, { content: text, clientMessageId: `mtg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}` });
+      ui.current = r; draw(); schedulePoll(); return true;
+    } catch (error) { toast(error.message, "bad"); return false; }
+  }
 
   async function loadList() {
     try { ui.list = (await api("/meetings")).meetings; ui.error = null; } catch (error) { ui.error = error.message; }
@@ -27,6 +33,7 @@
       const changed = JSON.stringify(next) !== JSON.stringify(ui.current) || ui.error;
       ui.current = next; ui.error = null;
       if (changed) draw();
+      watchSpeaker(next);
     } catch (error) { if (!quiet) { ui.error = error.message; draw(); } }
     schedulePoll();
   }
@@ -36,14 +43,38 @@
     if (!m || !["active", "ending"].includes(m.status)) return;
     ui.poll = setTimeout(() => { if (document.hidden || O.state.tab !== "meetings") return schedulePoll(); loadMeeting(m.id, { quiet: true }); }, m.currentSpeaker || m.queue.length || m.status === "ending" ? 1200 : 4000);
   }
+  function watchSpeaker(m) {
+    const turn = m.turns.find((item) => item.status === "in-flight" && item.runId);
+    if (!turn || ui.stream?.runId === turn.runId) return;
+    ui.stream?.source.close();
+    ui.stream = null;
+    const source = new EventSource(`/local-api/company/meetings/${encodeURIComponent(m.id)}/runs/${encodeURIComponent(turn.runId)}/events`);
+    ui.stream = { source, runId: turn.runId };
+    source.onmessage = (event) => {
+      let data; try { data = JSON.parse(event.data); } catch (_) { return; }
+      if (data.type === "content") {
+        window.AbudVoice?.feedStream(`meeting:${m.id}`, turn.runId, turn.speaker, data.content);
+        const target = ui.root?.querySelector(`[data-meeting-run="${turn.runId}"] .co-chat-text`);
+        if (target) target.textContent = data.content;
+      } else if (data.type === "done" || (data.type === "snapshot" && !["queued", "running"].includes(data.run?.status))) {
+        window.AbudVoice?.feedStream(`meeting:${m.id}`, turn.runId, turn.speaker, data.run?.output || "", true);
+        source.close(); ui.stream = null; loadMeeting(m.id, { quiet: true });
+      }
+    };
+    source.onerror = () => { source.close(); ui.stream = null; };
+  }
   /** Voice meetings: speak each agent turn that completes while the room is open, in transcript order. */
   function speakNew(next) {
     if (!["voice", "hybrid"].includes(next.mode) || !window.AbudVoice) return;
     const done = next.turns.filter((t) => t.status === "completed" && !["owner", "system"].includes(t.speaker) && t.content);
     const seen = ui.spokenSeq.get(next.id);
     if (seen === undefined) { ui.spokenSeq.set(next.id, done.at(-1)?.seq ?? 0); return; }
-    for (const turn of done.filter((t) => t.seq > seen)) window.AbudVoice.speak(turn.speaker, turn.content, { maxParts: 2 });
+    for (const turn of done.filter((t) => t.seq > seen)) {
+      if (window.AbudVoice.isLive(`meeting:${next.id}`)) window.AbudVoice.feedStream(`meeting:${next.id}`, turn.runId, turn.speaker, turn.content, true);
+      else window.AbudVoice.speak(turn.speaker, turn.content);
+    }
     if (done.length) ui.spokenSeq.set(next.id, Math.max(seen, done.at(-1).seq));
+    if (next.turns.some((t) => t.seq > seen && !["owner", "system"].includes(t.speaker) && ["completed", "failed", "interrupted"].includes(t.status))) window.AbudVoice.liveResponse(`meeting:${next.id}`);
   }
 
   // ------------------------------------------------------------------ list + create
@@ -53,7 +84,7 @@
     const pre = ui.prefill;
     const title = h("input", { class: "ops-input", name: "title", maxlength: 200, required: true, placeholder: "مثال: مراجعة أولويات الأسبوع", "aria-label": "عنوان الاجتماع", value: pre?.title || null });
     const project = select("projectId", [["", "بدون مشروع"], ...C.projectOptions(false)], "", { "aria-label": "المشروع" });
-    const mode = select("mode", Object.entries(MODE_AR), "text", { "aria-label": "نوع الاجتماع" });
+    const mode = select("mode", Object.entries(MODE_AR), pre?.mode || "voice", { "aria-label": "نوع الاجتماع" });
     const picks = list.map((a) => h("label", { class: "mt-pick" }, h("input", { type: "checkbox", name: "participants", value: a.id, checked: (pre ? pre.all || pre.participants?.includes(a.id) : a.id === "ori") ? true : null }), C.avatar(a.id, "sm"), h("span", null, a.name)));
     const chair = select("chair", list.map((a) => [a.id, a.name]), list.some((a) => a.id === "ori") ? "ori" : list[0]?.id, { "aria-label": "رئيس الاجتماع" });
     const agenda = h("textarea", { class: "ops-input", name: "agenda", rows: 3, maxlength: 3000, placeholder: "بند في كل سطر (اختياري)", "aria-label": "جدول الأعمال" });
@@ -66,7 +97,12 @@
         const m = await mutate("POST", "/meetings", { title: title.value, projectId: project.value || null, mode: mode.value, chair: chair.value, participants, agenda: agenda.value.split("\n") });
         return mutate("POST", `/meetings/${m.id}/start`, {});
       }, "بدأ الاجتماع");
-      if (created) { ui.prefill = null; O.go("agents", "meetings", created.id); }
+      if (created) {
+        ui.prefill = null; O.go("agents", "meetings", created.id);
+        if (["voice", "hybrid"].includes(created.mode) && window.AbudVoice) {
+          window.AbudVoice.startLive({ key: `meeting:${created.id}`, agentId: created.chair, onTurn: (text) => sendLiveTurn(created.id, text) });
+        }
+      }
     } },
       h("div", { class: "co-form-row" }, title, project, mode),
       h("fieldset", { class: "mt-picks" }, h("legend", null, "المشاركون"), ...picks, all),
@@ -100,7 +136,7 @@
   function turnView(t) {
     if (t.kind === "system") return h("div", { class: "co-chat-system" }, h("span", null, t.content), h("time", null, fmt.when(t.createdAt)));
     const pending = t.status === "queued" || t.status === "in-flight";
-    return h("article", { class: `co-chat-message ${t.speaker === "owner" ? "co-chat-owner" : "co-chat-assistant"} mt-turn-${t.status}` },
+    return h("article", { class: `co-chat-message ${t.speaker === "owner" ? "co-chat-owner" : "co-chat-assistant"} mt-turn-${t.status}`, "data-meeting-run": t.runId || "" },
       h("div", { class: "co-chat-meta" }, C.avatar(t.speaker === "owner" ? "owner" : t.speaker, "sm"), h("strong", null, t.speaker === "owner" ? "أنت" : t.speakerName), h("time", null, fmt.when(t.createdAt)),
         t.kind === "summary" ? h("span", { class: "ops-chip" }, "ملخص الرئيس") : null),
       h("div", { class: "co-chat-text", dir: "auto" }, pending ? (t.status === "queued" ? "ينتظر دوره…" : "يفكر ويجمع الأدلة…") : t.status === "interrupted" ? "قوطع قبل أن يكمل." : t.status === "failed" ? "تعذر إكمال المداخلة." :
@@ -119,7 +155,8 @@
     const typing = document.activeElement?.matches?.(".mt-compose textarea");
     const live = m.status === "active";
     const busy = Boolean(m.currentSpeaker || m.queue.length);
-    const control = (label, path, ok, kind = "secondary") => ok ? button(label, async (e) => { const r = await act(e.currentTarget, () => mutate("POST", `/meetings/${m.id}/${path}`, {}), null); if (r) { if (path === "interrupt" || path === "end") window.AbudVoice?.stopPlayback(); ui.current = r; draw(); schedulePoll(); } }, { kind }) : null;
+    window.AbudVoice?.updateLive(`meeting:${m.id}`, { busy, active: live && !m.budgetExhausted && ["voice", "hybrid"].includes(m.mode) });
+    const control = (label, path, ok, kind = "secondary") => ok ? button(label, async (e) => { const r = await act(e.currentTarget, () => mutate("POST", `/meetings/${m.id}/${path}`, {}), null); if (r) { if (path === "interrupt") window.AbudVoice?.liveResponse(`meeting:${m.id}`); if (path === "interrupt" || path === "end") window.AbudVoice?.stopPlayback(); ui.current = r; draw(); schedulePoll(); } }, { kind }) : null;
     const input = h("textarea", { class: "ops-input", rows: 2, maxlength: 4000, placeholder: "تكلّم مع الفريق… وجّه السؤال لموظف بذكر اسمه أول الرسالة (مثال: NEX، ايه رأيك؟)", "aria-label": "رسالتك في الاجتماع",
       oninput: (event) => { ui.draft = event.currentTarget.value; },
       onkeydown: (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } } });
@@ -130,7 +167,7 @@
       const r = await act(event.currentTarget.querySelector("button[type=submit]"), () => mutate("POST", `/meetings/${m.id}/messages`, { content, clientMessageId: `mtg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}` }), null);
       if (r) { input.value = ""; ui.draft = ""; ui.current = r; draw(); schedulePoll(); }
     } }, h("div", { class: "co-chat-compose-main" }, input),
-      ["voice", "hybrid"].includes(m.mode) ? window.AbudVoice?.controls({ agentId: m.chair, onText: (text) => { const box = ui.root?.querySelector(".mt-compose textarea") || input; box.value = box.value.trim() ? `${box.value.trim()} ${text}` : text; ui.draft = box.value; box.focus(); } }) : null,
+      ["voice", "hybrid"].includes(m.mode) ? window.AbudVoice?.controls({ agentId: m.chair, liveKey: `meeting:${m.id}`, liveLabel: "اجتماع لايف", liveBlocked: busy || m.budgetExhausted, onTurn: (text) => sendLiveTurn(m.id, text), onText: (text) => { const box = ui.root?.querySelector(".mt-compose textarea") || input; box.value = box.value.trim() ? `${box.value.trim()} ${text}` : text; ui.draft = box.value; box.focus(); } }) : null,
       h("button", { type: "submit", class: "btn btn-primary", disabled: busy ? true : null, title: busy ? "انتظر المتحدث الحالي أو قاطِع النقاش" : null }, "إرسال")) : null;
     const usage = m.usage, budget = m.budget;
     fill(root,
@@ -174,9 +211,10 @@
     render(root) { ui.root = root; draw(); },
     reload(rest) {
       clearTimeout(ui.poll);
+      ui.stream?.source.close(); ui.stream = null;
       const id = rest?.[0];
       if (id) { if (ui.current?.id !== id) ui.current = null; loadMeeting(id); } else { ui.current = null; loadList(); }
     },
-    stop() { clearTimeout(ui.poll); ui.prefill = null; }
+    stop() { clearTimeout(ui.poll); ui.stream?.source.close(); ui.stream = null; ui.prefill = null; window.AbudVoice?.stopLive(); }
   };
 })();

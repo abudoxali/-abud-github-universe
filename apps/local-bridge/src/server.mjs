@@ -21,7 +21,7 @@ import { createConversations } from "./conversations.mjs";
 import { createKnowledge } from "./knowledge.mjs";
 import { createLearning } from "./learning.mjs";
 import { createMeetings } from "./meetings.mjs";
-import { createVoice } from "./voice.mjs";
+import { createLiveTts } from "./live-tts.mjs";
 import { createAsk } from "./ask.mjs";
 import { createRoutines } from "./routines.mjs";
 import { createArtifacts, createTemplates } from "./artifacts.mjs";
@@ -151,7 +151,6 @@ export function createServer({
   routerClient = createRouterClient({ env }),
   githubReader = createGitHubReader(),
   agentOptions = {},
-  voiceOptions = {},
   capabilityOptions = {},
   background = false,
   instance = null,
@@ -250,8 +249,8 @@ export function createServer({
   const conversations = createConversations({ company, runtime, learning });
   runtime.setConversations(conversations);
   const meetings = createMeetings({ company, runtime });
+  const liveTts = createLiveTts({ env, log });
   runtime.setMeetings(meetings);
-  const voice = createVoice({ env, log, ...voiceOptions });
   const asker = createAsk({ company, runtime, conversations });
   const routines = createRoutines({ company, meetings, log });
   const contextReport = createContextReport({ company, workspaceReport: async () => publicWorkspaceConfig(await loadWorkspaceConfig({ configPath: workspaceConfigPath, env })) });
@@ -290,21 +289,21 @@ export function createServer({
       .catch((error) => log(JSON.stringify({ event: "github-identities-failed", name: error?.name || "Error" }))), 4000).unref();
   }
 
-  async function agentsView() {
+  async function agentsView({ router: suppliedRouter, routePreviews = true } = {}) {
     const today = new Date(Date.now() - 24 * 3_600_000).toISOString();
-    const router = await overview(false);
+    const router = routePreviews ? suppliedRouter ?? await overview(false) : suppliedRouter ?? null;
     const usageByAgent = new Map(company.usageByAgent(today).map((u) => [u.agentId, u]));
     return Promise.all(company.listAgents().map(async (def) => {
       const config = company.agentConfig(def.id);
       const runs = company.listRuns({ agentId: def.id, limit: 5 });
       const active = company.db.get("SELECT COUNT(*) AS n FROM agent_runs WHERE agent_id = ? AND status IN ('queued','running') AND parent_run_id IS NULL", def.id).n;
-      const route = await runtime.routePreview({ agentId: def.id });
-      const availability = !config.enabled ? "disabled" : router?.connection?.state !== "connected" ? "router-offline" : !route.chosen ? "no-eligible-model" : active ? "working" : "available";
+      const route = routePreviews ? await runtime.routePreview({ agentId: def.id, overview: router }) : null;
+      const availability = !config.enabled ? "disabled" : !router ? "checking" : router.connection?.state !== "connected" ? "router-offline" : routePreviews && !route.chosen ? "no-eligible-model" : active ? "working" : routePreviews ? "available" : "checking";
       return {
         ...def, profile: company.registry.get(def.id), config, availability, activeRuns: active, lastRun: runs[0] ?? null,
         openTasks: company.db.get("SELECT COUNT(*) AS n FROM tasks WHERE assignee = ? AND archived_at IS NULL AND status NOT IN ('done','cancelled')", def.id).n,
         currentTask: company.db.get("SELECT id, title FROM tasks WHERE assignee = ? AND archived_at IS NULL AND status = 'in_progress' ORDER BY updated_at DESC LIMIT 1", def.id) ?? null,
-        route: { chosen: route.chosen, domain: route.domain }, usage24h: usageByAgent.get(def.id) ?? { runs: 0, tokens: 0, costUsd: 0, unknownCostEvents: 0 }
+        route: { chosen: route?.chosen ?? null, domain: route?.domain ?? config.policyDomain }, usage24h: usageByAgent.get(def.id) ?? { runs: 0, tokens: 0, costUsd: 0, unknownCostEvents: 0 }
       };
     }));
   }
@@ -314,7 +313,9 @@ export function createServer({
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: settings.timezone }).format(new Date());
     const in7 = new Intl.DateTimeFormat("en-CA", { timeZone: settings.timezone }).format(new Date(Date.now() + 7 * 86_400_000));
     const open = company.listTasks({ includeClosed: false, limit: 2000 });
-    const router = await overview(false);
+    // The home screen's local task/project data must not wait on OmniRoute's multi-endpoint health scan.
+    // The browser loads /omniroute/overview independently; this snapshot is refreshed after it completes.
+    const router = snapshotCache.get("overview") ?? null;
     const done7 = company.db.all("SELECT id, title, completed_at, project_id, assignee FROM tasks WHERE archived_at IS NULL AND status = 'done' AND completed_at >= ? ORDER BY completed_at DESC LIMIT 8", new Date(Date.now() - 7 * 86_400_000).toISOString());
     const allProjects = company.listProjects();
     const compactProject = (p) => ({ id: p.id, name: p.name, github: p.github, status: p.status, priority: p.priority, focus: p.focus, blocker: p.blocker, tasks: p.tasks, checkouts: p.checkouts.length, agents: p.agents, updatedAt: p.updatedAt });
@@ -346,8 +347,8 @@ export function createServer({
       runs: { active: company.listRuns({ limit: 50 }).filter((r) => ["queued", "running"].includes(r.status) && !r.parentRunId).slice(0, 6).map((r) => ({ id: r.id, agentId: r.agentId, capability: r.capability, status: r.status, createdAt: r.createdAt, request: r.request.slice(0, 120) })) },
       approvals: company.listApprovals({ status: "pending" }).slice(0, 5).map((a) => ({ id: a.id, title: a.title, kind: a.kind, createdAt: a.createdAt })),
       quota: { groups: [...quotaGroups.values()].sort((a, b) => b.exhausted - a.exhausted || b.windows - a.windows) },
-      agents: (await agentsView()).map((a) => ({ id: a.id, name: a.name, color: a.color, titleAr: a.titleAr, availability: a.availability, activeRuns: a.activeRuns, openTasks: a.openTasks, lastRun: a.lastRun ? { status: a.lastRun.status, finishedAt: a.lastRun.finishedAt, capability: a.lastRun.capability } : null, art: a.art })),
-      router: { state: router?.connection?.state ?? "unknown", version: router?.router?.version ?? null, warnings: (router?.warnings || []).slice(0, 8), lockouts: (router?.lockouts || []).length },
+      agents: (await agentsView({ router, routePreviews: Boolean(router) })).map((a) => ({ id: a.id, name: a.name, color: a.color, titleAr: a.titleAr, availability: a.availability, activeRuns: a.activeRuns, openTasks: a.openTasks, lastRun: a.lastRun ? { status: a.lastRun.status, finishedAt: a.lastRun.finishedAt, capability: a.lastRun.capability } : null, art: a.art })),
+      router: { state: router?.connection?.state ?? "checking", version: router?.router?.version ?? null, warnings: (router?.warnings || []).slice(0, 8), lockouts: (router?.lockouts || []).length },
       notifications: company.notifications({ limit: 12 }), approvalsPending: company.listApprovals({ status: "pending" }).length,
       activity: company.activity({ limit: 12 }),
       // Only major infrastructure warnings reach HQ; detailed metrics stay in System → السيرفرات.
@@ -481,13 +482,9 @@ export function createServer({
   route("GET", "/routines/([^/]+)/runs", ({ params, query }) => ({ runs: routines.runs(params[0], query.get("limit")) }));
   route("PATCH", "/routines/([^/]+)", ({ params, body }) => routines.update(params[0], body));
   route("POST", "/routines/([^/]+)/run", ({ params }) => routines.runNow(params[0]));
-  route("GET", "/voice/status", () => voice.status());
-  route("POST", "/voice/start", async () => (await voice.ensure(), voice.status()));
-  route("POST", "/voice/warmup", () => voice.warmup());
-  route("POST", "/voice/unload", () => voice.unload());
-  route("POST", "/voice/stop", () => voice.stop());
-  route("POST", "/voice/stt", ({ body }) => voice.transcribe(body));
   route("GET", "/meetings", ({ query }) => ({ meetings: meetings.list({ projectId: query.get("projectId"), status: query.get("status"), limit: query.get("limit") }) }));
+  route("GET", "/live-audio/status", () => liveTts.status());
+  route("POST", "/live-audio/warm", async () => { await liveTts.ensure(); return liveTts.status(); });
   route("POST", "/meetings", ({ body }) => meetings.create(body));
   route("GET", "/meetings/([^/]+)", ({ params, query }) => meetings.get(params[0], { sinceSeq: query.get("since") }));
   route("POST", "/meetings/([^/]+)/(start|resume|pause|interrupt|end)", ({ params }) => meetings[params[1]](params[0]));
@@ -709,6 +706,20 @@ export function createServer({
           response.once("close", cleanup);
           return;
         }
+        const meetingEvents = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/meetings\/([^/]+)\/runs\/([^/]+)\/events$/);
+        if (meetingEvents) {
+          const meeting = meetings.get(decodeURIComponent(meetingEvents[1]));
+          const run = company.getRun(decodeURIComponent(meetingEvents[2]));
+          if (run.meetingId !== meeting.id) throw new HttpError(404, "not-found", "التشغيل غير موجود في الاجتماع");
+          response.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cross-Origin-Resource-Policy": "same-origin" });
+          const write = (event) => { if (!response.destroyed) response.write(`data: ${JSON.stringify(event)}\n\n`); };
+          write({ type: "snapshot", run });
+          if (!["queued", "running"].includes(run.status)) { response.end(); return; }
+          const unsubscribe = runtime.subscribe(run.id, (event) => { write(event); if (event.type === "done") response.end(); });
+          const heartbeat = setInterval(() => { if (!response.destroyed) response.write(": keepalive\n\n"); }, 15000);
+          response.once("close", () => { clearInterval(heartbeat); unsubscribe(); });
+          return;
+        }
         const download = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/conversations\/([^/]+)\/attachments\/([^/]+)$/);
         if (download) {
           const file = conversations.getAttachment(decodeURIComponent(download[1]), decodeURIComponent(download[2]));
@@ -716,13 +727,12 @@ export function createServer({
           response.end(file.data);
           return;
         }
-        if (request.method === "POST" && url.pathname === "/local-api/company/voice/tts") {
-          // The agent's configured identity picks the voice server-side; the client only names the agent.
+        if (request.method === "POST" && url.pathname === "/local-api/company/live-audio/tts") {
           const body = await readJson(request);
-          const agent = company.agentById(String(body.agentId || "")) || (() => { throw new HttpError(404, "not-found", "الوكيل غير موجود"); })();
-          const audio = await voice.speak({ voice: agent.id, text: body.text });
-          response.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": audio.length, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-          response.end(audio);
+          const result = await liveTts.speak(body.text);
+          response.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": result.audio.length, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+            "X-Audio-Synthesis-Ms": String(result.synthesisMs) });
+          response.end(result.audio);
           return;
         }
         const meetingExport = request.method === "GET" && url.pathname.match(/^\/local-api\/company\/meetings\/([^/]+)\/export$/);
@@ -756,7 +766,7 @@ export function createServer({
         const bodyLimit = /^\/local-api\/company\/conversations\/[^/]+\/attachments$/.test(url.pathname) ? 1_500_000
           : url.pathname === "/local-api/company/capabilities/design.saveCanvas/execute" ? 6_500_000
           : /^\/local-api\/company\/templates(?:\/[^/]+)?$/.test(url.pathname) ? 600_000
-          : url.pathname === "/local-api/company/voice/stt" ? Math.ceil(voice.maxAudioBytes * 4 / 3) + 4096 : MAX_JSON_BODY;
+          : MAX_JSON_BODY;
         const body = ["POST", "PATCH"].includes(request.method) ? await readJson(request, bodyLimit) : null;
         const result = await match.handler({ params, body: body ?? {}, query: url.searchParams });
         return send(response, request.method === "POST" && !/\/(decide|rollback|cancel|ack|sync|snapshot|backup|verify|browser|approve|reject|execute|probe|diagnostics|logs|action|retry|resolve|evaluate|activate)$/.test(url.pathname) ? 201 : 200, result);
@@ -830,7 +840,7 @@ export function createServer({
       return send(response, 500, { error: "local-bridge-failed", message: "خطأ داخلي في الـ Bridge" });
     }
   });
-  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); voice.stop(); operations.stop(); routines.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
+  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); liveTts.stop(); operations.stop(); routines.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
   server.company = company;
   server.vps = vps;
   server.vpsReady = vpsReady;

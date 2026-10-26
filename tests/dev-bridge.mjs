@@ -42,8 +42,8 @@ const liveModels = (process.env.DEV_ROUTER_MODELS || "gemini/gemini-3.1-flash-li
 const server = createServer({
   configPath: join(work, "worlds.json"), workspaceConfigPath: join(work, "workspace.json"), policyPath: join(work, "policy.json"), dbPath: join(work, "company.db"), backupDir: join(work, "backups"),
   vpsConfigPath: join(work, "no-vps.json"), env: { ...(realRouter ? { OMNIROUTE_BASE_URL: process.env.OMNIROUTE_BASE_URL || "http://localhost:20128", OMNIROUTE_API_KEY: process.env.OMNIROUTE_API_KEY } : { OMNIROUTE_BASE_URL: `http://127.0.0.1:${stub.port}`, OMNIROUTE_API_KEY: TEST_KEY }),
-    // Voice stays off (text-only) unless the developer opts in with VOICE_HOME or ABUD_VOICE_URL.
-    ...(process.env.VOICE_HOME ? { VOICE_HOME: process.env.VOICE_HOME } : {}), ...(process.env.ABUD_VOICE_URL ? { ABUD_VOICE_URL: process.env.ABUD_VOICE_URL } : {}) },
+    // The synthetic browser can exercise recognition; local neural TTS is opt-in for this isolated test server.
+    ...(process.env.ABUD_LIVE_VOICE_HOME ? { ABUD_LIVE_VOICE_HOME: process.env.ABUD_LIVE_VOICE_HOME, ABUD_LIVE_VOICE_PYTHON: process.env.ABUD_LIVE_VOICE_PYTHON || "" } : {}) },
   startupOptions: { env: {}, platform: "test" }, agentOptions: { home: work, env: {}, runImpl: async () => ({ ok: false, reason: "not-found" }) },
   githubReader: { resolve: async () => ({ state: "unavailable" }), read: async (github) => ({ state: "not-linked", github, fetchedAt: new Date().toISOString(), cached: false, unavailable: [] }) },
   background: true, log: () => {}

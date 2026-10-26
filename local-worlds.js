@@ -82,16 +82,19 @@
   async function loadInternalWorkspace() {
     try {
       const response = await fetch("/local-api/health", { headers: { Accept: "application/json" } });
-      if (!response.ok) return;
+      if (!response.ok) return null;
       const health = await response.json();
-      if (health?.service !== "abud-local-universe" || !health?.capabilities?.ops) return;
+      if (health?.service !== "abud-local-universe" || !health?.capabilities?.ops) return null;
       // The internal loader owns the module list and the stylesheet; nothing about them ships in this public file.
       window.AbudInternalHealth = health;
       await loadScript("./internal/ops-loader.js");
-    } catch (_) { /* static or public host: the internal workspace simply stays unloaded */ }
+      return health;
+    } catch (_) { /* static or public host: the internal workspace simply stays unloaded */ return null; }
   }
   async function boot() {
-    loadInternalWorkspace();
+    const health = await loadInternalWorkspace();
+    // The Company OS uses its own scoped workspace scanner. Don't run the legacy all-world Git and gh scan on its home load.
+    if (health?.capabilities?.company) return;
     try {
       const response = await fetch("/local-api/worlds", { headers: { Accept: "application/json" } });
       if (!response.ok) throw Error("bridge unavailable");

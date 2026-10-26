@@ -33,6 +33,7 @@
   const refreshAfterTaskChange = () => invalidate("tasks", "archivedTasks", "summary", "activity", "projects", "agents", "agent:", "notifications", "project:");
 
   function pipType(state) {
+    if (state === "checking") return "thinking";
     if (!state) return null;
     if (state === "working") return "working";
     if (["thinking", "queued", "listening", "speaking"].includes(state)) return "thinking";
@@ -45,6 +46,7 @@
   function pipLabel(state) {
     const map = {
       working: "يعمل الآن",
+      checking: "جار التحقق",
       thinking: "يفكر في الطلب",
       queued: "في طابور التنفيذ",
       listening: "يستمع للطلب",

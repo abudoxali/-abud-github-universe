@@ -257,28 +257,17 @@
       panel("الوكلاء والموارد", "إعدادات كل وكيل في مساحته، والميزانيات وسياسات التوجيه في «الموارد الذكية».", h("div", { class: "co-inline" }, linkButton("الوكلاء", href("agents"), { icon: "agents" }), linkButton("التوجيه والميزانيات", href("resources", "routing"), { icon: "resources" }))));
   }
 
-  // ---------------------------------------------------------------- local voice engine (advanced; daily screens only show Talk/Mute/Stop)
+  // ---------------------------------------------------------------- browser voice availability
   function voicePanel() {
-    const body = h("div", { class: "vo-admin" }, h("p", { class: "ops-dim" }, "يتحقق من محرك الصوت…"));
-    const STATE_AR = { ready: "يعمل", stopped: "متوقف (يبدأ تلقائيًا عند أول استخدام)", starting: "يبدأ…", "not-installed": "غير مثبت", error: "خطأ" };
-    const draw = async (force = false) => {
-      const st = await window.AbudVoice.status(force);
-      const models = st.worker?.models || {};
-      const run = (label, path, kind = "secondary") => button(label, async (e) => { if (await act(e.currentTarget, () => O.mutate("POST", path, {}), null) !== undefined) draw(true); }, { kind });
-      fill(body,
-        h("p", null, h("strong", null, STATE_AR[st.state] || st.state), st.reasonAr ? ` — ${st.reasonAr}` : ""),
-        st.state === "not-installed" ? h("p", { class: "ops-dim" }, "التثبيت مرة واحدة على هذا الجهاز: ", h("code", { dir: "ltr" }, st.setup || "apps\voice-worker\setup.ps1")) : null,
-        st.state !== "not-installed" ? h("div", { class: "ops-actions" },
-          st.state === "ready" ? null : run("تشغيل", "/voice/start", "primary"),
-          st.state === "ready" ? run("تفريغ ذاكرة كرت الشاشة", "/voice/unload") : null,
-          st.state === "ready" ? run("إيقاف المحرك", "/voice/stop") : null,
-          button("تحديث", () => draw(true))) : null,
-        st.worker ? h("details", null, h("summary", null, "تفاصيل تقنية"),
-          h("dl", { class: "mt-budget" }, ...Object.entries(models).flatMap(([name, m]) => [h("dt", null, name === "stt" ? "تحويل الكلام لنص" : name === "tts" ? "النطق" : name), h("dd", { dir: "ltr" }, [m.state, m.device, m.model].filter(Boolean).join(" · "))]),
-            st.worker.vramUsedMiB != null ? [h("dt", null, "ذاكرة كرت الشاشة"), h("dd", { dir: "ltr" }, `${st.worker.vramUsedMiB} MiB`)] : null)) : null);
+    const body = h("div", { class: "vo-admin" });
+    const draw = () => {
+      const st = window.AbudVoice.status();
+      fill(body, h("p", null, h("strong", null, st.state === "ready" ? "جاهز" : "غير متاح"), st.reasonAr ? ` — ${st.reasonAr}` : ""),
+        st.voices?.length ? h("p", { class: "ops-dim" }, `صوت مصري متاح: ${st.voices.map((voice) => voice.name).join("، ")}`) : null,
+        button("فحص مجددًا", draw));
     };
     draw();
-    return panel("محرك الصوت المحلي", "التعرف على الكلام والنطق المصري يعملان على هذا الجهاز فقط؛ لا يُرسل أي صوت إلى OmniRoute أو أي خدمة خارجية. الأصوات الستة مؤقتة حتى تعتمدها بالاستماع.", body);
+    return panel("المحادثة الصوتية", "الصوت يعتمد على التعرف والنطق في المتصفح، بدون اشتراك داخل التطبيق. قد يستخدم المتصفح خدمة سحابية للتعرف على الكلام؛ توفر الصوت المصري يتوقف على أصوات المتصفح المثبتة.", body);
   }
 
   // ---------------------------------------------------------------- agent registry (owner writes use the shared session guard)

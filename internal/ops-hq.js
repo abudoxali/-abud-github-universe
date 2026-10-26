@@ -27,7 +27,7 @@
     if (s.approvalsPending) parts.push(`${plural(s.approvalsPending, "موافقة بانتظارك", "موافقتان بانتظارك", "موافقات بانتظارك", "موافقة بانتظارك")}`);
     const working = s.runs.active.length;
     // Agents can only run through OmniRoute; while it is unreachable they are stopped, not "on standby".
-    parts.push(working ? `${plural(working, "وكيل يعمل الآن", "تشغيلان جاريان", "تشغيلات جارية", "تشغيلًا جاريًا")}` : s.router.state !== "connected" ? "الوكلاء متوقفون حتى يعود اتصال OmniRoute" : "الوكلاء في وضع الاستعداد");
+    parts.push(working ? `${plural(working, "وكيل يعمل الآن", "تشغيلان جاريان", "تشغيلات جارية", "تشغيلًا جاريًا")}` : s.router.state === "checking" ? "جارٍ التحقق من اتصال OmniRoute" : s.router.state !== "connected" ? "الوكلاء متوقفون حتى يعود اتصال OmniRoute" : "الوكلاء في وضع الاستعداد");
     return `${parts.join("، ")}.`;
   }
 
@@ -67,12 +67,13 @@
     const ready = s.agents.filter((a) => ["available", "working"].includes(a.availability)).length;
     const decisions = s.approvalsPending + t.blocked.length + s.projects.blocked.length;
     const routerOk = s.router.state === "connected";
+    const routerChecking = s.router.state === "checking";
     return h("div", { class: "os-kpis", role: "list", "aria-label": "مؤشرات الشركة" },
       kpi({ label: "مشاريع نشطة", value: s.projects.active, hint: `من ${s.projects.total} مشروعًا مسجلًا`, href: href("projects", "all"), ic: "projects", tone: "accent" }),
       kpi({ label: "مهام مهمة مفتوحة", value: t.highOpen, hint: `${t.open} مهمة مفتوحة إجمالًا`, href: href("work"), ic: "work", tone: t.overdue.length ? "warn" : null }),
       kpi({ label: "قرارات معلّقة", value: decisions, hint: decisions ? "موافقات وعوائق تنتظرك" : "لا شيء ينتظر قرارك", href: href(s.approvalsPending ? "resources" : "work", s.approvalsPending ? "routing" : ""), ic: "flag", tone: decisions ? "warn" : "ok" }),
       kpi({ label: "وكلاء يعملون الآن", value: working, hint: `${ready} من 6 جاهزون للتنفيذ`, href: href("agents"), ic: "agents", tone: working ? "accent" : null }),
-      kpi({ label: "اتصال الذكاء", value: routerOk ? "متصل" : "غير متصل", hint: s.router.version ? `OmniRoute v${s.router.version}` : "OmniRoute", href: href("resources"), ic: "resources", tone: routerOk ? "ok" : "bad" }));
+      kpi({ label: "اتصال الذكاء", value: routerOk ? "متصل" : routerChecking ? "جار التحقق" : "غير متصل", hint: s.router.version ? `OmniRoute v${s.router.version}` : "OmniRoute", href: href("resources"), ic: "resources", tone: routerOk ? "ok" : routerChecking ? "muted" : "bad" }));
   }
 
   function todayPanel(s) {
@@ -100,7 +101,7 @@
   /** Attention list: blocked work, approvals, router and agent failures — each item once, most severe first. */
   function attentionPanel(s) {
     const items = [];
-    if (s.router.state !== "connected") items.push({ sev: "critical", ic: "resources", title: "OmniRoute غير متصل", sub: "لا يمكن تنفيذ طلبات الوكلاء حتى يعود الاتصال.", href: href("resources") });
+    if (s.router.state !== "connected" && s.router.state !== "checking") items.push({ sev: "critical", ic: "resources", title: "OmniRoute غير متصل", sub: "لا يمكن تنفيذ طلبات الوكلاء حتى يعود الاتصال.", href: href("resources") });
     for (const a of s.approvals) items.push({ sev: "warning", ic: "shield", title: a.title, sub: `موافقة مطلوبة · ${fmt.relative(a.createdAt)}`, href: href("resources", "routing") });
     for (const t of s.tasks.blocked) items.push({ sev: "warning", ic: "alert", title: t.title, sub: t.blocker ? `متعطّلة: ${t.blocker}` : "مهمة متعطّلة", task: t.id });
     for (const p of s.projects.blocked) items.push({ sev: "warning", ic: "projects", title: p.name, sub: p.blocker ? `مشروع متعطّل: ${p.blocker}` : "مشروع متعطّل", href: href("projects", "p", p.id) });
@@ -137,7 +138,7 @@
     const unknown = () => badge("muted", "غير معروف حاليًا");
     return panelX({ title: "صحة الموارد الذكية", hint: "ملخص NEX: الاتصال، والوكلاء بلا نموذج، وضغط الحصص.", actions: linkButton("الموارد الذكية", href("resources"), { icon: "chevronLeft" }) },
       h("div", { class: "hq-resource" },
-        h("div", { class: "hq-res-row" }, h("span", null, "OmniRoute"), routerOk ? badge("ok", "متصل") : badge("bad", "غير متصل")),
+        h("div", { class: "hq-res-row" }, h("span", null, "OmniRoute"), routerOk ? badge("ok", "متصل") : s.router.state === "checking" ? badge("muted", "جار التحقق") : badge("bad", "غير متصل")),
         h("div", { class: "hq-res-row" }, h("span", null, "وكلاء بلا نموذج مؤهل"), !routerOk ? unknown() : blockedAgents ? badge("warn", String(blockedAgents)) : badge("ok", "لا أحد")),
         h("div", { class: "hq-res-row" }, h("span", null, "نوافذ حصص نافدة / منخفضة"), !routerOk ? unknown() : h("span", null, exhausted ? badge("warn", `${exhausted} نافدة`) : null, " ", low ? badge("muted", `${low} منخفضة`) : null, !exhausted && !low ? badge("ok", "لا ضغط") : null)),
         groups.length ? h("p", { class: "ops-dim" }, "الأكثر تأثرًا: ", groups.slice(0, 3).map((g, i) => [i ? "، " : "", bdi(g.provider)])) : null,
@@ -164,11 +165,12 @@
 
   O.registerView({
     id: "hq", order: 10, icon: "home", ar: "الرئيسية", subtitle: null,
-    onShow() { C.co.summary(); C.co.catalog(); C.co.projects(); },
+    onShow() { C.co.summary(); C.co.catalog(); C.co.projects(); O.api.overview(); },
     badge() { const s = data(); const n = s ? s.tasks.overdue.length : 0; return n ? { n, tone: "bad", title: `${n} مهمة متأخرة` } : null; }
   });
   O.setActions("hq", () => [h("span", { class: "ops-stamp" }, data() ? `آخر تحديث ${fmt.relative(data().generatedAt)}` : ""), button("تحديث", () => { C.co.summary(true); C.co.notifications(true); }, { icon: "refresh" })]);
   O.on("co:summary", () => { render(); if (O.state.view === "hq") O.refreshHead(); });
+  O.on("overview", () => { if (O.state.view === "hq") C.co.summary(true); });
   O.on("co:catalog", render);
   O.on("co:projects", () => { if (O.state.view === "hq") render(); });
   render();

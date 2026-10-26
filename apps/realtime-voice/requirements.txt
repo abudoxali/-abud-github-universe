@@ -1,0 +1,5 @@
+kokoro>=0.9.4
+torch>=2.1
+soundfile
+espeakng-loader
+huggingface_hub

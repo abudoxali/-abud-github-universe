@@ -62,6 +62,40 @@ test("route selection excludes restricted and non-opted-in subscription provider
   } finally { await env.close(); }
 });
 
+test("conversational prompt stays short without changing registry permissions", async () => {
+  const env = await setup();
+  try {
+    const run = await env.wait(env.runtime.enqueue({ agentId: "ori", request: "ملخص سريع" }).id);
+    assert.equal(run.status, "succeeded", run.errorMessage);
+    const prompt = env.stub.chats[0].messages.find((message) => message.role === "system").content;
+    assert.match(prompt, /باللهجة المصرية الطبيعية/);
+    assert.match(prompt, /جاوب على سؤاله مباشرة/);
+    assert.doesNotMatch(prompt, /السجل الداخلي المعتمد|المصدر التاريخي|فهرس مكرر/);
+    assert.match(prompt, /الصلاحيات يتحكم فيهما الخادم/);
+    assert.deepEqual(env.company.agentConfig("ori").tools, env.company.agentById("ori").tools, "context policy does not grant or change tools");
+
+    env.company.upsertMemory({ scope: "owner", title: "Test owner profile", body: "Founder of ABUD FUN; professional software builder.", kind: "fact", confidence: "supported", sourceRef: "test:owner-profile", approved: true });
+    env.company.upsertMemory({ scope: "owner", title: "Test owner preference", body: "Be direct and verify before claiming completion.", kind: "preference", confidence: "verified", sourceRef: "test:owner-preference", approved: true });
+    const routineContext = JSON.stringify(env.runtime.memoryContext("ori", null, "quick task"));
+    assert.doesNotMatch(routineContext, /Test owner profile/);
+    assert.match(routineContext, /Test owner preference/);
+    const profileContext = JSON.stringify(env.runtime.memoryContext("ori", null, "Founder ABUD FUN"));
+    assert.match(profileContext, /Test owner profile/);
+  } finally { await env.close(); }
+});
+
+test("a short hearing check answers immediately without a router call or internal report", async () => {
+  const env = await setup();
+  try {
+    const before = env.stub.chats.length;
+    const run = await env.wait(env.runtime.enqueue({ agentId: "ori", request: "سمعني؟" }).id);
+    assert.equal(run.status, "succeeded");
+    assert.equal(run.output, "أيوه، سامعك. اتفضل.");
+    assert.equal(env.stub.chats.length, before);
+    assert.equal(run.costBasis, "no-inference");
+  } finally { await env.close(); }
+});
+
 test("conversation messages use the existing run, scoped history and persisted assistant result", async () => {
   const env = await setup();
   try {

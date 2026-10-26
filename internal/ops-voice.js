@@ -1,187 +1,288 @@
-/* ABUD FUN Company OS V6 — local voice in conversations and meetings. Push-to-talk only (never always-on): the owner
- * records, reviews the local transcript, then sends it like typed text. Agent replies are spoken one sentence at a time
- * through a single queue, so two voices never overlap; talking again stops playback. Robots show listening/speaking only
- * while that is actually happening. Everything degrades to text when the local voice engine is not installed. */
+/* Browser-native live conversation. Recognition supplies interim/final text while the owner speaks; the existing
+ * agent run streams text, and complete clauses are spoken immediately by an Egyptian browser voice. No recorded
+ * blobs, model downloads, local Python worker, or application-level audio uploads are involved. */
 (() => {
   "use strict";
   const O = window.AbudOps;
   if (!O) return;
-  const { h, toast, mutate } = O;
-  const MAX_SECONDS = 60;
-  const store = { get(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { sessionStorage.setItem(k, v); } catch (_) { /* private mode */ } } };
-  const state = { status: null, checkedAt: 0, warmed: false, recorder: null, queue: [], playing: null, overrides: new Map(), baselines: new Map(), spoken: new Set(), listeners: new Set() };
-  const replyOn = () => store.get("abud.voice.reply") !== "off";
-  const notify = () => state.listeners.forEach((fn) => { try { fn(); } catch (_) { /* detached view */ } });
+  const { h, toast } = O;
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const synth = window.speechSynthesis;
+  const listeners = new Set(), baselines = new Map(), spokenMessages = new Set(), streamedRuns = new Set(), streams = new Map(), suppressed = new Set();
+  const overrides = new Map();
+  let live = null, dictation = null, speaking = null, queue = [], epoch = 0, localReady = false, warming = null, enabled = sessionStorage.getItem("abud.voice.reply") !== "off";
 
-  async function status(force = false) {
-    if (!force && state.status && Date.now() - state.checkedAt < 15_000) return state.status;
-    try { state.status = await (await fetch("/local-api/company/voice/status", { cache: "no-store" })).json(); } catch (_) { state.status = { state: "error" }; }
-    state.checkedAt = Date.now();
-    return state.status;
+  function egyptianVoices() {
+    return synth?.getVoices().filter((voice) => /^ar[-_]EG$/i.test(voice.lang)) || [];
   }
-  const usable = () => ["ready", "stopped", "starting"].includes(state.status?.state);
+  function status() {
+    if (!Recognition) return { state: "unavailable", reasonAr: "التعرف المباشر على الكلام غير متاح في هذا المتصفح" };
+    if (!synth && !localReady) return { state: "unavailable", reasonAr: "النطق غير متاح في هذا المتصفح" };
+    const voices = egyptianVoices();
+    if (!voices.length && !localReady) return { state: "unavailable", reasonAr: "لا يوجد صوت عربي مصري (ar-EG) متاح في المتصفح" };
+    return { state: "ready", engine: localReady ? "KemeTone" : "browser", voices: voices.map((voice) => ({ name: voice.name, lang: voice.lang, local: voice.localService })) };
+  }
+  const usable = () => status().state === "ready";
+  function warm() {
+    if (warming || localReady) return warming;
+    warming = O.mutate("POST", "/live-audio/warm", {}).then(() => { localReady = true; notify(); }).catch(() => { localReady = false; }).finally(() => { warming = null; });
+    return warming;
+  }
+  const notify = () => { for (const listener of listeners) { if (!listener.node.isConnected) listeners.delete(listener); else listener.update(); } };
+  const setRobot = (agentId, state) => { if (agentId) { if (state) overrides.set(agentId, state); else overrides.delete(agentId); } notify(); };
+  const onRoute = (key) => {
+    const [kind, id] = key.split(":");
+    const path = decodeURIComponent(location.hash).split("/").slice(1);
+    return path[0] === "agents" && path[1] === (kind === "chat" ? "chat" : "meetings") && path[2] === id;
+  };
 
-  /** Robot state comes from real audio activity only; views ask for the override when they render. */
-  function setRobot(agentId, value) {
-    if (value) state.overrides.set(agentId, value); else state.overrides.delete(agentId);
-    document.querySelectorAll(`svg.rb-robot[data-agent="${CSS.escape(agentId)}"]`).forEach((el) => el.__robot?.set?.({ animationState: value || "idle" }));
+  function stopPlayback() {
+    epoch++;
+    if (live) for (const key of streams.keys()) if (key.startsWith(`${live.key}:`)) suppressed.add(key);
+    queue = [];
+    speaking?.controller?.abort();
+    if (speaking?.audio) { speaking.audio.pause(); URL.revokeObjectURL(speaking.url); }
+    if (synth) synth.cancel();
+    if (speaking) setRobot(speaking.agentId, null);
+    speaking = null;
+    maybeListen();
     notify();
   }
-
-  function warm() {
-    if (state.warmed || !usable()) return;
-    state.warmed = true;
-    mutate("POST", "/voice/warmup", {}).catch(() => { state.warmed = false; });
-  }
-
-  // ------------------------------------------------------------------ speech output (single queue)
-  const plain = (text) => String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/`([^`]*)`/g, "$1").replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, " ").replace(/[#*_>|~-]{1,}/g, " ").replace(/\s+/g, " ").trim();
-  function sentences(text, max = 360) {
-    const out = [];
-    for (const part of plain(text).split(/(?<=[.!؟?؛\n])\s+/)) {
-      if (!part) continue;
-      if (out.length && (out.at(-1) + " " + part).length <= max) out[out.length - 1] += ` ${part}`;
-      else out.push(part.slice(0, max));
-    }
-    return out.slice(0, 8); // long answers stay readable on screen; only the opening is spoken
-  }
-  /** One synthesis at a time (the local worker has a single GPU slot): a busy worker — e.g. still warming up — is
-   * retried briefly instead of failing the reply. */
-  async function fetchAudio(agentId, text, cancelled) {
-    for (let attempt = 0; attempt < 60; attempt++) {
-      if (cancelled()) return null;
-      const token = await O.session();
-      const response = await fetch("/local-api/company/voice/tts", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-Abud-Session": token }, body: JSON.stringify({ agentId, text }) });
-      if (response.status === 429) { await new Promise((resolve) => setTimeout(resolve, 1500)); continue; }
-      if (!response.ok) throw new Error((await response.json().catch(() => null))?.message || "تعذر توليد الصوت");
-      return URL.createObjectURL(await response.blob());
-    }
-    throw new Error("محرك الصوت مشغول؛ ستظهر الردود كتابةً");
-  }
-  function speak(agentId, text, { maxParts = 8 } = {}) {
-    if (!replyOn() || !usable()) return;
-    const parts = sentences(text).slice(0, maxParts);
-    if (!parts.length) return;
-    state.queue.push(...parts.map((part) => ({ agentId, text: part, url: null })));
-    if (!state.playing) playNext();
-  }
-  const generation = { n: 0 };
-  /** Fetches the head of the queue (and prefetches only the next item), plays it, then moves on. */
   async function playNext() {
-    const next = state.queue.shift();
-    if (!next) { state.playing = null; notify(); return; }
-    const gen = generation.n;
-    const cancelled = () => gen !== generation.n;
-    state.playing = { agentId: next.agentId, audio: null };
-    let url;
-    try { url = await (next.url || fetchAudio(next.agentId, next.text, cancelled)); } catch (error) { toast(error.message, "bad"); state.queue.length = 0; state.playing = null; notify(); return; }
-    if (cancelled() || !url) { if (url) URL.revokeObjectURL(url); return; }
-    const following = state.queue[0];
-    const audio = new Audio(url);
-    state.playing = { agentId: next.agentId, audio };
+    if (speaking || !enabled) return;
+    const next = queue.shift();
+    if (!next) { maybeListen(); notify(); return; }
+    const voices = egyptianVoices();
+    const generation = epoch;
+    const controller = new AbortController();
+    speaking = { agentId: next.agentId, controller };
     setRobot(next.agentId, "speaking");
     const done = () => {
-      URL.revokeObjectURL(url); setRobot(next.agentId, null);
-      if (state.playing?.audio === audio) { state.playing = null; playNext(); }
+      if (epoch !== generation) return;
+      if (speaking?.url) URL.revokeObjectURL(speaking.url);
+      speaking = null;
+      setRobot(next.agentId, null);
+      playNext();
     };
-    audio.addEventListener("ended", done, { once: true });
-    audio.addEventListener("error", done, { once: true });
-    audio.play().then(() => { if (following && !following.url) following.url = fetchAudio(following.agentId, following.text, cancelled); })
-      .catch(() => { toast("لم يسمح المتصفح بتشغيل الصوت؛ اضغط في الصفحة ثم أعد المحاولة", "bad"); state.queue.length = 0; done(); });
+    try {
+      if (!localReady) throw new Error("local-tts-warming");
+      const token = await O.session();
+      const response = await fetch("/local-api/company/live-audio/tts", { method: "POST", cache: "no-store", signal: controller.signal,
+        headers: { "Content-Type": "application/json", "X-Abud-Session": token }, body: JSON.stringify({ text: next.text }) });
+      if (!response.ok) throw new Error("local-tts-unavailable");
+      const url = URL.createObjectURL(await response.blob());
+      if (epoch !== generation) { URL.revokeObjectURL(url); return; }
+      const audio = new Audio(url);
+      speaking = { agentId: next.agentId, audio, url, controller };
+      audio.onended = done; audio.onerror = done;
+      await audio.play();
+    } catch (error) {
+      if (epoch !== generation || controller.signal.aborted) return;
+      if (speaking?.url) URL.revokeObjectURL(speaking.url);
+      if (!voices.length || !synth) { toast("النطق المصري غير متاح دلوقتي", "warn"); done(); return; }
+      const utterance = new SpeechSynthesisUtterance(next.text);
+      utterance.lang = "ar-EG";
+      utterance.voice = voices[0];
+      utterance.rate = 1.06;
+      utterance.onend = done; utterance.onerror = done;
+      speaking = { agentId: next.agentId, utterance, controller };
+      synth.speak(utterance);
+    }
     notify();
   }
-  function stopPlayback() {
-    const current = state.playing;
-    generation.n++;
-    for (const item of state.queue.splice(0)) item.url?.then((url) => url && URL.revokeObjectURL(url)).catch(() => {});
-    if (current?.audio) { current.audio.pause(); setRobot(current.agentId, null); }
-    state.playing = null;
-    notify();
+  function speak(agentId, text) {
+    if (!enabled || !usable()) return;
+    const clean = String(text || "").replace(/\*\*|^#{1,6}\s*/gm, "").trim();
+    if (!clean) return;
+    queue.push({ agentId, text: clean.slice(0, 550) });
+    if (live?.phase === "listening") { live.phase = "waiting"; live.recognition.stop(); }
+    playNext();
   }
-
-  /** Speaks only replies that complete after the view was opened — reopening a thread never replays history. */
+  function feedStream(key, runId, agentId, cumulative, final = false) {
+    if (!live || live.key !== key || !enabled || !usable()) return;
+    const streamKey = `${key}:${runId || agentId}`;
+    if (suppressed.has(streamKey)) { if (final) { suppressed.delete(streamKey); streams.delete(streamKey); liveResponse(key); } return; }
+    if (final && runId && streamedRuns.has(runId) && !streams.has(streamKey)) { liveResponse(key); return; }
+    if (runId) streamedRuns.add(runId);
+    const text = String(cumulative || "").replace(/\*\*|^#{1,6}\s*/gm, "");
+    const state = streams.get(streamKey) || { sent: 0, text: "" };
+    if (text.startsWith(state.text)) state.text = text;
+    else { state.sent = 0; state.text = text; }
+    let remaining = state.text.slice(state.sent);
+    while (remaining) {
+      const match = remaining.match(/^[\s\S]*?[.!؟\n،؛](?=\s|$)/u);
+      const length = match && match[0].trim().length >= 8 ? match[0].length
+        : remaining.length >= 120 ? Math.max(remaining.lastIndexOf(" ", 110) + 1, 110)
+          : final ? remaining.length : 0;
+      if (!length) break;
+      const part = remaining.slice(0, length).trim();
+      state.sent += length;
+      remaining = state.text.slice(state.sent);
+      if (part) speak(agentId, part);
+    }
+    streams.set(streamKey, state);
+    if (final) { streams.delete(streamKey); liveResponse(key); }
+  }
   function observe(key, agentId, messages) {
     const done = (messages || []).filter((m) => m.role === "assistant" && m.state === "complete" && m.content);
     const last = done.at(-1);
-    if (!state.baselines.has(key)) { state.baselines.set(key, last?.id ?? null); return; }
-    if (!last || last.id === state.baselines.get(key) || state.spoken.has(last.id)) return;
-    state.spoken.add(last.id);
-    state.baselines.set(key, last.id);
-    speak(agentId, last.content);
+    if (!baselines.has(key)) { baselines.set(key, last?.id || null); return; }
+    if (!last || last.id === baselines.get(key)) return;
+    baselines.set(key, last.id);
+    if (spokenMessages.has(last.id) || (last.runId && streamedRuns.has(last.runId))) return;
+    spokenMessages.add(last.id);
+    if (live?.key === `chat:${key}`) speak(agentId, last.content);
   }
 
-  // ------------------------------------------------------------------ push-to-talk input
-  const toBase64 = (blob) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1] || ""); r.onerror = reject; r.readAsDataURL(blob); });
-  async function startRecording(agentId, onText, ui) {
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return toast("هذا المتصفح لا يدعم التسجيل الصوتي؛ استخدم الكتابة", "bad");
-    stopPlayback();
-    let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); } catch (error) {
-      return toast(error?.name === "NotAllowedError" ? "لم يُسمح بالميكروفون. فعّله من إعدادات المتصفح للموقع ثم أعد المحاولة." : "تعذر الوصول إلى الميكروفون", "bad");
+  function maybeListen() {
+    if (!live || live.phase !== "waiting" || live.busy || !live.responseSeen || speaking || queue.length || document.hidden) return;
+    live.responseSeen = false;
+    live.phase = "listening";
+    setRobot(live.agentId, "listening");
+    try { live.recognition.start(); } catch (_) { toast("تعذّر استئناف الميكروفون؛ ابدأ المكالمة مرة أخرى", "warn"); stopLive(); }
+    notify();
+  }
+  function liveResponse(key) {
+    if (live?.key !== key) return;
+    live.responseSeen = true;
+    maybeListen();
+  }
+  function updateLive(key, { busy = false, active = true } = {}) {
+    if (live?.key !== key) return;
+    if (!active) return stopLive();
+    live.busy = busy;
+    maybeListen();
+  }
+  function stopLive() {
+    epoch++;
+    const old = live;
+    live = null;
+    if (old) {
+      old.recognition.onend = null;
+      old.recognition.onresult = null;
+      try { old.recognition.abort(); } catch (_) { /* already stopped */ }
+      setRobot(old.agentId, null);
     }
-    const type = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported?.(t)) || "";
-    const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-    const chunks = [], started = Date.now();
-    state.recorder = { recorder, stream, agentId };
-    recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
-    recorder.onstop = async () => {
-      stream.getTracks().forEach((t) => t.stop());
-      clearInterval(timer); state.recorder = null; setRobot(agentId, null); ui.sync();
-      const blob = new Blob(chunks, { type: recorder.mimeType || type || "audio/webm" });
-      if (blob.size < 800) return toast("التسجيل قصير جدًا", "bad");
-      ui.busy(true);
-      try {
-        const result = await mutate("POST", "/voice/stt", { audioBase64: await toBase64(blob), mime: blob.type });
-        if (result.text) onText(result.text); else toast("لم يُتعرّف على كلام واضح", "bad");
-      } catch (error) { toast(error.message, "bad"); } finally { ui.busy(false); }
-    };
-    const timer = setInterval(() => { const s = Math.floor((Date.now() - started) / 1000); ui.tick(s); if (s >= MAX_SECONDS) recorder.stop(); }, 250);
-    ui.tick(0);
-    recorder.start(250);
-    setRobot(agentId, "listening");
-    ui.sync();
+    if (dictation) { try { dictation.abort(); } catch (_) { /* already stopped */ } dictation = null; }
+    stopPlayback();
+    notify();
   }
-
-  /** Composer controls: تحدّث / إيقاف الصوت / الرد بالصوت. Text input stays the primary path. */
-  function controls({ agentId, onText }) {
-    const wrap = h("div", { class: "vo-controls", role: "group", "aria-label": "التحكم الصوتي" });
-    const mic = h("button", { type: "button", class: "btn btn-secondary vo-mic", "aria-pressed": "false" });
-    const indicator = h("span", { class: "vo-indicator", role: "status", "aria-live": "polite" });
-    const stop = h("button", { type: "button", class: "btn btn-secondary vo-stop", onclick: stopPlayback }, "إيقاف الصوت");
-    const reply = h("button", { type: "button", class: "btn btn-secondary vo-reply" });
-    let busy = false;
-    const ui = {
-      tick: (s) => { indicator.textContent = `● يسجّل ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} — اضغط مرة أخرى للإنهاء`; },
-      busy: (v) => { busy = v; indicator.textContent = v ? "يحوّل الكلام إلى نص محليًا…" : ""; ui.sync(); },
-      sync: () => {
-        const recording = state.recorder?.agentId === agentId;
-        const ok = usable();
-        mic.disabled = !ok || busy || (Boolean(state.recorder) && !recording);
-        mic.setAttribute("aria-pressed", String(recording));
-        mic.classList.toggle("is-recording", recording);
-        mic.textContent = recording ? "إنهاء التسجيل" : "🎙 تحدّث";
-        mic.title = ok ? "اضغط للتحدث، ثم راجع النص قبل الإرسال" : state.status?.state === "not-installed" ? "محرك الصوت غير مثبت على هذا الجهاز — الكتابة متاحة" : "محرك الصوت غير متاح الآن — الكتابة متاحة";
-        if (!recording && !busy) indicator.textContent = ok ? "" : state.status ? "الصوت غير متاح؛ الكتابة تعمل كالمعتاد" : "";
-        stop.hidden = !state.playing;
-        reply.disabled = !ok;
-        reply.setAttribute("aria-pressed", String(replyOn()));
-        reply.textContent = replyOn() ? "🔊 الرد بالصوت" : "🔇 الرد كتابةً فقط";
+  function startLive({ key, agentId, onTurn }) {
+    const available = status();
+    if (available.state !== "ready") { toast(available.reasonAr, "warn"); return false; }
+    if (!onRoute(key)) return false;
+    stopLive();
+    const recognition = new Recognition();
+    recognition.lang = "ar-EG";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    const session = { key, agentId, onTurn, recognition, phase: "listening", busy: false, responseSeen: false, interim: "", lastError: "" };
+    live = session;
+    recognition.onresult = (event) => {
+      if (live !== session || session.phase !== "listening") return;
+      const finals = [], partials = [];
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const value = event.results[i][0]?.transcript?.trim();
+        if (!value) continue;
+        (event.results[i].isFinal ? finals : partials).push(value);
+      }
+      session.interim = partials.join(" ");
+      if (finals.length) {
+        const text = finals.join(" ").trim();
+        session.phase = "waiting";
+        session.busy = true;
+        session.responseSeen = false;
+        session.interim = text;
+        recognition.stop();
+        Promise.resolve(onTurn(text)).then((ok) => {
+          if (live === session && ok === false) { toast("تعذّر إرسال الكلام", "bad"); stopLive(); }
+        }).catch((error) => { if (live === session) { toast(error.message || "تعذّر إرسال الكلام", "bad"); stopLive(); } });
+      }
+      notify();
+    };
+    recognition.onerror = (event) => {
+      if (live !== session) return;
+      session.lastError = event.error;
+      if (["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(event.error)) {
+        toast(event.error === "not-allowed" ? "اسمح للميكروفون من إعدادات المتصفح" : "خدمة التعرف على الكلام غير متاحة الآن", "warn");
+        stopLive();
       }
     };
-    mic.onclick = () => {
-      if (state.recorder?.agentId === agentId) return state.recorder.recorder.stop();
-      warm();
-      startRecording(agentId, onText, ui);
+    recognition.onend = () => {
+      if (live !== session || session.phase !== "listening") return;
+      setTimeout(() => {
+        if (live === session && session.phase === "listening" && !document.hidden) {
+          try { recognition.start(); } catch (_) { stopLive(); }
+        }
+      }, 250);
     };
-    reply.onclick = () => { store.set("abud.voice.reply", replyOn() ? "off" : "on"); if (!replyOn()) stopPlayback(); else warm(); ui.sync(); };
-    const listener = () => { if (!wrap.isConnected) state.listeners.delete(listener); else ui.sync(); };
-    state.listeners.add(listener);
-    status().then(() => { ui.sync(); if (replyOn()) warm(); });
-    ui.sync();
-    wrap.append(mic, reply, stop, indicator);
+    try { recognition.start(); }
+    catch (_) { live = null; toast("تعذّر بدء الميكروفون في هذا المتصفح", "bad"); return false; }
+    sessionStorage.setItem("abud.voice.reply", "on");
+    enabled = true;
+    warm();
+    setRobot(agentId, "listening");
+    notify();
+    return true;
+  }
+  function startDictation(agentId, onText) {
+    if (!Recognition) { toast("التعرف على الكلام غير متاح في هذا المتصفح", "warn"); return; }
+    if (live) stopLive();
+    if (dictation) { dictation.stop(); return; }
+    const recognition = new Recognition();
+    recognition.lang = "ar-EG";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      const result = event.results[event.results.length - 1];
+      if (result?.isFinal) { onText(result[0].transcript.trim()); recognition.stop(); }
+      notify();
+    };
+    recognition.onerror = (event) => { if (event.error !== "no-speech") toast("لم أسمع كلامًا واضحًا", "warn"); };
+    recognition.onend = () => { if (dictation === recognition) dictation = null; setRobot(agentId, null); notify(); };
+    dictation = recognition;
+    try { recognition.start(); setRobot(agentId, "listening"); }
+    catch (_) { dictation = null; toast("تعذّر بدء الميكروفون", "bad"); }
+    notify();
+  }
+  function controls({ agentId, onText, liveKey = null, liveLabel = "مكالمة لايف", liveBlocked = false, onTurn = null }) {
+    const wrap = h("div", { class: "vo-controls", role: "group", "aria-label": "التحكم الصوتي" });
+    const call = liveKey && onTurn ? h("button", { type: "button", class: "btn btn-secondary vo-live", onclick: () => live?.key === liveKey ? stopLive() : startLive({ key: liveKey, agentId, onTurn }) }) : null;
+    const mic = h("button", { type: "button", class: "btn btn-secondary vo-mic", onclick: () => startDictation(agentId, onText) }, "🎙 إملاء");
+    const mute = h("button", { type: "button", class: "btn btn-secondary vo-reply", onclick: () => {
+      enabled = !enabled;
+      sessionStorage.setItem("abud.voice.reply", enabled ? "on" : "off");
+      if (!enabled) stopPlayback();
+      notify();
+    } });
+    const stop = h("button", { type: "button", class: "btn btn-secondary vo-stop", onclick: stopPlayback }, "إيقاف الصوت");
+    const indicator = h("span", { class: "vo-indicator", role: "status", "aria-live": "polite" });
+    const update = () => {
+      const available = status();
+      const active = live?.key === liveKey;
+      if (call) {
+        call.disabled = !active && (available.state !== "ready" || liveBlocked || Boolean(live));
+        call.setAttribute("aria-pressed", String(active));
+        call.textContent = active ? "■ إنهاء المكالمة" : `📞 ${liveLabel}`;
+      }
+      mic.disabled = !Recognition || Boolean(live);
+      mic.setAttribute("aria-pressed", String(Boolean(dictation)));
+      mute.disabled = available.state !== "ready";
+      mute.setAttribute("aria-pressed", String(enabled));
+      mute.textContent = enabled ? "🔊 الصوت شغال" : "🔇 صوت مكتوم";
+      stop.hidden = !speaking && !queue.length;
+      indicator.textContent = active ? live.phase === "listening" ? `سامعك دلوقتي${live.interim ? ` · ${live.interim}` : ""}` : speaking ? "بيرد بالصوت…" : "بيجهّز الرد…" : available.state === "ready" ? "" : available.reasonAr;
+    };
+    listeners.add({ node: wrap, update });
+    wrap.append(call, mic, mute, stop, indicator);
+    update();
     return wrap;
   }
-
-  window.AbudVoice = { status, usable, controls, observe, speak, stopPlayback, override: (agentId) => state.overrides.get(agentId) || null };
+  synth?.addEventListener?.("voiceschanged", notify);
+  if (Recognition) setTimeout(warm, 0);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopLive(); });
+  window.addEventListener("hashchange", () => { if (live && !onRoute(live.key)) stopLive(); });
+  window.AbudVoice = { status, usable, controls, observe, speak, feedStream, stopPlayback, startLive, stopLive, liveResponse, updateLive,
+    isLive: (key) => live?.key === key, override: (agentId) => overrides.get(agentId) || null };
 })();

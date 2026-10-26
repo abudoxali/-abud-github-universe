@@ -232,7 +232,14 @@
           h("div", null, h("dt", null, "آخر تشغيل"), h("dd", null, last ? `${L.runStatus[last.status]} · ${fmt.relative(last.finishedAt || last.createdAt)}` : "—"))),
         h("div", { class: "ag-actions" },
           linkButton("مساحة العمل", href("agents", "workspace", a.id), { kind: "primary" }),
-          V5.conversations ? linkButton("محادثة", href("agents", "chat", a.id), { icon: "agents" }) : null,
+          V5.conversations && V5.voice ? button(`مكالمة لايف مع ${a.name}`, async (event) => {
+            const created = await act(event.currentTarget, () => mutate("POST", "/conversations", { agentId: a.id, title: `مكالمة مع ${a.name}` }), null);
+            if (!created) return;
+            ui.pick = a.id;
+            O.go("agents", "chat", created.id);
+            await loadChats(created.id);
+            window.AbudVoice.startLive({ key: `chat:${created.id}`, agentId: a.id, onTurn: (text) => sendChatMessage(created, text) });
+          }, { icon: "agents" }) : V5.conversations ? linkButton("محادثة", href("agents", "chat", a.id), { icon: "agents" }) : null,
           linkButton("طلب جديد", href("agents", "request", a.id), { icon: "play" }))));
   }
   function renderTeam() {
@@ -247,6 +254,7 @@
         h("div", null,
           h("h2", { id: "agHeroTitle" }, "فريق متجدد، هوية واحدة"),
           h("p", null, "كل وكيل له دور ثابت وصلاحيات تُفرض في الخادم. يمر كل طلب عبر OmniRoute وفق سياسة التوجيه والميزانية."),
+          V5.meetings ? h("div", { class: "ops-actions" }, button("اجتماع لايف مع كل الفريق", () => { window.AbudMeetings?.prefill({ all: true, title: "اجتماع الفريق", mode: "voice" }); O.go("agents", "meetings"); }, { kind: "primary", icon: "agents" })) : null,
           h("div", { class: "ag-hero-stats" },
             h("div", { class: "ag-hero-stat" }, h("strong", null, `${ready}/${agents.length}`), h("span", null, "جاهزون الآن")),
             h("div", { class: "ag-hero-stat" }, h("strong", null, String(working)), h("span", null, "يعملون الآن")),
@@ -370,9 +378,13 @@
       ui.chatError = "";
       // A reply that lands while the owner is typing updates state; the page redraws once focus leaves the field.
       if (!background || !busyTyping()) renderChat();
+      else if (window.AbudVoice?.isLive(`chat:${id}`) && ui.chatCurrent) {
+        window.AbudVoice.observe(id, ui.chatCurrent.agentId, ui.chatCurrent.messages);
+        window.AbudVoice.updateLive(`chat:${id}`, { busy: ui.chatCurrent.messages?.some((m) => m.role === "assistant" && m.state === "pending"), active: ui.chatCurrent.state === "active" });
+      }
       const pending = ui.chatCurrent?.messages?.findLast((m) => m.role === "assistant" && m.state === "pending");
       if (pending?.runId) watchChatRun(ui.chatCurrent.id, pending.runId);
-    } catch (error) { ui.chatError = error.message; if (!background || !busyTyping()) renderChat(); }
+    } catch (error) { ui.chatError = error.message; if (!background || !busyTyping()) renderChat(); else if (window.AbudVoice?.isLive(`chat:${ui.chatCurrent?.id}`)) toast(error.message, "bad"); }
   }
   function watchChatRun(id, runId) {
     if (ui.chatStream?.runId === runId) return;
@@ -383,10 +395,13 @@
       let data; try { data = JSON.parse(event.data); } catch (_) { return; }
       if (data.type === "content") {
         ui.chatPartial = data.content;
+        window.AbudVoice?.feedStream(`chat:${id}`, runId, ui.chatCurrent?.agentId, data.content);
         const target = root.querySelector(`[data-chat-run="${runId}"] .co-chat-text`);
         if (target) target.textContent = data.content;
       } else if (data.type === "done" || (data.type === "snapshot" && !["queued", "running"].includes(data.run?.status))) {
-        source.close(); ui.chatStream = null; ui.chatPartial = ""; loadChats(id, { background: true });
+        if (data.type === "done") window.AbudVoice?.feedStream(`chat:${id}`, runId, ui.chatCurrent?.agentId, data.run?.output || ui.chatPartial, true);
+        source.close(); ui.chatStream = null; ui.chatPartial = "";
+        loadChats(id, { background: true }).then(() => window.AbudVoice?.liveResponse(`chat:${id}`));
       }
     };
     source.onerror = () => { source.close(); ui.chatStream = null; setTimeout(() => { if (O.state.view === "agents" && O.state.tab === "chat") loadChats(id, { background: true }); }, 2500); };
@@ -395,7 +410,7 @@
     try {
       const result = await mutate("POST", `/conversations/${thread.id}/messages`, { content, idempotencyKey: key, attachmentIds });
       await loadChats(thread.id); watchChatRun(thread.id, result.run.id);
-      root.querySelector(".co-chat-compose textarea")?.focus();
+      if (!window.AbudVoice?.isLive(`chat:${thread.id}`)) root.querySelector(".co-chat-compose textarea")?.focus();
       return true;
     } catch (error) { toast(error.message, "bad"); return false; }
   }
@@ -422,6 +437,7 @@
     if (O.state.view !== "agents" || O.state.tab !== "chat") return;
     O.setHead("agents", null);
     const current = ui.chatCurrent;
+    if (!current) window.AbudVoice?.stopLive();
     const agents = activeAgents();
     const agentSel = select("agentId", agents.map((a) => [a.id, a.name]), ui.pick, { "aria-label": "الوكيل" });
     const projectSel = select("projectId", [["", "بدون مشروع"], ...C.projectOptions(false)], "", { "aria-label": "المشروع" });
@@ -467,6 +483,7 @@
       loadChats(current.id);
     } });
     const pendingFiles = ui.chatAttachments.length ? h("ul", { class: "co-chat-files" }, ui.chatAttachments.map((file) => h("li", null, file.filename, h("small", null, file.readableByAgent ? "سيُقرأ النص" : "لن يقرأ النموذج النصي هذا الملف"), h("button", { type: "button", class: "btn btn-secondary", onclick: async () => { await mutate("DELETE", `/conversations/${current.id}/attachments/${file.id}`); loadChats(current.id); } }, "إزالة")))) : null;
+    if (current) window.AbudVoice?.updateLive(`chat:${current.id}`, { busy: current.messages?.some((m) => m.role === "assistant" && m.state === "pending"), active: current.state === "active" });
     const composer = current && current.state === "active" ? h("form", { class: "co-chat-compose", onsubmit: async (event) => {
       event.preventDefault();
       const input = event.currentTarget.querySelector("textarea");
@@ -474,7 +491,7 @@
       const submit = event.currentTarget.querySelector("button[type=submit]"); submit.disabled = true;
       if (await sendChatMessage(current, content, undefined, ui.chatAttachments.map((file) => file.id))) input.value = "";
       submit.disabled = false;
-    } }, h("div", { class: "co-chat-compose-main" }, h("textarea", { class: "ops-input", rows: 3, maxlength: 4000, placeholder: "اكتب رسالتك…", "aria-label": "رسالتك", onkeydown: (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } } }), fileInput, pendingFiles, h("small", { class: "ops-dim" }, "النصوص والشيفرة تُقرأ بحدود آمنة. PDF والصور محفوظة للعرض فقط حتى تتوفر أداة قراءة معتمدة.")), window.AbudVoice?.controls({ agentId: current.agentId, onText: (text) => { const input = root.querySelector(".co-chat-compose textarea"); if (input) { input.value = input.value.trim() ? `${input.value.trim()} ${text}` : text; input.focus(); } } }), h("button", { type: "submit", class: "btn btn-primary" }, "إرسال")) : null;
+    } }, h("div", { class: "co-chat-compose-main" }, h("textarea", { class: "ops-input", rows: 3, maxlength: 4000, placeholder: "اكتب رسالتك…", "aria-label": "رسالتك", onkeydown: (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } } }), fileInput, pendingFiles, h("small", { class: "ops-dim" }, "النصوص والشيفرة تُقرأ بحدود آمنة. PDF والصور محفوظة للعرض فقط حتى تتوفر أداة قراءة معتمدة.")), window.AbudVoice?.controls({ agentId: current.agentId, liveKey: `chat:${current.id}`, liveBlocked: current.messages?.some((m) => m.role === "assistant" && m.state === "pending"), onTurn: (text) => sendChatMessage(current, text), onText: (text) => { const input = root.querySelector(".co-chat-compose textarea"); if (input) { input.value = input.value.trim() ? `${input.value.trim()} ${text}` : text; input.focus(); } } }), h("button", { type: "submit", class: "btn btn-primary" }, "إرسال")) : null;
     const chatAgent = current ? catalog()?.agents?.find((x) => x.id === current.agentId) : null;
     const chatLive = current ? agentsRes()?.find((x) => x.id === current.agentId) : null;
     const chatState = (current && window.AbudVoice?.override(current.agentId)) || robotState(chatLive);
@@ -487,16 +504,16 @@
           h("p", null, `${chatAgent?.name || current.agentId.toUpperCase()} · ${chatAgent?.titleAr || ""} · ${current.projectId ? C.projectName(current.projectId) || "مشروع مرتبط" : "بدون مشروع"}${current.taskId ? " · مهمة مرتبطة" : ""}`))),
       h("div", { class: "ops-actions" }, current.messages?.some((m) => m.role === "assistant" && m.state === "pending") ? h("button", { type: "button", class: "btn btn-secondary", onclick: async () => {
         const pending = current.messages.findLast((m) => m.role === "assistant" && m.state === "pending");
-        if (pending) { const cancelled = await act(null, () => mutate("POST", `/runs/${pending.runId}/cancel`, {}), "طُلب إيقاف الرد"); if (cancelled) loadChats(current.id); }
+        if (pending) { const cancelled = await act(null, () => mutate("POST", `/runs/${pending.runId}/cancel`, {}), "طُلب إيقاف الرد"); if (cancelled) { await loadChats(current.id); window.AbudVoice?.liveResponse(`chat:${current.id}`); } }
       } }, "إيقاف الرد") : null, h("button", { type: "button", class: "btn btn-secondary", onclick: async () => {
         const title = await O.promptDialog({ title: "إعادة تسمية المحادثة", label: "اسم المحادثة", value: current.title, maxlength: 160 }); if (!title || title === current.title) return;
         try { await mutate("PATCH", `/conversations/${current.id}`, { title }); loadChats(current.id); } catch (error) { toast(error.message, "bad"); }
       } }, "إعادة تسمية"), h("button", { type: "button", class: "btn btn-secondary", onclick: async () => {
-        try { await mutate("PATCH", `/conversations/${current.id}`, { state: current.state === "active" ? "archived" : "active" }); ui.chatCurrent = null; loadChats(); } catch (error) { toast(error.message, "bad"); }
+        try { await mutate("PATCH", `/conversations/${current.id}`, { state: current.state === "active" ? "archived" : "active" }); window.AbudVoice?.stopLive(); ui.chatCurrent = null; loadChats(); } catch (error) { toast(error.message, "bad"); }
       } }, current.state === "active" ? "أرشفة" : "استعادة"), h("button", { type: "button", class: "btn btn-secondary", onclick: async () => {
         if (!await O.confirmDialog({ title: "حذف المحادثة؟", body: "ستختفي المحادثة من العرض. لن تُحذف سجلات التشغيل والتدقيق المرتبطة بها.", confirm: "حذف", tone: "danger" })) return;
         const deleted = await act(null, () => mutate("DELETE", `/conversations/${current.id}`), "حُذفت المحادثة");
-        if (deleted) { ui.chatCurrent = null; loadChats(); }
+        if (deleted) { window.AbudVoice?.stopLive(); ui.chatCurrent = null; loadChats(); }
       } }, "حذف"),
         h("details", { class: "co-chat-export" }, h("summary", { class: "btn btn-secondary" }, icon("download", 16), "تصدير"),
           h("div", { class: "co-chat-export-menu" }, h("a", { class: "btn btn-secondary", href: `/local-api/company/conversations/${current.id}/export?format=md`, download: "" }, "نص Markdown"), h("a", { class: "btn btn-secondary", href: `/local-api/company/conversations/${current.id}/export?format=json`, download: "" }, "JSON كامل"))))),
@@ -887,6 +904,7 @@
       if (ui.agent) loadAgent(ui.agent); else { loadAgents(); loadRuns(); }
       if (tab === "request") loadAgents();
       if (tab === "memory") { ui.memSeg = ["knowledge", "conflicts", "learning"].includes(rest[0]) ? rest[0] : "memory"; loadMemory({ background: true }); if (ui.memSeg === "knowledge") loadKnowledge({ background: true }); }
+      if (tab !== "chat" && tab !== "meetings") window.AbudVoice?.stopLive();
       if (tab === "chat") {
         C.co.tasks();
         const target = rest[0];

@@ -300,7 +300,7 @@
     projectStatus: { active: "نشط", planned: "مخطط", paused: "متوقف مؤقتًا", blocked: "متعطّل", shipped: "مُطلق", archived: "مؤرشف" },
     priority: { high: "عالية", medium: "متوسطة", low: "منخفضة" },
     runStatus: { queued: "في الطابور", running: "قيد التنفيذ", succeeded: "اكتمل", failed: "فشل", blocked: "متوقف", cancelled: "ملغى" },
-    availability: { available: "جاهز", working: "يعمل الآن", disabled: "معطّل", "router-offline": "الراوتر غير متصل", "no-eligible-model": "لا نموذج مؤهل" },
+    availability: { available: "جاهز", working: "يعمل الآن", checking: "جار التحقق", disabled: "معطّل", "router-offline": "الراوتر غير متصل", "no-eligible-model": "لا نموذج مؤهل" },
     level: { critical: "حرج", warning: "تحذير", info: "معلومة", optimization: "تحسين" },
     approval: { pending: "بانتظار القرار", approved: "مُعتمد", rejected: "مرفوض", applied: "مُطبَّق", failed: "فشل", rolled_back: "تم التراجع" },
     owner: "المالك", none: "غير مُسند"
@@ -310,7 +310,7 @@
     projectStatus: { active: "ok", planned: "info", paused: "muted", blocked: "bad", shipped: "accent", archived: "muted" },
     runStatus: { queued: "muted", running: "info", succeeded: "ok", failed: "bad", blocked: "warn", cancelled: "muted" },
     priority: { high: "bad", medium: "warn", low: "muted" },
-    availability: { available: "ok", working: "info", disabled: "muted", "router-offline": "bad", "no-eligible-model": "warn" },
+    availability: { available: "ok", working: "info", checking: "muted", disabled: "muted", "router-offline": "bad", "no-eligible-model": "warn" },
     level: { critical: "bad", warning: "warn", info: "info", optimization: "accent" },
     approval: { pending: "warn", approved: "info", rejected: "muted", applied: "ok", failed: "bad", rolled_back: "muted" }
   };
@@ -809,17 +809,18 @@
   function renderHealth() {
     const summary = peek("co:summary")?.data;
     const routerState = summary?.router?.state ?? peek("overview")?.data?.connection?.state ?? null;
+    const routerUnknown = routerState == null || routerState === "checking";
     const bridgeOk = Boolean(peek("co:summary")?.data || peek("co:catalog")?.data);
     const routerOk = routerState === "connected";
     const dot = (ok, unknown) => h("span", { class: `os-dot ${unknown ? "" : ok ? "os-dot-ok" : "os-dot-bad"}` });
     if (shell.health) fill(shell.health,
       h("p", { class: "os-health-title" }, "حالة الأنظمة"),
       h("a", { href: href("system", "overview") }, dot(bridgeOk, !summary), h("span", null, "Local Bridge"), h("small", null, bridgeOk ? "يعمل" : "…")),
-      h("a", { href: href("resources") }, dot(routerOk, routerState == null), h("span", null, "OmniRoute"), h("small", null, routerState == null ? "…" : routerOk ? "متصل" : "غير متصل")),
+      h("a", { href: href("resources") }, dot(routerOk, routerUnknown), h("span", null, "OmniRoute"), h("small", null, routerUnknown ? "جار التحقق" : routerOk ? "متصل" : "غير متصل")),
       h("a", { href: href("system", "data") }, dot(bridgeOk, !summary), h("span", null, "قاعدة البيانات"), h("small", null, bridgeOk ? "SQLite" : "…")));
     if (shell.conn) {
-      shell.conn.className = `os-conn ${routerState == null ? "" : routerOk ? "os-conn-ok" : "os-conn-bad"}`;
-      fill(shell.conn, h("span", { class: "os-dot" }), h("span", { class: "os-conn-text" }, routerState == null ? "OmniRoute…" : routerOk ? "OmniRoute متصل" : "OmniRoute غير متصل"));
+      shell.conn.className = `os-conn ${routerUnknown ? "" : routerOk ? "os-conn-ok" : "os-conn-bad"}`;
+      fill(shell.conn, h("span", { class: "os-dot" }), h("span", { class: "os-conn-text" }, routerUnknown ? "OmniRoute جار التحقق" : routerOk ? "OmniRoute متصل" : "OmniRoute غير متصل"));
     }
   }
 

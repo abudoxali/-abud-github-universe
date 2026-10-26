@@ -218,35 +218,35 @@
         </section>
 
         <section class="map-section" id="map">
-          <div class="section-heading"><div><div class="section-kicker">02 / INTERACTIVE PROJECT GRAPH</div><h2 data-i18n="mapTitle">خريطة المشاريع التفاعلية</h2><p data-i18n="mapSub">حرّك الخريطة، كبّر، وافتح أي Repo لمعرفة موقعه والخطوة التالية.</p></div><div class="map-key"><span><b style="--key:#f97373"></b> ACTIVE</span><span><b style="--key:#34d399"></b> SHIPPED</span><span><b style="--key:#fb7185"></b> CLEANUP</span></div></div>
+          <div class="section-heading"><div><div class="section-kicker">02 / PROJECT MAP</div><h2 data-i18n="mapTitle">خريطة المشاريع التفاعلية</h2><p data-i18n="mapSub">اختار مجموعة أو مشروعًا، والخريطة هتوصلك للتفاصيل والخطوة الجاية.</p></div><span class="section-count" id="graphSummary"></span></div>
           <div class="map-dashboard-bar">
             <div class="map-kpis" id="mapKpis" aria-live="polite"></div>
             <div class="map-dashboard-tools">
               <label class="map-search"><span>⌕</span><input id="mapSearch" type="search" autocomplete="off" placeholder="ابحث داخل الخريطة..." aria-label="Search project map"><kbd>/</kbd></label>
               <div class="map-view-switch" role="group" aria-label="Map view">
-                <button type="button" class="map-view-btn is-active" id="mapGraphView" aria-pressed="true">◌ <span>Graph</span></button>
-                <button type="button" class="map-view-btn" id="mapListViewToggle" aria-pressed="false">☷ <span>List</span></button>
-                <button type="button" class="map-view-btn" id="mapBoardViewToggle" aria-pressed="false">▦ <span>Board</span></button>
+                <button type="button" class="map-view-btn is-active" id="mapGraphView" aria-pressed="true"><span class="map-view-icon" aria-hidden="true">◌</span> <span data-map-ar="الخريطة" data-map-en="Map">الخريطة</span></button>
+                <button type="button" class="map-view-btn" id="mapListViewToggle" aria-pressed="false"><span class="map-view-icon" aria-hidden="true">☷</span> <span data-map-ar="القائمة" data-map-en="List">القائمة</span></button>
+                <button type="button" class="map-view-btn" id="mapBoardViewToggle" aria-pressed="false"><span class="map-view-icon" aria-hidden="true">▦</span> <span data-map-ar="اللوحة" data-map-en="Board">اللوحة</span></button>
               </div>
-              <button type="button" class="map-focus-btn" id="mapFullscreen" aria-pressed="false">⛶ <span>مساحة كاملة</span></button>
+              <button type="button" class="map-focus-btn" id="mapFullscreen" aria-pressed="false">⛶ <span data-map-ar="تكبير مساحة الخريطة" data-map-en="Expand map">تكبير مساحة الخريطة</span></button>
             </div>
           </div>
           <div class="map-filterbar" id="mapFilterbar" aria-label="Map filters" role="group"></div>
           <div class="map-shell" id="mapShell">
             <div class="map-topline">
-              <div class="map-breadcrumb"><span class="map-online"></span><span data-i18n="mapMode">SITEMAP MODE</span><span class="map-caption" id="graphSummary"></span></div>
+              <div class="map-breadcrumb"><span class="map-online"></span><span data-map-ar="خريطة المشاريع" data-map-en="Project map">خريطة المشاريع</span><span class="map-caption" id="mapCanvasHint" data-map-ar="اسحب لتحريكها · عجلة الفأرة للتكبير" data-map-en="Drag to move · scroll to zoom">اسحب لتحريكها · عجلة الفأرة للتكبير</span></div>
               <div class="map-controls">
-                <button class="map-ctrl" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+                <button type="button" class="map-ctrl" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
                 <span id="zoomValue" class="zoom-value">100%</span>
-                <button class="map-ctrl" id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-                <button class="map-ctrl fit-control" id="fitMap" data-i18n="fit">Fit</button>
-                <button class="map-ctrl fit-control" id="resetMap" data-i18n="reset">Reset</button>
+                <button type="button" class="map-ctrl" id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+                <button type="button" class="map-ctrl fit-control" id="fitMap" data-map-ar="احتواء" data-map-en="Fit">احتواء</button>
+                <button type="button" class="map-ctrl fit-control" id="resetMap" data-map-ar="إعادة الضبط" data-map-en="Reset">إعادة الضبط</button>
               </div>
             </div>
             <div class="map-workspace">
-              <div class="map-viewport" id="mapViewport" tabindex="0" aria-label="Interactive repository relationship map">
+              <div class="map-viewport" id="mapViewport" tabindex="0" aria-label="خريطة تفاعلية للمشاريع — استخدم الأسهم للتحريك، و+ أو - للتكبير">
                 <div class="map-world" id="mapWorld">
-                  <svg class="graph-lines" id="graphLines" viewBox="0 0 2260 1640" aria-hidden="true"></svg>
+                  <svg class="graph-lines" id="graphLines" viewBox="0 0 2060 950" aria-hidden="true"></svg>
                   <div class="graph-center" id="graphCenter"><div class="core-glyph">✧</div><strong>ABUD OS</strong><span>REPOSITORY UNIVERSE</span><div id="graphTotal">28 REPOS</div></div>
                   <div id="graphClusters"></div>
                 </div>
@@ -271,7 +271,7 @@
                   <div class="board-composer-actions"><button type="button" class="btn btn-outline" data-board-action="close-composer">إلغاء</button><button type="submit" class="btn btn-primary">حفظ البطاقة</button></div>
                 </form>
               </div>
-              <aside class="map-inspector" id="mapInspector" aria-live="polite">
+              <aside class="map-inspector" id="mapInspector" aria-live="polite" hidden>
                 <div class="map-inspector-head"><span data-map-ar="محدد الخريطة" data-map-en="MAP SELECTION">محدد الخريطة</span><button type="button" class="map-inspector-close" id="mapInspectorClear" aria-label="Clear map selection">×</button></div>
                 <div class="map-inspector-empty" id="mapInspectorEmpty"><span class="map-inspector-glyph">✧</span><strong data-map-ar="اختار مشروع من الخريطة" data-map-en="Select a project from the map">اختار مشروع من الخريطة</strong><p data-map-ar="هتظهر هنا الخطوة التالية، التصنيف، والروابط المهمة من غير ما تسيب مساحة الخريطة." data-map-en="See its next action, category and links here without leaving the map workspace.">هتظهر هنا الخطوة التالية، التصنيف، والروابط المهمة من غير ما تسيب مساحة الخريطة.</p></div>
                 <div class="map-inspector-content" id="mapInspectorContent" hidden>
@@ -283,7 +283,7 @@
                 </div>
               </aside>
             </div>
-            <div class="map-bottomline"><span data-i18n="mapHint">اسحب للتحريك · استخدم +/− للتكبير · اضغط على أي مشروع للتفاصيل</span><span class="map-coordinates">WORKSPACE / ABUDOXALI</span></div>
+            <div class="map-bottomline"><span data-map-ar="اختار مجموعة من الفلاتر، أو اضغط على مشروع لعرض ملخصه والخطوة التالية." data-map-en="Choose a group filter or select a project to see its summary and next step.">اختار مجموعة من الفلاتر، أو اضغط على مشروع لعرض ملخصه والخطوة التالية.</span><span class="map-coordinates">ABUD FUN / PROJECTS</span></div>
           </div>
         </section>
 

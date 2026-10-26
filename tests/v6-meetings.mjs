@@ -1,6 +1,5 @@
-/* V6 Meeting Center, voice controls and learning view — browser regression against the isolated dev bridge only.
- * Usage: node tests/dev-bridge.mjs 4191   (in another shell)   then   node tests/v6-meetings.mjs http://127.0.0.1:4191
- * Fake media flags let Chromium grant a synthetic microphone; nothing is recorded from a real device. */
+/* V6 Meeting Center and browser voice controls — isolated dev bridge only.
+ * Usage: node tests/dev-bridge.mjs 4191   (in another shell)   then   node tests/v6-meetings.mjs http://127.0.0.1:4191 */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 const origin = process.argv[2] || 'http://127.0.0.1:4191';
@@ -38,16 +37,14 @@ try {
     const speakers = await page.$$eval('.co-chat-assistant .co-chat-meta strong', (els) => els.map((e) => e.textContent));
     assert.deepEqual(speakers, ['NEX']);
   });
-  await check('voice controls are push-to-talk only and recording shows an indicator', async () => {
-    const mic = page.locator('.mt-compose .vo-mic');
-    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    if (!(await mic.isDisabled())) {
-      await mic.click();
-      await page.waitForSelector('.vo-mic.is-recording', { timeout: 5000 });
-      assert.match(await page.textContent('.mt-compose .vo-indicator'), /يسجّل/);
-      await mic.click();
-      await page.waitForSelector('.vo-mic:not(.is-recording)');
-    }
+  await check('live meeting exposes direct call, Egyptian voice status and text fallback', async () => {
+    const state = await page.evaluate(() => window.AbudVoice.status());
+    assert.ok(['ready', 'unavailable'].includes(state.state));
+    assert.ok(await page.locator('.mt-compose .vo-live').count());
+    assert.ok(await page.locator('.mt-compose .vo-mic').count());
+    assert.ok(await page.locator('.mt-compose textarea').count());
+    const old = await page.evaluate(async () => (await fetch('/local-api/company/voice/status')).status);
+    assert.equal(old, 404);
   });
   await check('ending produces proposed outcomes; confirming an action item creates a task', async () => {
     await page.click('button:has-text("إنهاء واستخراج النتائج")');

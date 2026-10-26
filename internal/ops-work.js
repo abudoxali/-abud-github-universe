@@ -11,7 +11,7 @@
   const head = O.section("coWork", "work");
   const body = O.section("coWorkBody", "work");
   const prefs = store.read("abud-os-work", {}) || {};
-  const ui = { project: prefs.project || "", assignee: prefs.assignee || "", query: "", month: null };
+  const ui = { project: prefs.project || "", assignee: prefs.assignee || "", query: "", month: null, boardPositioned: false };
   const persist = () => store.write("abud-os-work", { project: ui.project, assignee: ui.assignee });
   const allTasks = () => C.data("tasks")?.tasks || [];
   const isOpen = (t) => !["done", "cancelled"].includes(t.status);
@@ -105,6 +105,16 @@
       }))];
     }
     fill(body, nodes);
+    if (tab === "board" && !ui.boardPositioned) {
+      ui.boardPositioned = true;
+      requestAnimationFrame(() => {
+        const boardEl = body.querySelector(".co-board");
+        const activeCol = [...(boardEl?.querySelectorAll(".co-col") || [])].find((col) => col.querySelector(".co-task"));
+        if (boardEl && activeCol && getComputedStyle(boardEl).direction === "rtl") {
+          boardEl.scrollLeft = activeCol.getBoundingClientRect().right - boardEl.getBoundingClientRect().right;
+        }
+      });
+    }
   }
 
   function board(tasks) {
@@ -173,7 +183,7 @@
     id: "work", order: 30, icon: "work", ar: "العمل", subtitle: "مهام الشركة وجداولها في مخزن واحد دائم — للمالك ولفريق الوكلاء.",
     tabs: [["today", "اليوم"], ["board", "اللوحة"], ["calendar", "التقويم"], ["upcoming", "القادمة"], ["project", "حسب المشروع"], ["agent", "حسب الوكيل"], ["done", "المنجزة"], ...(window.AbudInternalHealth?.capabilities?.routines ? [["routines", "الروتين"]] : [])],
     defaultTab: store.read("abud-os-work-tab", "today"),
-    onShow(tab) { store.write("abud-os-work-tab", tab); C.co.tasks(); C.co.projects(); C.co.catalog(); if (tab === "done") O.api.co("archivedTasks", "/tasks?archived=only", { ttl: 15_000 }); renderAll(); },
+    onShow(tab) { store.write("abud-os-work-tab", tab); if (tab === "board") ui.boardPositioned = false; C.co.tasks(); C.co.projects(); C.co.catalog(); if (tab === "done") O.api.co("archivedTasks", "/tasks?archived=only", { ttl: 15_000 }); renderAll(); },
     badge() { const today = todayIso(); const n = allTasks().filter((t) => isOpen(t) && t.dueDate && t.dueDate < today).length; return n ? { n, tone: "bad", title: `${n} مهمة متأخرة` } : null; }
   });
   O.setActions("work", () => [button("تحديث", () => C.co.tasks(true), { icon: "refresh" }), button("مهمة مفصّلة", () => C.openQuickTask({ projectId: ui.project || "" }), { kind: "primary", icon: "plus" })]);

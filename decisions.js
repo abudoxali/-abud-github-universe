@@ -119,7 +119,7 @@
     if(!world||!svg)return;
     svg.querySelectorAll(".repo-connection").forEach(x=>x.remove());
     document.querySelectorAll("#graphClusters .graph-repo.is-related-focus").forEach(x=>x.classList.remove("is-related-focus"));
-    const rect=world.getBoundingClientRect(),scale=rect.width/2260;
+    const rect=world.getBoundingClientRect(),scale=rect.width/(world.offsetWidth||1);
     if(!Number.isFinite(scale)||scale<=0)return;
     for(const e of publicRelations()){
       const from=pointFor(e.from,rect,scale),to=pointFor(e.to,rect,scale);
@@ -234,6 +234,9 @@
   });
   $("#decisionSort").addEventListener("change",e=>{decisionSort=e.target.value;decisionRender();});
   $("#repoSearch").addEventListener("input",()=>requestAnimationFrame(drawEdges));
+  $("#mapSearch")?.addEventListener("input",()=>requestAnimationFrame(drawEdges));
+  window.addEventListener("abud:map-filter",()=>requestAnimationFrame(drawEdges));
+  window.addEventListener("abud:refresh",()=>requestAnimationFrame(drawEdges));
   $("#zoomIn").addEventListener("click",()=>requestAnimationFrame(drawEdges));
   $("#zoomOut").addEventListener("click",()=>requestAnimationFrame(drawEdges));
   $("#fitMap").addEventListener("click",()=>requestAnimationFrame(drawEdges));

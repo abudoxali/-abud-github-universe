@@ -14,6 +14,13 @@
   const modules = ["workspace-map", "ops-core", "robot-specs", "robot-engine"];
   if (health.capabilities?.company) modules.push("ops-company", "ops-hq", "ops-projects-hub", "ops-work", ...(health.capabilities?.toolEngine ? ["ops-capabilities"] : []), ...(health.capabilities?.workflows ? ["ops-operations"] : []), ...(health.capabilities?.voice ? ["ops-voice"] : []), ...(health.capabilities?.meetings ? ["ops-meetings"] : []), ...(health.capabilities?.learning ? ["ops-learning"] : []), "ops-routines", "ops-context", "ops-performance", "ops-workforce", "ops-resources", "ops-usage", "ops-agents", "ops-system", "ops-servers");
   else modules.push("ops-usage", "ops-agents", "ops-system");
+  // Fetch the whole module set concurrently, then execute it in the dependency order below. This keeps registration
+  // semantics intact while avoiding one network round-trip per module on the app's critical startup path.
+  for (const file of modules) {
+    const preload = document.createElement("link");
+    preload.rel = "preload"; preload.as = "script"; preload.href = `./internal/${file}.js`;
+    document.head.append(preload);
+  }
   for (const file of modules) await loadScript(`./internal/${file}.js`);
   window.AbudOps?.boot();
 })();
