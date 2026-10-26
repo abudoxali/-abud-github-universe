@@ -471,10 +471,11 @@
       const submit = event.currentTarget.querySelector("button[type=submit]"); submit.disabled = true;
       if (await sendChatMessage(current, content, undefined, ui.chatAttachments.map((file) => file.id))) input.value = "";
       submit.disabled = false;
-    } }, h("div", { class: "co-chat-compose-main" }, h("textarea", { class: "ops-input", rows: 3, maxlength: 4000, placeholder: "اكتب رسالتك…", "aria-label": "رسالتك", onkeydown: (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } } }), fileInput, pendingFiles, h("small", { class: "ops-dim" }, "النصوص والشيفرة تُقرأ بحدود آمنة. PDF والصور محفوظة للعرض فقط حتى تتوفر أداة قراءة معتمدة.")), h("button", { type: "submit", class: "btn btn-primary" }, "إرسال")) : null;
+    } }, h("div", { class: "co-chat-compose-main" }, h("textarea", { class: "ops-input", rows: 3, maxlength: 4000, placeholder: "اكتب رسالتك…", "aria-label": "رسالتك", onkeydown: (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } } }), fileInput, pendingFiles, h("small", { class: "ops-dim" }, "النصوص والشيفرة تُقرأ بحدود آمنة. PDF والصور محفوظة للعرض فقط حتى تتوفر أداة قراءة معتمدة.")), window.AbudVoice?.controls({ agentId: current.agentId, onText: (text) => { const input = root.querySelector(".co-chat-compose textarea"); if (input) { input.value = input.value.trim() ? `${input.value.trim()} ${text}` : text; input.focus(); } } }), h("button", { type: "submit", class: "btn btn-primary" }, "إرسال")) : null;
     const chatAgent = current ? catalog()?.agents?.find((x) => x.id === current.agentId) : null;
     const chatLive = current ? agentsRes()?.find((x) => x.id === current.agentId) : null;
-    const chatState = robotState(chatLive);
+    const chatState = (current && window.AbudVoice?.override(current.agentId)) || robotState(chatLive);
+    if (current) window.AbudVoice?.observe(current.id, current.agentId, current.messages);
     const main = h("section", { class: "co-chat-main" }, current ? [h("header", { class: "co-chat-header" },
       h("div", { class: "co-chat-header-identity" },
         C.avatar(current.agentId, "md", { state: chatState }),
@@ -564,14 +565,15 @@
   const clearDrafts = (...keys) => { for (const k of keys) delete ui.drafts[k]; };
   function memoryHeader() {
     const conflicts = ui.memoryConflicts?.length || 0;
-    return [O.sectionShell({ id: "memory", title: "الذاكرة والمعرفة", subtitle: "حقائق وقرارات قابلة للمراجعة، ومصادر معرفة اعتمدتها، مع نطاق ومصدر واضحين. الذاكرة المقيّدة لا تدخل سياق الوكلاء." }),
-      O.segmented([["memory", "الذاكرة"], ["knowledge", "مكتبة المعرفة"], ["conflicts", conflicts ? `التعارضات (${conflicts})` : "التعارضات"]], ui.memSeg, (v) => { ui.memSeg = v; O.go("agents", "memory", v === "memory" ? undefined : v); renderMemoryTab(); if (v === "knowledge") loadKnowledge(); }, "أقسام الذاكرة والمعرفة")];
+    return [O.sectionShell({ id: "memory", title: V5.learning ? "الذاكرة والخبرات" : "الذاكرة والمعرفة", subtitle: "حقائق وقرارات قابلة للمراجعة، ومصادر معرفة اعتمدتها، مع نطاق ومصدر واضحين. الذاكرة المقيّدة لا تدخل سياق الوكلاء." }),
+      O.segmented([["memory", "الذاكرة"], ...(V5.learning ? [["learning", "الخبرات والتعلّم"]] : []), ["knowledge", "مكتبة المعرفة"], ["conflicts", conflicts ? `التعارضات (${conflicts})` : "التعارضات"]], ui.memSeg, (v) => { ui.memSeg = v; O.go("agents", "memory", v === "memory" ? undefined : v); renderMemoryTab(); if (v === "knowledge") loadKnowledge(); }, "أقسام الذاكرة والمعرفة")];
   }
   function renderMemoryTab() {
     if (O.state.view !== "agents" || O.state.tab !== "memory") return;
     O.setHead("agents", null);
     if (ui.memSeg === "knowledge") return renderKnowledge();
     if (ui.memSeg === "conflicts") return renderConflicts();
+    if (ui.memSeg === "learning" && window.AbudLearning) return fill(root, ...memoryHeader(), window.AbudLearning.render());
     return renderMemory();
   }
   function renderMemory() {
@@ -843,6 +845,7 @@
     if (O.state.tab === "runs") return renderRuns();
     if (O.state.tab === "chat") return renderChat();
     if (O.state.tab === "memory") return renderMemoryTab();
+    if (O.state.tab === "meetings") return window.AbudMeetings ? window.AbudMeetings.render(root) : fill(root, notice("bad", "وحدة الاجتماعات غير محمّلة", "أعد تحميل الصفحة."));
     if (O.state.tab === "operations") return window.AbudOperations ? window.AbudOperations.renderRoom(root) : fill(root, notice("bad", "وحدة غرفة العمليات غير محمّلة", "أعد تحميل الصفحة."));
     if (O.state.tab === "tools") return window.AbudCapabilities ? window.AbudCapabilities.renderLibrary(root) : fill(root, notice("bad", "وحدة الأدوات غير محمّلة", "أعد تحميل الصفحة."));
     return renderTeam();
@@ -863,14 +866,14 @@
 
   O.registerView({
     id: "agents", order: 40, icon: "agents", ar: "الوكلاء", subtitle: "فريق وكلاء بأدوار متخصصة، يعمل عبر OmniRoute وتحت صلاحيات يفرضها الخادم.",
-    tabs: [["team", "الفريق"], ...(V5.workflows ? [["operations", "غرفة العمليات"]] : []), ...(V5.conversations ? [["chat", "المحادثات"]] : []), ...(V5.toolEngine ? [["tools", "الأدوات والمهارات"]] : []), ...(V5.knowledge ? [["memory", "الذاكرة والمعرفة"]] : []), ["runs", "سجل التشغيل"], ["request", "طلب متخصص", { hidden: true }], ["workspace", "مساحة الوكيل", { hidden: true }]],
+    tabs: [["team", "الفريق"], ...(V5.workflows ? [["operations", "غرفة العمليات"]] : []), ...(V5.conversations ? [["chat", "المحادثات"]] : []), ...(V5.meetings ? [["meetings", "الاجتماعات"]] : []), ...(V5.toolEngine ? [["tools", "الأدوات والمهارات"]] : []), ...(V5.knowledge ? [["memory", V5.learning ? "الذاكرة والخبرات" : "الذاكرة والمعرفة"]] : []), ["runs", "سجل التشغيل"], ["request", "طلب متخصص", { hidden: true }], ["workspace", "مساحة الوكيل", { hidden: true }]],
     defaultTab: "team",
     resolve(rest) {
       if (rest[0] === "workspace") return { tab: "workspace", rest: rest.slice(1) };
-      if (BUILTIN_IDS.includes(rest[0]) || (rest[0] && !["team", "request", "runs", "chat", "memory", "knowledge", "operations", "tools"].includes(rest[0]))) return { tab: "workspace", rest };
+      if (BUILTIN_IDS.includes(rest[0]) || (rest[0] && !["team", "request", "runs", "chat", "meetings", "memory", "knowledge", "operations", "tools"].includes(rest[0]))) return { tab: "workspace", rest };
       // «المعرفة» is part of «الذاكرة والمعرفة»; its old route still lands there.
       if (V5.knowledge && rest[0] === "knowledge") return { tab: "memory", rest: ["knowledge"] };
-      const available = ["team", "request", "runs", ...(V5.workflows ? ["operations"] : []), ...(V5.conversations ? ["chat"] : []), ...(V5.toolEngine ? ["tools"] : []), ...(V5.knowledge ? ["memory"] : [])];
+      const available = ["team", "request", "runs", ...(V5.workflows ? ["operations"] : []), ...(V5.conversations ? ["chat"] : []), ...(V5.meetings ? ["meetings"] : []), ...(V5.toolEngine ? ["tools"] : []), ...(V5.knowledge ? ["memory"] : [])];
       return available.includes(rest[0]) ? { tab: rest[0], rest: rest.slice(1) } : { tab: null, rest };
     },
     onShow(tab, rest) {
@@ -879,7 +882,7 @@
       C.co.catalog(); C.co.projects();
       if (ui.agent) loadAgent(ui.agent); else { loadAgents(); loadRuns(); }
       if (tab === "request") loadAgents();
-      if (tab === "memory") { ui.memSeg = ["knowledge", "conflicts"].includes(rest[0]) ? rest[0] : "memory"; loadMemory({ background: true }); if (ui.memSeg === "knowledge") loadKnowledge({ background: true }); }
+      if (tab === "memory") { ui.memSeg = ["knowledge", "conflicts", "learning"].includes(rest[0]) ? rest[0] : "memory"; loadMemory({ background: true }); if (ui.memSeg === "knowledge") loadKnowledge({ background: true }); }
       if (tab === "chat") {
         C.co.tasks();
         const target = rest[0];
@@ -887,6 +890,7 @@
         else loadChats(target || null, { background: true });
       } else if (ui.chatStream) { ui.chatStream.source.close(); ui.chatStream = null; }
       if (tab === "operations") window.AbudOperations?.reload(); else window.AbudOperations?.stop();
+      if (tab === "meetings") window.AbudMeetings?.reload(rest); else window.AbudMeetings?.stop();
       render();
       startPolling();
     },

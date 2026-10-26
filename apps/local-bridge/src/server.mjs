@@ -735,8 +735,8 @@ export function createServer({
       if (url.pathname === "/local-api/session") return send(response, 200, { token: sessionToken });
       if (url.pathname === "/local-api/health") {
         return send(response, 200, {
-          status: "ok", service: "abud-local-universe", apiVersion: 5, readOnly: false, pid: process.pid, uptimeSec: Math.round(process.uptime()),
-          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true, conversations: true, knowledge: true, toolEngine: true, workflows: true }
+          status: "ok", service: "abud-local-universe", apiVersion: 6, readOnly: false, pid: process.pid, uptimeSec: Math.round(process.uptime()),
+          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true, conversations: true, knowledge: true, toolEngine: true, workflows: true, registry: true, meetings: true, learning: true, voice: true }
         });
       }
       if (url.pathname === "/local-api/account") return send(response, 200, { account: await localAccount() });

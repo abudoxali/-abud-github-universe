@@ -26,11 +26,18 @@ for (const [name, status] of [["atlas-web", "Active — sprint 4"], ["nova-api",
 await writeFile(join(work, "worlds.json"), JSON.stringify({ githubOwner: "example", worlds: [] }));
 // Synthetic model replies that cite the evidence ids they were given, so the Operations Room shows a realistic synthesis.
 const FENCE = "```";
-const stub = await startStubRouter({ chat: (model) => ({ status: 200, headers: { "x-omniroute-provider": "nvidia", "x-omniroute-model": model.split("/").slice(1).join("/") },
+// A meeting chair's closing turn gets a structured outcome block, so the Meeting Center's confirm/reject flow is testable.
+const MEETING_SUMMARY = `ملخص تجريبي للاجتماع.
+${"```"}json
+${JSON.stringify({ summary: "راجع الفريق أولويات الأسبوع (رد تجريبي).", decisions: ["التركيز على إصدار V6 هذا الأسبوع"], action_items: [{ title: "تجهيز خطة اختبار الإصدار", responsible: "luna", due: "2026-11-02" }], open_questions: ["هل نحتاج ميزانية نماذج إضافية؟"], disagreements: ["REX يفضّل تأجيل الإصدار حتى اكتمال المراجعة الأمنية"], follow_ups: [] })}
+${"```"}`;
+const stub = await startStubRouter({ chat: (model, body) => body?.messages?.at(-1)?.content?.includes("انتهى اجتماع") ? { status: 200, headers: { "x-omniroute-provider": "nvidia", "x-omniroute-model": model.split("/").slice(1).join("/") }, body: { model, usage: { prompt_tokens: 900, completion_tokens: 220 }, choices: [{ message: { role: "assistant", content: MEETING_SUMMARY } }] } } : ({ status: 200, headers: { "x-omniroute-provider": "nvidia", "x-omniroute-model": model.split("/").slice(1).join("/") },
   body: { model, usage: { prompt_tokens: 820, completion_tokens: 160 }, choices: [{ message: { role: "assistant", content: `## الخلاصة (رد تجريبي من خادم اختبار)\nالمشروع نشط ولا توجد عوائق حرجة مثبتة [E1]. حالة Git مقروءة [E2]، والفحص الأمني الحتمي لم يجد سرًا [E3].\n\n${FENCE}json\n{"tasks":[{"title":"مراجعة نتائج الفحص الأسبوعي","priority":"medium"}]}\n${FENCE}` } }] } }) });
 const server = createServer({
   configPath: join(work, "worlds.json"), workspaceConfigPath: join(work, "none.json"), policyPath: join(work, "policy.json"), dbPath: join(work, "company.db"), backupDir: join(work, "backups"),
-  vpsConfigPath: join(work, "no-vps.json"), env: { OMNIROUTE_BASE_URL: `http://127.0.0.1:${stub.port}`, OMNIROUTE_API_KEY: TEST_KEY, ABUD_WORKSPACE_ROOTS: workspace },
+  vpsConfigPath: join(work, "no-vps.json"), env: { OMNIROUTE_BASE_URL: `http://127.0.0.1:${stub.port}`, OMNIROUTE_API_KEY: TEST_KEY, ABUD_WORKSPACE_ROOTS: workspace,
+    // Voice stays off (text-only) unless the developer opts in with VOICE_HOME or ABUD_VOICE_URL.
+    ...(process.env.VOICE_HOME ? { VOICE_HOME: process.env.VOICE_HOME } : {}), ...(process.env.ABUD_VOICE_URL ? { ABUD_VOICE_URL: process.env.ABUD_VOICE_URL } : {}) },
   startupOptions: { env: {}, platform: "test" }, agentOptions: { home: work, env: {}, runImpl: async () => ({ ok: false, reason: "not-found" }) },
   githubReader: { resolve: async () => ({ state: "unavailable" }), read: async (github) => ({ state: "not-linked", github, fetchedAt: new Date().toISOString(), cached: false, unavailable: [] }) },
   background: true, log: () => {}
