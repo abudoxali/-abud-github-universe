@@ -14,7 +14,7 @@ const OWNER = { type: "owner", id: "owner" };
 const DEFAULT_BUDGET = { maxRounds: 12, maxTurns: 40, maxTokens: 120000 };
 const MAX_SPECIALISTS = 2;
 const HISTORY_TURNS = 12, HISTORY_CHARS = 6000;
-const ALIASES = { ori: ["اوري", "أوري"], mia: ["ميا", "مايا"], nex: ["نكس", "نيكس", "نِكس"], luna: ["لونا"], zen: ["زن", "زِن", "زين"], rex: ["ريكس", "ركس"] };
+export const ALIASES = { ori: ["اوري", "أوري"], mia: ["ميا", "مايا"], nex: ["نكس", "نيكس", "نِكس"], luna: ["لونا"], zen: ["زن", "زِن", "زين"], rex: ["ريكس", "ركس"] };
 const EVERYONE = /(?:^|\s)(?:كلكم|الكل|الجميع|كل واحد|everyone|all of you)(?:\s|$|[؟?،,.])/u;
 const OUTCOME_TYPES = { decisions: "decision", action_items: "action_item", open_questions: "open_question", disagreements: "disagreement", follow_ups: "follow_up" };
 const fail = (status, code, message) => { throw new HttpError(status, code, message); };

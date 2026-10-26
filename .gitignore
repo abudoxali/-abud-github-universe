@@ -16,3 +16,4 @@ local/qa/
 local/qa*/
 local/vps.json
 local/voice/
+__pycache__/

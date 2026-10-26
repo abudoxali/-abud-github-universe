@@ -1418,3 +1418,5 @@ details.ops-panel:not([open]) { padding-block: 14px; }
 .lr-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .lr-steps { margin: 0; padding-inline-start: 1.2em; }
 .lr-bad { color: var(--os-bad); margin: 0; }
+.hq-ask { display: flex; gap: 8px; margin-block: 12px; max-inline-size: 720px; }
+.hq-ask .ops-input { flex: 1; min-inline-size: 0; }

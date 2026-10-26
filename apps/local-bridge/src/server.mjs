@@ -21,6 +21,7 @@ import { createKnowledge } from "./knowledge.mjs";
 import { createLearning } from "./learning.mjs";
 import { createMeetings } from "./meetings.mjs";
 import { createVoice } from "./voice.mjs";
+import { createAsk } from "./ask.mjs";
 import { createArtifacts, createTemplates } from "./artifacts.mjs";
 import { createTelemetry } from "./telemetry.mjs";
 import { MCP_TOOLS } from "./mcp-server.mjs";
@@ -249,6 +250,7 @@ export function createServer({
   const meetings = createMeetings({ company, runtime });
   runtime.setMeetings(meetings);
   const voice = createVoice({ env, log, ...voiceOptions });
+  const asker = createAsk({ company, runtime, conversations });
   runtime.setKnowledge(knowledge);
   vps.setEnqueue((input, actor) => runtime.enqueue(input, actor));
   const operations = createOperations({ company, getOverview: (force) => overview(force), log });
@@ -451,6 +453,7 @@ export function createServer({
   route("POST", "/runs/([^/]+)/cancel", ({ params }) => runtime.cancel(params[0], owner));
   route("GET", "/conversations", ({ query }) => ({ conversations: conversations.list({ agentId: query.get("agentId"), projectId: query.get("projectId"), state: query.get("state") || "active", before: query.get("before"), limit: query.get("limit"), q: query.get("q") }) }));
   route("POST", "/conversations", ({ body }) => conversations.create(body));
+  route("POST", "/ask", ({ body }) => asker.ask(body));
   route("GET", "/voice/status", () => voice.status());
   route("POST", "/voice/start", async () => (await voice.ensure(), voice.status()));
   route("POST", "/voice/warmup", () => voice.warmup());

@@ -6,7 +6,7 @@
   const O = window.AbudOps;
   const C = window.AbudCompany;
   if (!O || !C) return;
-  const { h, fill, fmt, badge, notice, L, label, bdi, icon, panelX, empty, button, linkButton, kpi, href, todayIso } = O;
+  const { h, fill, fmt, badge, notice, L, label, bdi, icon, panelX, empty, button, linkButton, kpi, href, todayIso, act, toast } = O;
 
   const root = O.section("hqView", "hq");
   const data = () => O.peek("co:summary")?.data;
@@ -31,6 +31,19 @@
     return `${parts.join("، ")}.`;
   }
 
+  /** «اسأل الشركة»: the bridge routes the request to the right employee (or ORI) and opens that conversation. */
+  function askBox() {
+    const input = h("input", { class: "ops-input", type: "text", maxlength: 4000, placeholder: "اسأل الشركة… مثال: راجع حالة مشاريعي وجهّز أولويات النهارده", "aria-label": "اسأل الشركة" });
+    return h("form", { class: "hq-ask", role: "search", onsubmit: async (event) => {
+      event.preventDefault();
+      const content = input.value.trim(); if (!content) return input.focus();
+      const result = await act(event.currentTarget.querySelector("button[type=submit]"), () => O.mutate("POST", "/ask", { content, idempotencyKey: `ask-${Date.now()}-${Math.random().toString(36).slice(2, 10)}` }), null);
+      if (!result) return;
+      toast(`حُوّل الطلب إلى ${result.agentName}: ${result.reasonAr}`, "ok");
+      O.go("agents", "chat", result.conversationId);
+    } }, input, h("button", { type: "submit", class: "btn btn-primary" }, "اسأل"));
+  }
+
   function hero(s) {
     const longDate = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "full", timeZone: O.companyZone() }).format(new Date());
     return h("section", { class: "hq-hero", "aria-labelledby": "hqGreeting" },
@@ -38,6 +51,7 @@
         h("p", { class: "hq-eyebrow" }, h("b", null, "ABUD FUN"), h("span", null, longDate), h("span", null, "توقيت القاهرة")),
         h("h2", { id: "hqGreeting" }, `${greeting()}، هذه حالة الشركة الآن`),
         h("p", { class: "hq-summary" }, s ? operationalSummary(s) : "جارٍ تجميع حالة الشركة من المخزن المحلي…"),
+        askBox(),
         h("div", { class: "hq-hero-actions" },
           button("مهمة جديدة", () => C.openQuickTask({ dueDate: todayIso() }), { kind: "primary", icon: "plus" }),
           linkButton("إسناد لوكيل", href("agents", "request"), { icon: "agents" }),
