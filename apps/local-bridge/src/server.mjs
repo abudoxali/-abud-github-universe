@@ -21,6 +21,7 @@ import { createConversations } from "./conversations.mjs";
 import { createKnowledge } from "./knowledge.mjs";
 import { createLearning } from "./learning.mjs";
 import { createMeetings } from "./meetings.mjs";
+import { createLiveVoice } from "./live-voice.mjs";
 import { createLiveTts } from "./live-tts.mjs";
 import { createAsk } from "./ask.mjs";
 import { createRoutines } from "./routines.mjs";
@@ -152,6 +153,7 @@ export function createServer({
   githubReader = createGitHubReader(),
   agentOptions = {},
   capabilityOptions = {},
+  liveVoiceOptions = {},
   background = false,
   instance = null,
   log = (line) => console.log(line)
@@ -250,6 +252,7 @@ export function createServer({
   runtime.setConversations(conversations);
   const meetings = createMeetings({ company, runtime });
   const liveTts = createLiveTts({ env, log });
+  const liveVoice = createLiveVoice({ company, conversations, meetings, runtime, env, log, ...liveVoiceOptions });
   runtime.setMeetings(meetings);
   const asker = createAsk({ company, runtime, conversations });
   const routines = createRoutines({ company, meetings, log });
@@ -483,6 +486,10 @@ export function createServer({
   route("PATCH", "/routines/([^/]+)", ({ params, body }) => routines.update(params[0], body));
   route("POST", "/routines/([^/]+)/run", ({ params }) => routines.runNow(params[0]));
   route("GET", "/meetings", ({ query }) => ({ meetings: meetings.list({ projectId: query.get("projectId"), status: query.get("status"), limit: query.get("limit") }) }));
+  route("GET", "/live-voice/status", () => liveVoice.status());
+  route("POST", "/live-voice/key", ({ body }) => liveVoice.setKey(body));
+  route("POST", "/live-voice/test", () => liveVoice.test());
+  route("DELETE", "/live-voice/key", () => liveVoice.clearKey());
   route("GET", "/live-audio/status", () => liveTts.status());
   route("POST", "/live-audio/warm", async () => { await liveTts.ensure(); return liveTts.status(); });
   route("POST", "/meetings", ({ body }) => meetings.create(body));
@@ -776,7 +783,7 @@ export function createServer({
       if (url.pathname === "/local-api/health") {
         return send(response, 200, {
           status: "ok", service: "abud-local-universe", apiVersion: 6, readOnly: false, pid: process.pid, uptimeSec: Math.round(process.uptime()),
-          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true, conversations: true, knowledge: true, toolEngine: true, workflows: true, registry: true, meetings: true, learning: true, voice: true, routines: true, context: true, performance: true }
+          capabilities: { ops: true, company: true, omniroute: routerClient.config.valid, agents: true, workspace: true, policy: true, inference: routerClient.config.valid, routerWrites: routerClient.config.writesEnabled === true, conversations: true, knowledge: true, toolEngine: true, workflows: true, registry: true, meetings: true, learning: true, voice: true, routines: true, context: true, performance: true, liveVoice: true }
         });
       }
       if (url.pathname === "/local-api/account") return send(response, 200, { account: await localAccount() });
@@ -840,7 +847,8 @@ export function createServer({
       return send(response, 500, { error: "local-bridge-failed", message: "خطأ داخلي في الـ Bridge" });
     }
   });
-  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); liveTts.stop(); operations.stop(); routines.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
+  liveVoice.attach(server, { isLocal: (request) => requestIsLocal(request, request.socket.localPort), tokenOk: (token) => { const candidate = Buffer.from(String(token || "")); return candidate.length === sessionBuffer.length && timingSafeEqual(candidate, sessionBuffer); } });
+  server.on("close", () => { if (telemetryTimer) clearInterval(telemetryTimer); liveTts.stop(); liveVoice.stop(); operations.stop(); routines.stop(); vps.stop(); runtime.stop().finally(() => { try { db.close(); } catch (_) { /* already closed */ } }); });
   server.company = company;
   server.vps = vps;
   server.vpsReady = vpsReady;

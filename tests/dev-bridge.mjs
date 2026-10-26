@@ -44,6 +44,7 @@ const server = createServer({
   vpsConfigPath: join(work, "no-vps.json"), env: { ...(realRouter ? { OMNIROUTE_BASE_URL: process.env.OMNIROUTE_BASE_URL || "http://localhost:20128", OMNIROUTE_API_KEY: process.env.OMNIROUTE_API_KEY } : { OMNIROUTE_BASE_URL: `http://127.0.0.1:${stub.port}`, OMNIROUTE_API_KEY: TEST_KEY }),
     // The synthetic browser can exercise recognition; local neural TTS is opt-in for this isolated test server.
     ...(process.env.ABUD_LIVE_VOICE_HOME ? { ABUD_LIVE_VOICE_HOME: process.env.ABUD_LIVE_VOICE_HOME, ABUD_LIVE_VOICE_PYTHON: process.env.ABUD_LIVE_VOICE_PYTHON || "" } : {}) },
+  liveVoiceOptions: process.env.DEV_LIVE_GOOGLE ? { home: join(work, "gemini-live"), endpoints: { ws: `ws://127.0.0.1:${process.env.DEV_LIVE_GOOGLE}`, http: `http://127.0.0.1:${process.env.DEV_LIVE_GOOGLE}` } } : {},
   startupOptions: { env: {}, platform: "test" }, agentOptions: { home: work, env: {}, runImpl: async () => ({ ok: false, reason: "not-found" }) },
   githubReader: { resolve: async () => ({ state: "unavailable" }), read: async (github) => ({ state: "not-linked", github, fetchedAt: new Date().toISOString(), cached: false, unavailable: [] }) },
   background: true, log: () => {}

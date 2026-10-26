@@ -1,5 +1,12 @@
 # ABUD FUN Company OS — STATUS
 
+## Gemini Live is the primary voice engine — 2026-10-26 (awaiting the owner's API key)
+
+- Calls (chat and voice meetings) now use Gemini Live (free tier) as ears and mouth only. Browser mic (16 kHz PCM, `internal/live-worklet.js`) → local Bridge WebSocket (`/local-api/company/live-voice/ws`, host/origin check + session token) → Google Live. The key stays on the machine (`%LOCALAPPDATA%\ABUD-FUN-OS\gemini-live\gemini.key` or `GEMINI_LIVE_API_KEY`) and is never sent to the browser. The old browser-recognition/KemeTone path remains as the fallback when no key is configured.
+- Agents, OmniRoute routing, tools, permissions, approvals and audit are unchanged: Gemini has one tool, `ask_company`, which runs the owner's own transcript through `conversations.send` / `meetings.say` exactly like typing. New: `apps/local-bridge/src/live-voice.mjs`, dependency `ws@8.22.0`, routes `GET /live-voice/status`, `POST /live-voice/key`, `POST /live-voice/test`, `DELETE /live-voice/key`, System panel for up to three keys (primary + automatic backups) with a free-tier data acknowledgement. See `docs/live-voice.md`.
+- Verified with a local fake of Google's protocol: 237/237 Bridge tests (7 new), 14/14 meeting browser checks, the legacy live-voice browser check, and `tests/live-gemini.mjs` (Chromium synthetic mic → Bridge → fake Google → real meeting turn → audio playback). **Not yet verified against real Google** (needs the owner's key): model name/availability, Egyptian pronunciation and quality, end-to-end latency, free-tier limits, and whether the `bidiGenerateContent` field names used still match the live API.
+- Fixed earlier the same day: the light-chat shortcut no longer skips tool selection when a granted tool matches (228/230 → 230/230).
+
 ## Current voice update — 2026-10-26
 
 - Replaced the former MediaRecorder/Whisper/F5 voice worker with browser streaming recognition and a persistent local KemeTone Egyptian voice. The old worker, supervisor, endpoints, tests, and setup files were removed from the checkout. The historic V6 notes below describe the earlier release and are no longer the current voice implementation.

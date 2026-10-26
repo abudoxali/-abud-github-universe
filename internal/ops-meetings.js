@@ -77,6 +77,9 @@
     if (next.turns.some((t) => t.seq > seen && !["owner", "system"].includes(t.speaker) && ["completed", "failed", "interrupted"].includes(t.status))) window.AbudVoice.liveResponse(`meeting:${next.id}`);
   }
 
+  // A Gemini Live call runs its turns on the Bridge; show them as soon as it reports progress.
+  window.addEventListener("abud:live-refresh", (event) => { const m = ui.current; if (m && event.detail?.key === `meeting:${m.id}`) loadMeeting(m.id, { quiet: true }); });
+
   // ------------------------------------------------------------------ list + create
   function createForm() {
     const list = agents();

@@ -1,6 +1,7 @@
-/* Browser-native live conversation. Recognition supplies interim/final text while the owner speaks; the existing
- * agent run streams text, and complete clauses are spoken immediately by an Egyptian browser voice. No recorded
- * blobs, model downloads, local Python worker, or application-level audio uploads are involved. */
+/* Live conversation. Primary engine: Gemini Live through the local Bridge — the microphone streams as 16 kHz PCM, the
+ * model's spoken reply streams back as 24 kHz PCM, and every real request runs through the normal agent path on the
+ * Bridge (tools, permissions, OmniRoute). Fallback when no Gemini key is configured: browser SpeechRecognition (ar-EG)
+ * plus a local Egyptian TTS or the browser's ar-EG voice, fed by the existing agent run streams. */
 (() => {
   "use strict";
   const O = window.AbudOps;
@@ -10,12 +11,22 @@
   const synth = window.speechSynthesis;
   const listeners = new Set(), baselines = new Map(), spokenMessages = new Set(), streamedRuns = new Set(), streams = new Map(), suppressed = new Set();
   const overrides = new Map();
+  let gemini = { configured: false, model: null };
+  const GEMINI_PHASE = { connecting: "بيتصل…", listening: "سامعك دلوقتي", working: "بيشتغل على طلبك…", speaking: "بيرد بالصوت…" };
+  const geminiReady = () => gemini.configured && Boolean(navigator.mediaDevices?.getUserMedia) && Boolean(window.AudioContext);
+  async function loadGemini() {
+    try {
+      const response = await fetch("/local-api/company/live-voice/status", { cache: "no-store", headers: { Accept: "application/json" } });
+      if (response.ok) { gemini = await response.json(); notify(); }
+    } catch (_) { /* Bridge unreachable: the local fallback keeps working */ }
+  }
   let live = null, dictation = null, speaking = null, queue = [], epoch = 0, localReady = false, warming = null, enabled = sessionStorage.getItem("abud.voice.reply") !== "off";
 
   function egyptianVoices() {
     return synth?.getVoices().filter((voice) => /^ar[-_]EG$/i.test(voice.lang)) || [];
   }
   function status() {
+    if (geminiReady()) return { state: "ready", engine: "Gemini Live", model: gemini.model, voices: [] };
     if (!Recognition) return { state: "unavailable", reasonAr: "التعرف المباشر على الكلام غير متاح في هذا المتصفح" };
     if (!synth && !localReady) return { state: "unavailable", reasonAr: "النطق غير متاح في هذا المتصفح" };
     const voices = egyptianVoices();
@@ -37,6 +48,7 @@
   };
 
   function stopPlayback() {
+    if (live?.engine === "gemini") { flushGemini(live); notify(); return; }
     epoch++;
     if (live) for (const key of streams.keys()) if (key.startsWith(`${live.key}:`)) suppressed.add(key);
     queue = [];
@@ -91,7 +103,7 @@
     notify();
   }
   function speak(agentId, text) {
-    if (!enabled || !usable()) return;
+    if (live?.engine === "gemini" || !enabled || !usable()) return;
     const clean = String(text || "").replace(/\*\*|^#{1,6}\s*/gm, "").trim();
     if (!clean) return;
     queue.push({ agentId, text: clean.slice(0, 550) });
@@ -99,7 +111,7 @@
     playNext();
   }
   function feedStream(key, runId, agentId, cumulative, final = false) {
-    if (!live || live.key !== key || !enabled || !usable()) return;
+    if (!live || live.engine === "gemini" || live.key !== key || !enabled || !usable()) return;
     const streamKey = `${key}:${runId || agentId}`;
     if (suppressed.has(streamKey)) { if (final) { suppressed.delete(streamKey); streams.delete(streamKey); liveResponse(key); } return; }
     if (final && runId && streamedRuns.has(runId) && !streams.has(streamKey)) { liveResponse(key); return; }
@@ -157,6 +169,12 @@
     epoch++;
     const old = live;
     live = null;
+    if (old?.engine === "gemini") {
+      stopGemini(old);
+      setRobot(old.agentId, null);
+      notify();
+      return;
+    }
     if (old) {
       old.recognition.onend = null;
       old.recognition.onresult = null;
@@ -171,6 +189,7 @@
     const available = status();
     if (available.state !== "ready") { toast(available.reasonAr, "warn"); return false; }
     if (!onRoute(key)) return false;
+    if (geminiReady()) return startGemini({ key, agentId });
     stopLive();
     const recognition = new Recognition();
     recognition.lang = "ar-EG";
@@ -226,6 +245,114 @@
     notify();
     return true;
   }
+  // ---------------------------------------------------------------- Gemini Live engine
+  function startGemini({ key, agentId }) {
+    stopLive();
+    const [kind, ...rest] = key.split(":");
+    const session = { engine: "gemini", key, agentId, phase: "connecting", interim: "", sources: new Set(), nextTime: 0, ws: null, stream: null, capture: null, play: null, gain: null, micOn: false, turnDone: true };
+    live = session;
+    sessionStorage.setItem("abud.voice.reply", "on");
+    enabled = true;
+    setRobot(agentId, "listening");
+    notify();
+    openGemini(session, kind, rest.join(":")).catch((error) => {
+      if (live !== session) return;
+      toast(error?.name === "NotAllowedError" ? "اسمح للميكروفون من إعدادات المتصفح" : (error?.message || "تعذّر بدء المكالمة"), "bad");
+      stopLive();
+    });
+    return true;
+  }
+  async function openGemini(session, kind, id) {
+    const token = await O.session();
+    session.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    if (live !== session) return stopGemini(session);
+    session.play = new AudioContext();
+    session.play.resume?.().catch?.(() => {});
+    session.gain = session.play.createGain();
+    session.gain.connect(session.play.destination);
+    const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/local-api/company/live-voice/ws`);
+    ws.binaryType = "arraybuffer";
+    session.ws = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ type: "start", token, context: { kind, id } }));
+    ws.onmessage = (event) => {
+      if (live !== session) return;
+      if (typeof event.data === "string") { try { onGeminiEvent(session, JSON.parse(event.data)); } catch (_) { /* ignore a malformed frame */ } }
+      else playPcm(session, event.data);
+    };
+    ws.onclose = () => { if (live === session) { toast("المكالمة اتقفلت", "warn"); stopLive(); } };
+  }
+  async function startCapture(session) {
+    let context;
+    try { context = new AudioContext({ sampleRate: 16000 }); } catch (_) { context = new AudioContext(); }
+    session.capture = context;
+    await context.audioWorklet.addModule("./internal/live-worklet.js");
+    if (live !== session) return;
+    const source = context.createMediaStreamSource(session.stream);
+    const node = new AudioWorkletNode(context, "abud-live-capture");
+    const silent = context.createGain();
+    silent.gain.value = 0;
+    node.port.onmessage = (event) => { if (session.micOn && session.ws?.readyState === 1) session.ws.send(event.data); };
+    source.connect(node);
+    node.connect(silent);
+    silent.connect(context.destination);
+    session.micOn = true;
+  }
+  function playPcm(session, buffer) {
+    if (!enabled || !session.play || buffer.byteLength < 2) return;
+    const pcm = new Int16Array(buffer, 0, buffer.byteLength >> 1);
+    const audio = session.play.createBuffer(1, pcm.length, 24000);
+    const channel = audio.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 32768;
+    const source = session.play.createBufferSource();
+    source.buffer = audio;
+    source.connect(session.gain);
+    const startAt = Math.max(session.play.currentTime + 0.02, session.nextTime);
+    source.start(startAt);
+    session.nextTime = startAt + audio.duration;
+    session.sources.add(source);
+    session.phase = "speaking";
+    session.turnDone = false;
+    setRobot(session.agentId, "speaking");
+    source.onended = () => {
+      session.sources.delete(source);
+      if (live === session && !session.sources.size && session.nextTime <= session.play.currentTime + 0.05) {
+        session.phase = "listening";
+        session.interim = "";
+        setRobot(session.agentId, "listening");
+        notify();
+      }
+    };
+  }
+  function flushGemini(session) {
+    for (const source of session.sources) { source.onended = null; try { source.stop(); } catch (_) { /* already stopped */ } }
+    session.sources.clear();
+    session.nextTime = 0;
+    if (live === session && session.phase === "speaking") { session.phase = "listening"; setRobot(session.agentId, "listening"); }
+  }
+  function onGeminiEvent(session, message) {
+    switch (message.type) {
+      case "ready": session.phase = "listening"; startCapture(session).catch((error) => { toast(error?.message || "تعذّر تشغيل الميكروفون", "bad"); stopLive(); }); break;
+      case "input": session.interim = message.text || ""; if (session.phase === "connecting") session.phase = "listening"; break;
+      case "working": session.phase = "working"; setRobot(session.agentId, "listening"); break;
+      case "speaking": session.phase = "speaking"; break;
+      case "interrupted": flushGemini(session); session.phase = "listening"; break;
+      case "turn-complete": session.turnDone = true; if (!session.sources.size) { session.phase = "listening"; session.interim = ""; setRobot(session.agentId, "listening"); } break;
+      case "refresh": window.dispatchEvent(new CustomEvent("abud:live-refresh", { detail: { key: message.key } })); break;
+      case "reconnecting": session.phase = "connecting"; break;
+      case "error": toast(message.message || "حصلت مشكلة في المكالمة", "bad"); break;
+      case "ended": stopLive(); return;
+      default: break;
+    }
+    notify();
+  }
+  function stopGemini(session) {
+    session.micOn = false;
+    flushGemini(session);
+    try { if (session.ws?.readyState === 1) session.ws.send(JSON.stringify({ type: "stop" })); session.ws?.close(); } catch (_) { /* already closed */ }
+    session.ws = null;
+    session.stream?.getTracks().forEach((track) => track.stop());
+    for (const context of [session.capture, session.play]) { try { context?.close(); } catch (_) { /* already closed */ } }
+  }
   function startDictation(agentId, onText) {
     if (!Recognition) { toast("التعرف على الكلام غير متاح في هذا المتصفح", "warn"); return; }
     if (live) stopLive();
@@ -271,8 +398,9 @@
       mute.disabled = available.state !== "ready";
       mute.setAttribute("aria-pressed", String(enabled));
       mute.textContent = enabled ? "🔊 الصوت شغال" : "🔇 صوت مكتوم";
-      stop.hidden = !speaking && !queue.length;
-      indicator.textContent = active ? live.phase === "listening" ? `سامعك دلوقتي${live.interim ? ` · ${live.interim}` : ""}` : speaking ? "بيرد بالصوت…" : "بيجهّز الرد…" : available.state === "ready" ? "" : available.reasonAr;
+      stop.hidden = live?.engine === "gemini" ? !live.sources.size : !speaking && !queue.length;
+      if (live?.gain) live.gain.gain.value = enabled ? 1 : 0;
+      indicator.textContent = active && live.engine === "gemini" ? `${GEMINI_PHASE[live.phase] || ""}${live.phase === "listening" && live.interim ? ` · ${live.interim}` : ""}` : active ? live.phase === "listening" ? `سامعك دلوقتي${live.interim ? ` · ${live.interim}` : ""}` : speaking ? "بيرد بالصوت…" : "بيجهّز الرد…" : available.state === "ready" ? "" : available.reasonAr;
     };
     listeners.add({ node: wrap, update });
     wrap.append(call, mic, mute, stop, indicator);
@@ -280,9 +408,9 @@
     return wrap;
   }
   synth?.addEventListener?.("voiceschanged", notify);
-  if (Recognition) setTimeout(warm, 0);
-  document.addEventListener("visibilitychange", () => { if (document.hidden) stopLive(); });
+  setTimeout(async () => { await loadGemini(); if (!gemini.configured && Recognition) warm(); }, 0);
+  document.addEventListener("visibilitychange", () => { if (document.hidden && live?.engine !== "gemini") stopLive(); });
   window.addEventListener("hashchange", () => { if (live && !onRoute(live.key)) stopLive(); });
-  window.AbudVoice = { status, usable, controls, observe, speak, feedStream, stopPlayback, startLive, stopLive, liveResponse, updateLive,
+  window.AbudVoice = { refreshEngine: loadGemini, status, usable, controls, observe, speak, feedStream, stopPlayback, startLive, stopLive, liveResponse, updateLive,
     isLive: (key) => live?.key === key, override: (agentId) => overrides.get(agentId) || null };
 })();

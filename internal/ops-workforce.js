@@ -386,6 +386,8 @@
       if (pending?.runId) watchChatRun(ui.chatCurrent.id, pending.runId);
     } catch (error) { ui.chatError = error.message; if (!background || !busyTyping()) renderChat(); else if (window.AbudVoice?.isLive(`chat:${ui.chatCurrent?.id}`)) toast(error.message, "bad"); }
   }
+  // A Gemini Live call sends the owner's turns from the Bridge; reload the thread as soon as it reports progress.
+  window.addEventListener("abud:live-refresh", (event) => { const id = ui.chatCurrent?.id; if (id && event.detail?.key === `chat:${id}`) loadChats(id, { background: true }); });
   function watchChatRun(id, runId) {
     if (ui.chatStream?.runId === runId) return;
     ui.chatStream?.source.close();

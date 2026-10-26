@@ -260,14 +260,42 @@
   // ---------------------------------------------------------------- browser voice availability
   function voicePanel() {
     const body = h("div", { class: "vo-admin" });
+    let info = null, busy = false;
+    const load = async () => {
+      try { info = await (await fetch("/local-api/company/live-voice/status", { cache: "no-store" })).json(); } catch (_) { info = null; }
+      draw();
+    };
+    const keyInputs = [1, 2, 3].map((n) => h("input", { class: "ops-input", type: "password", autocomplete: "off", spellcheck: "false", placeholder: n === 1 ? "المفتاح الأساسي" : `مفتاح احتياطي ${n - 1} (اختياري)`, "aria-label": n === 1 ? "مفتاح Gemini الأساسي" : `مفتاح Gemini احتياطي ${n - 1}` }));
+    const ack = h("input", { type: "checkbox", "aria-label": "فاهم إن النسخة المجانية بتسمح لجوجل تستخدم الصوت والنص لتحسين منتجاتها" });
+    async function save(event) {
+      const result = await act(event.currentTarget, () => mutate("POST", "/live-voice/key", { keys: keyInputs.map((input) => input.value.trim()).filter(Boolean), acknowledgeFreeTier: ack.checked }), "تم حفظ المفتاح وتجربة الاتصال بجوجل");
+      for (const input of keyInputs) input.value = "";
+      if (result) { info = result; await window.AbudVoice?.refreshEngine?.(); }
+      draw();
+    }
     const draw = () => {
       const st = window.AbudVoice.status();
-      fill(body, h("p", null, h("strong", null, st.state === "ready" ? "جاهز" : "غير متاح"), st.reasonAr ? ` — ${st.reasonAr}` : ""),
-        st.voices?.length ? h("p", { class: "ops-dim" }, `صوت مصري متاح: ${st.voices.map((voice) => voice.name).join("، ")}`) : null,
-        button("فحص مجددًا", draw));
+      const configured = info?.configured === true;
+      fill(body,
+        h("p", null, h("strong", null, configured ? "Gemini Live شغال" : "مفيش مفتاح Gemini"), configured && info.model ? ` — الموديل: ${info.model}${info.keyCount > 1 ? ` — ${info.keyCount} مفاتيح (الاحتياطي بيشتغل لو الأساسي اترفض أو خلصت حصته)` : ""}` : "",
+          configured ? "" : " — المكالمات دلوقتي بتستخدم الصوت المحلي الاحتياطي (أبطأ وأقل جودة)."),
+        configured
+          ? h("div", { class: "co-inline" },
+            button("اختبار الاتصال", async (event) => { const r = await act(event.currentTarget, () => mutate("POST", "/live-voice/test", {}), "الاتصال بجوجل سليم"); if (r) { info = r; draw(); } }, { kind: "secondary" }),
+            button("حذف المفتاح", async (event) => { if (!await O.confirmDialog({ title: "حذف مفتاح Gemini", body: "المكالمات هترجع للصوت المحلي الاحتياطي." })) return; const r = await act(event.currentTarget, () => mutate("DELETE", "/live-voice/key"), "تم حذف المفتاح"); if (r) { info = r; await window.AbudVoice?.refreshEngine?.(); draw(); } }, { kind: "secondary" }))
+          : h("div", null,
+            h("ol", { class: "ops-dim" },
+              h("li", null, "افتح ", h("a", { href: "https://aistudio.google.com/apikey", target: "_blank", rel: "noopener noreferrer" }, "aistudio.google.com/apikey"), " واعمل مفتاح مجاني."),
+              h("li", null, "الصقه هنا (ومعاه لحد مفتاحين احتياطيين لو حابب) واحفظ. بيتخزن على جهازك بس، ومش بيظهر تاني ولا بيطلع للمتصفح.")),
+            ...keyInputs,
+            h("label", { class: "ops-dim" }, ack, " فاهم إن النسخة المجانية بتسمح لجوجل تستخدم الصوت وردود الوكلاء اللي بتتقال بالصوت لتحسين منتجاتها."),
+            info && info.canStoreKey === false ? h("p", { class: "ops-dim" }, "مفيش مكان آمن لحفظ المفتاح على الجهاز ده؛ استخدم متغير البيئة GEMINI_LIVE_API_KEY.") : null,
+            button("احفظ وجرّب", save, { kind: "primary" })),
+        h("p", { class: "ops-dim" }, `المحرك الحالي للمكالمات: ${st.state === "ready" ? (st.engine === "Gemini Live" ? "Gemini Live" : "الصوت المحلي الاحتياطي") : `غير متاح — ${st.reasonAr || ""}`}`));
     };
     draw();
-    return panel("المحادثة الصوتية", "الصوت يعتمد على التعرف والنطق في المتصفح، بدون اشتراك داخل التطبيق. قد يستخدم المتصفح خدمة سحابية للتعرف على الكلام؛ توفر الصوت المصري يتوقف على أصوات المتصفح المثبتة.", body);
+    load();
+    return panel("المحادثة الصوتية", "جيميناي بيسمعك وبينطق بالمصري، لكن الوكلاء وأدواتهم وصلاحياتهم وبياناتهم بتفضل في التطبيق وOmniRoute زي ما هي. الطلب بيتنفذ بنفس مسار الكتابة بالظبط.", body);
   }
 
   // ---------------------------------------------------------------- agent registry (owner writes use the shared session guard)
