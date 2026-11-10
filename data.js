@@ -298,11 +298,11 @@ window.ABUD_DATA = {
       "name": "MoHIamySuite",
       "category": "freeze",
       "status": "FROZEN",
-      "ar": "تصورات قديمة لمنصة Mohamy",
-      "en": "Older Mohamy platform experiments",
+      "ar": "تجارب قديمة لمستودع خاص",
+      "en": "Older experiments for a private repository",
       "nextAr": "عدم إعادة الفتح بدون حاجة سوق واضحة",
       "nextEn": "Freeze unless a concrete market reason emerges",
-      "note": "Distinct from current MohamyPhone commercial product"
+      "note": "Distinct from the current commercial product in a private repository"
     },
     {
       "name": "vps_bot",
