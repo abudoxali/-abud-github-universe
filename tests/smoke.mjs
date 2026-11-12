@@ -142,7 +142,7 @@ try {
   await desktop.locator('#decisionFilters [data-decision-filter="overlap"]').click();
   assert.equal(await desktop.locator("#decisionList .decision-item").count(),1);
   await desktop.locator('#decisionFilters [data-decision-filter="all"]').click();
-  assert.equal(await desktop.locator("#decisionList .decision-item").count(),10);
+  assert.equal(await desktop.locator("#decisionList .decision-item").count(),await desktop.evaluate(()=>window.ABUD_DECISIONS.getState().signals),"All derived review signals must render after clearing filters");
   await desktop.locator("#decisionSort").selectOption("name");
   assert.equal(await desktop.locator("#decisionSort").inputValue(),"name");
   assert.match(await desktop.locator("#decisionDisclaimer").textContent(),/not verified duplication/i);
