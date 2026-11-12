@@ -1,0 +1,92 @@
+# Example only. Do NOT enable before DNS, certificate, and port checks.
+# Create a NEW site; do not modify or overwrite unrelated production vhosts.
+limit_req_zone $binary_remote_addr zone=abud_os_auth:10m rate=20r/m;
+limit_req_zone $binary_remote_addr zone=abud_os_api:10m rate=120r/m;
+server {
+    listen 80;
+    server_name os.abud.fun;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / {
+        return 301 https://os.abud.fun$request_uri;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name os.abud.fun;
+    ssl_certificate /etc/letsencrypt/live/os.abud.fun/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/os.abud.fun/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    real_ip_header CF-Connecting-IP;
+    real_ip_recursive on;
+    limit_req_status 429;
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+    set_real_ip_from 2400:cb00::/32;
+    set_real_ip_from 2606:4700::/32;
+    set_real_ip_from 2803:f800::/32;
+    set_real_ip_from 2405:b500::/32;
+    set_real_ip_from 2405:8100::/32;
+    set_real_ip_from 2a06:98c0::/29;
+    set_real_ip_from 2c0f:f248::/32;
+    proxy_intercept_errors on;
+    error_page 502 504 =503 @abud_os_maintenance;
+
+    add_header Cache-Control "private, no-store, max-age=0" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location ^~ /auth/ {
+        limit_req zone=abud_os_auth burst=10 nodelay;
+        proxy_pass http://127.0.0.1:3164;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_read_timeout 30s;
+    }
+
+    location ^~ /api/ {
+        limit_req zone=abud_os_api burst=30 nodelay;
+        proxy_pass http://127.0.0.1:3164;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_read_timeout 30s;
+    }
+
+    location / {
+        limit_req zone=abud_os_api burst=30 nodelay;
+        proxy_pass http://127.0.0.1:3164;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_read_timeout 30s;
+    }
+
+    location @abud_os_maintenance {
+        default_type text/plain;
+        return 503 "ABUD OS is not active; owner authentication setup is pending.\n";
+    }
+}

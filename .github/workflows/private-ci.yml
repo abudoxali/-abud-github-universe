@@ -1,0 +1,56 @@
+name: V2 Private Backend Checks
+on:
+  push:
+    branches: [feat/v2-secure-os]
+    paths:
+      - "apps/private-server/**"
+      - ".github/workflows/private-ci.yml"
+  pull_request:
+    paths:
+      - "apps/private-server/**"
+      - ".github/workflows/private-ci.yml"
+permissions:
+  contents: read
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: abud_os_test
+          POSTGRES_USER: abud_test
+          POSTGRES_PASSWORD: abud_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U abud_test -d abud_os_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      TEST_DATABASE_URL: postgresql://abud_test:abud_test@127.0.0.1:5432/abud_os_test
+    defaults:
+      run:
+        working-directory: apps/private-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Node dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Validate server and browser syntax
+        run: npm run check
+      - name: Security and authorization negative tests
+        run: npm test
+      - name: Install headless browser for private UI smoke
+        run: npx playwright install --with-deps chromium
+      - name: Private dashboard browser checks (desktop and mobile)
+        run: node tests/browser.mjs
+      - name: Check private server files not in public artifact
+        run: |
+          if grep -E 'private-server|GITHUB_CLIENT_SECRET|GITHUB_APP_PRIVATE_KEY' ../../.github/workflows/pages.yml; then
+            echo 'Public Pages workflow references private server material'; exit 1
+          fi
+          echo 'PASS: public Pages artifact remains isolated'

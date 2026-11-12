@@ -2,10 +2,36 @@
 
 Updated: 2026-10-09
 Repository: `abudoxali/-abud-github-universe`
-Production: https://abudoxali.github.io/-abud-github-universe/
-State: **V1.7 RELIABILITY & PRIVACY — LIVE HTTPS VERIFIED / TECHNICALLY SHIPPED**
-Owner visual/content review: **NOT YET RECORDED**.
+Production: https://os.abud.fun/
+Public GitHub Pages: https://abudoxali.github.io/-abud-github-universe/
+State: **V2.0 LIVE — CORE HEALTH AND SECURITY CHECKS PASSED; OWNER END-TO-END ACCEPTANCE PENDING**
+Owner visual/content review: **PENDING**.
+## V2.0 — Secure Owner-Only Workspace (2026-10-09)
 
+**Deployment state:** LIVE on the owner-only origin. Core health, unauthenticated access controls, server-side GitHub integration and database persistence were verified. Full owner acceptance remains pending; do not represent V2.0 as fully accepted until the owner completes the checks below.
+
+### Production deployment
+- Live application: `https://os.abud.fun/`; public GitHub Pages remains unchanged at `https://abudoxali.github.io/-abud-github-universe/`.
+- Source branch `feat/v2-secure-os` was verified at `02ccb83348e0db6a70f4d758228113df35f16418`. Staged release `/var/www/abud-os/releases/20261009175941` is active at `/var/www/abud-os/current`.
+- `abud-os-private.service` is enabled and active under `abudos`; Node listens only on `127.0.0.1:3164`. Nginx proxies `os.abud.fun` to the app. The temporary maintenance 503 fallback was removed from this vhost only after local health/security checks passed; no other vhost was edited.
+- `/etc/abud-os/private.env` has nonempty OAuth client values. A server-side token-exchange probe with an intentionally invalid one-time code received GitHub's expected invalid-code response, confirming the client credentials without issuing or exposing a token.
+- GitHub App authentication succeeded for installation `169700628`: selected-only mode, two selected repositories including one private repository, `Metadata: Read` and `Contents: Read`, and no write permissions. Temporary installation tokens used for verification were revoked immediately. No private repository names or contents are recorded here.
+- PostgreSQL 16.15 is reachable by app role `abud_os_app` on database `abud_os`; all three V2 tables are present. A synthetic workspace row was committed, re-read on a separate connection and removed by exact test marker; app role/database identity matched.
+
+### Verification performed
+- Staged-release `npm test`: **9 passed, 0 failed, 1 skipped**; the local PostgreSQL test was skipped because no test-only `TEST_DATABASE_URL` was configured. `npm run check`: **PASS**. The separate live PostgreSQL persistence probe passed. GitHub Actions runs `37984867561` and `37984874443` passed full CI PostgreSQL, browser and public-artifact checks on code commit `c6259c9c672002c184f2532eaf9b119080552f52`.
+- Public HTTPS `/health/live` and `/` return **200**. Unauthenticated `/api/me`, `/api/repos`, `/api/workboard`, `/api/report.md` and repository status requests return **401**. `/auth/start` redirects to GitHub with only `read:user` scope; the OAuth state cookie is Secure, HttpOnly and SameSite=Lax.
+- Verified live `Cache-Control: private, no-store`, HSTS, CSP, `nosniff` and no-referrer headers. Backend binds only to loopback. Live headless Chrome loaded guest UI with Arabic RTL content and English UI markers; branch browser CI covers interactive bilingual and mobile flows.
+- After Nginx reload, `os.abud.fun` health remained 200 and protected APIs remained 401. `nginx -t` passed. Existing `abud.fun` remained 200, `www.abud.fun` remained 301, and public GitHub Pages remained 200.
+- `abud-platform.service`, `pm2-elhabak.service` and Nginx were active and left unchanged. `pm2-root.service` was observed inactive and was not modified. Nginx validation reported existing TLS-option/stapling warnings in unrelated vhosts; no unrelated configuration was changed.
+
+### Remaining owner acceptance / security requirements
+1. Complete real owner-browser OAuth login and logout, then verify authenticated app session, selected private repository metadata/STATUS access, workboard save/reload, CSRF/Origin rejection, unauthorized-account rejection and App-revocation behavior. These authenticated live flows were not performed using another account or a simulated owner session.
+2. Manually review and accept Arabic RTL and English LTR on desktop and mobile. Automated/live rendering checks are not owner visual approval.
+3. Rotate any credentials previously exposed through chat (including the OAuth client secret and any exposed App signing key) as an outstanding security requirement; coordinate replacement without interrupting the live service. No credential values belong here.
+4. Confirm off-host escrow of `/etc/abud-os/backup.agekey` and disposition of the two retained database-restore verification databases. Neither was changed during this deployment.
+
+**Readiness:** Production is online and core health/security checks pass. Full owner acceptance and outstanding credential/backup requirements remain open; do not mark the V2.0 acceptance checklist complete until resolved.
 ## V1.6–V1.7 — Evidence-Based Reports & Hardening (2026-10-09)
 
 **Delivered:** V1.6 reporting and V1.7 static privacy/accessibility hardening. GitHub Pages remains PUBLIC-ONLY and backend-free.
@@ -35,11 +61,9 @@ Owner visual/content review: **NOT YET RECORDED**.
 - A timing-sensitive V1.2 regression was caught in a CI rerun: the agent prompt could be rendered before public GitHub commit/CI evidence arrived. Fixed by dispatching `abud:project-activity` after the project activity panel updates and regenerating the prompt. The follow-up complete Playwright/HTTPS run passed. No commit/CI evidence is fabricated when requests have not completed.
 - Owner's **manual visual approval: PENDING**, independent of CI/HTTPS success.
 
-### V2 status — defined, NOT SHIPPED
-- Security and live-acceptance contract added at `docs/V2_SECURE_WORKSPACE.md`.
-- A genuine authenticated private workspace with cross-device database state, read-only scoped GitHub App credentials, owner sessions and per-repository authorization is NOT implemented or verified.
-- V2 implementation/deployment requires the owner to choose a current backend domain/host, approve the GitHub authorization method/selected repositories, and approve the intended security/backup policy.
-- Never store private repository details or OAuth tokens on the public GitHub Pages app.
+### V2 status at this historical V1.7 snapshot (superseded)
+- This section records the V1.7-era design-only state before the V2 implementation and deployment preparation documented at the top of this file. It is retained as history, not as the current V2 status.
+- The public GitHub Pages app remains public-only; private repository details and OAuth tokens must never be added to it.
 
 ## V1.4–V1.5 — Daily Execution Workboard & Local Progress Journal (2026-10-09)
 
@@ -77,7 +101,7 @@ Owner visual/content review: **NOT YET RECORDED**.
 - Current public repo membership must be successfully refreshed to reflect new GitHub visibility immediately; during a network outage the last published public snapshot may be stale.
 - The existing public Git history contains earlier repository catalogs; their presence is not fixed by the current HEAD. No destructive rewrite was performed.
 - Owner screenshot/visual acceptance is **not yet recorded**, distinct from passing CI and real HTTPS availability.
-- **V1.6, V1.7 and V2.0 are proposed, not implemented**. V2 private workspace requires secure server-side GitHub authorization and a backend beyond public GitHub Pages.
+- At this V1.5 snapshot, V1.6–V2.0 were future proposals; subsequent V1.6–V1.7 history and the current V2.0 deployment status above supersede that snapshot.
 
 ### Future release direction (not delivered)
 - V1.6: owner-directed weekly review and printable/exportable summaries.
