@@ -383,6 +383,16 @@ window.ABUD_DATA = {
       "nextAr": "افحص المستودع وحدد وظيفته وحالته",
       "nextEn": "Inspect and assign an evidence-backed project status",
       "note": "Discovered automatically from GitHub's public repository API. Not yet reviewed."
+    },
+    {
+      "name": "zc-room",
+      "category": "revive",
+      "status": "UNREVIEWED",
+      "ar": "مستودع عام جديد يحتاج مراجعة فعلية.",
+      "en": "New public repository requiring editorial review.",
+      "nextAr": "افحص المستودع وحدد وظيفته وحالته",
+      "nextEn": "Inspect and assign an evidence-backed project status",
+      "note": "Discovered automatically from GitHub's public repository API. Not yet reviewed."
     }
   ],
   "relationships": [
@@ -450,5 +460,5 @@ window.ABUD_DATA = {
   "snapshot": "PUBLIC_ONLY",
   "catalogPolicy": "Only public repositories are included. Private repositories are excluded. Status labels are curated, not inferred from commit activity.",
   "relationshipSchema": "V1.3: curated relationship type and bilingual rationale. Overlap does NOT establish duplication. No inferred technical dependencies.",
-  "inventorySyncedAt": "2026-11-12T07:14:24.956Z"
+  "inventorySyncedAt": "2026-11-17T20:58:02.991Z"
 };
